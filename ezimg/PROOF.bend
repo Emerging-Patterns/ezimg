@@ -97,3 +97,51 @@ def Laws.straight_opaque():
 
 def Laws.straight_premultiply():
   {==}
+
+def Laws.crc32_digits():
+  {==}
+
+def Laws.crc32_ihdr():
+  {==}
+
+def Laws.crc32_iend():
+  {==}
+
+def Laws.parse_ihdr_fields():
+  {==}
+
+def Laws.unfilter_none():
+  {==}
+
+def Laws.unfilter_sub():
+  {==}
+
+def Laws.unfilter_up():
+  {==}
+
+def Laws.unfilter_average():
+  {==}
+
+def Laws.unfilter_paeth():
+  {==}
+
+def Laws.inflate_stored():
+  {==}
+
+def Laws.decode_chunks():
+  {==}
+
+def Laws.decode_png_rgb():
+  {==}
+
+def Laws.decode_png_rgba():
+  {==}
+
+def Laws.decode_png_grey():
+  {==}
+
+def Laws.decode_png_ga():
+  {==}
+
+def Laws.decode_png_idx():
+  {==}

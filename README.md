@@ -39,5 +39,14 @@ Closed equalities in `ezimg/LAWS.bend`, proved in `ezimg/PROOF.bend`
   JPEG start-of-image marker.
 - JFIF, [ISO/IEC 10918-5](https://www.iso.org/standard/54989.html) | ITU-T
   T.871: the interchange format those bytes open.
+- [ISO/IEC 15948](https://www.iso.org/standard/29581.html) (PNG) and the
+  [W3C PNG specification](https://www.w3.org/TR/png/): chunk layout and CRC-32
+  (ISO 3309 / ITU-T V.42) over the chunk type and data.
+- IHDR fields: width, height, bit depth, colour type, compression method,
+  filter method, and interlace method.
+- Scanline filters None, Sub, Up, Average, and Paeth (filter method 0).
+- IDAT as zlib-wrapped DEFLATE, PNG compression method 0 (proved on a stored
+  block).
+- 8-bit colour types 0, 2, 3, 4, and 6, interlace method 0.
 
 Full codec conformance is not claimed yet.
