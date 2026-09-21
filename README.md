@@ -16,9 +16,10 @@ ez add Emerging-Patterns/ezimg
 A picture is a `Raster`: a width, a height, and row-major samples. Bend's own
 `Image` is the window quadtree, so a file image lives under this name.
 `png_sig` is the eight-byte PNG signature. `parse_signature` returns that
-signature when the bytes open with it, and none otherwise. `decode_png` and
-`decode_jpeg` return none until the codecs land. `width`, `height`, `size`,
-`count`, and `fill` are the pixel helpers.
+signature when the bytes open with it, and none otherwise. `decode_png` returns a raster for an 8-bit PNG. `decode_jpeg` returns a
+raster for a baseline sequential JPEG, and none when the bytes are not one.
+`width`,
+`height`, `size`, `count`, and `fill` are the pixel helpers.
 
 ```
 import ./ezimg/main.bend as Img
@@ -35,10 +36,13 @@ Closed equalities in `ezimg/LAWS.bend`, proved in `ezimg/PROOF.bend`
 - [ISO/IEC 15948](https://www.iso.org/standard/29581.html) (PNG) and the
   [W3C PNG specification](https://www.w3.org/TR/png/): the eight-byte
   signature.
-- [ISO/IEC 10918-1](https://www.iso.org/standard/18902.html) | ITU-T T.81: the
-  JPEG start-of-image marker.
+- [ISO/IEC 10918-1](https://www.iso.org/standard/18902.html) | ITU-T T.81:
+  the SOI, EOI, APP0, SOF0, SOF2, SOF9, DHT, DQT, and SOS marker bytes, and a
+  baseline sequential 8-bit Huffman frame (SOF0) decoded to gray and to
+  4:4:4 YCbCr samples. Progressive SOF2 and arithmetic SOF9 decode as none.
 - JFIF, [ISO/IEC 10918-5](https://www.iso.org/standard/54989.html) | ITU-T
-  T.871: the interchange format those bytes open.
+  T.871: the APP0 identifier `JFIF`, and the neutral and one saturated
+  YCbCr triple converted to a packed RGB sample.
 - [ISO/IEC 15948](https://www.iso.org/standard/29581.html) (PNG) and the
   [W3C PNG specification](https://www.w3.org/TR/png/): chunk layout and CRC-32
   (ISO 3309 / ITU-T V.42) over the chunk type and data.

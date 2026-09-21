@@ -145,3 +145,60 @@ def Laws.decode_png_ga():
 
 def Laws.decode_png_idx():
   {==}
+
+def Laws.jpeg_soi_bytes():
+  {==}
+
+def Laws.jpeg_eoi_bytes():
+  {==}
+
+def Laws.jpeg_app0_bytes():
+  {==}
+
+def Laws.jpeg_sof0_bytes():
+  {==}
+
+def Laws.jpeg_sof2_bytes():
+  {==}
+
+def Laws.jpeg_sof9_bytes():
+  {==}
+
+def Laws.jpeg_dht_bytes():
+  {==}
+
+def Laws.jpeg_dqt_bytes():
+  {==}
+
+def Laws.jpeg_sos_bytes():
+  {==}
+
+def Laws.jpeg_jfif_id():
+  {==}
+
+def Laws.jpeg_rgb_neutral():
+  {==}
+
+def Laws.jpeg_rgb_red():
+  {==}
+
+def Laws.jpeg_gray_128():
+  {==}
+
+def Laws.jpeg_gray_136():
+  {==}
+
+def Laws.jpeg_color_neutral():
+  {==}
+
+def Laws.jpeg_color_red():
+  {==}
+
+def Laws.jpeg_sof2_none():
+  {==}
+
+def Laws.jpeg_sof9_none():
+  {==}
+
+def Laws.jpeg_raster_gray():
+  {==}
