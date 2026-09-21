@@ -5,6 +5,7 @@ import ./main.bend as Img
 import ./crc.bend as Crc
 import ./inflate.bend as Inf
 import ./png.bend as Png
+import ./jpeg.bend as Jpeg
 
 # a 2 by 3 picture, six samples
 def swatch() -> Img.Raster:
@@ -63,7 +64,7 @@ law parse_jpeg_not_png:
 law decode_png_none:
   {Img.decode_png(Img.png_sig()) == None{} : Maybe<&2, Img.Raster>}
 
-# LAW: JPEG decode returns none
+# LAW: a JPEG that is only the start-of-image marker decodes as none
 law decode_jpeg_none:
   {Img.decode_jpeg(Img.jpeg_soi()) == None{} : Maybe<&2, Img.Raster>}
 
@@ -263,3 +264,121 @@ law decode_png_ga:
 # LAW: ISO/IEC 15948 / W3C PNG — 8-bit colour type 3 reads the palette index
 law decode_png_idx:
   {Img.decode_png(fix.idx()) == Some{Img.raster(1, 1, [4294901760])} : Maybe<&2, Img.Raster>}
+
+# LAW: ISO/IEC 10918-1 Table B.1 — SOI is FF D8
+law jpeg_soi_bytes:
+  {Jpeg.soi() == Img.jpeg_soi() : List<&2, U32>}
+
+# LAW: ISO/IEC 10918-1 Table B.1 — EOI is FF D9
+law jpeg_eoi_bytes:
+  {Jpeg.eoi() == [255, 217] : List<&2, U32>}
+
+# LAW: ISO/IEC 10918-1 Table B.1 — APP0 is FF E0
+law jpeg_app0_bytes:
+  {Jpeg.app0() == [255, 224] : List<&2, U32>}
+
+# LAW: ISO/IEC 10918-1 Table B.1 — SOF0 is FF C0
+law jpeg_sof0_bytes:
+  {Jpeg.sof0() == [255, 192] : List<&2, U32>}
+
+# LAW: ISO/IEC 10918-1 Table B.1 — SOF2 is FF C2
+law jpeg_sof2_bytes:
+  {Jpeg.sof2() == [255, 194] : List<&2, U32>}
+
+# LAW: ISO/IEC 10918-1 Table B.1 — SOF9 is FF C9
+law jpeg_sof9_bytes:
+  {Jpeg.sof9() == [255, 201] : List<&2, U32>}
+
+# LAW: ISO/IEC 10918-1 Table B.1 — DHT is FF C4
+law jpeg_dht_bytes:
+  {Jpeg.dht() == [255, 196] : List<&2, U32>}
+
+# LAW: ISO/IEC 10918-1 Table B.1 — DQT is FF DB
+law jpeg_dqt_bytes:
+  {Jpeg.dqt() == [255, 219] : List<&2, U32>}
+
+# LAW: ISO/IEC 10918-1 Table B.1 — SOS is FF DA
+law jpeg_sos_bytes:
+  {Jpeg.sos() == [255, 218] : List<&2, U32>}
+
+# LAW: JFIF T.871 — the APP0 identifier is JFIF followed by a null
+law jpeg_jfif_id:
+  {Jpeg.jfif() == [74, 70, 73, 70, 0] : List<&2, U32>}
+
+# LAW: JFIF T.871 — neutral YCbCr is the packed gray sample
+law jpeg_rgb_neutral:
+  {Jpeg.rgb(128, 128, 128) == 8421504 : U32}
+
+# LAW: JFIF T.871 — Y 0, Cb 128, Cr 255 packs to red 178
+law jpeg_rgb_red:
+  {Jpeg.rgb(0, 128, 255) == 11665408 : U32}
+
+# LAW: a 1 by 1 baseline gray JPEG of sample 128 decodes to that sample
+law jpeg_gray_128:
+  {Jpeg.decode([
+    255, 216, 255, 224, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 255, 219, 0, 67,
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 255, 192, 0, 11, 8, 0, 1, 0, 1, 1, 1, 17, 0, 255, 196, 0, 20, 0, 1, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 196, 0, 20, 16, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 255, 218, 0, 8, 1, 1, 0, 0, 63, 0, 63, 255, 217
+  ]) == Some{Jpeg.Pic{1, 1, [128]}} : Maybe<&2, Jpeg.Pic>}
+
+# LAW: a 1 by 1 baseline gray JPEG of sample 136 decodes to that sample
+law jpeg_gray_136:
+  {Jpeg.decode([
+    255, 216, 255, 224, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 255, 219, 0, 67,
+    0, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 255, 192, 0, 11, 8, 0, 1, 0, 1, 1, 1, 17, 0, 255, 196, 0, 21, 0, 1, 1, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 255, 196, 0, 20, 16, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 255, 218, 0, 8, 1, 1, 0, 0, 63, 0, 161, 255, 217
+  ]) == Some{Jpeg.Pic{1, 1, [136]}} : Maybe<&2, Jpeg.Pic>}
+
+# LAW: a 1 by 1 baseline 4:4:4 JPEG of neutral YCbCr decodes to packed gray
+law jpeg_color_neutral:
+  {Jpeg.decode([
+    255, 216, 255, 224, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 255, 219, 0, 67,
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 255, 192, 0, 17, 8, 0, 1, 0, 1, 3, 1, 17, 0, 2, 17, 0, 3, 17, 0, 255, 196,
+    0, 20, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 196, 0, 20, 16, 1, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 218, 0, 12, 3, 1, 0, 2, 0, 3, 0, 0, 63, 0,
+    3, 255, 217
+  ]) == Some{Jpeg.Pic{1, 1, [8421504]}} : Maybe<&2, Jpeg.Pic>}
+
+# LAW: a 1 by 1 baseline 4:4:4 JPEG of Y 0, Cb 128, Cr 255 decodes to packed red
+law jpeg_color_red:
+  {Jpeg.decode([
+    255, 216, 255, 224, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 255, 219, 0, 67,
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 255, 192, 0, 17, 8, 0, 1, 0, 1, 3, 1, 17, 0, 2, 17, 0, 3, 17, 0, 255, 196,
+    0, 22, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 10, 255, 196, 0, 20, 16,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 218, 0, 12, 3, 1, 0, 2, 0, 3, 0, 0,
+    63, 0, 159, 248, 223, 195, 255, 217
+  ]) == Some{Jpeg.Pic{1, 1, [11665408]}} : Maybe<&2, Jpeg.Pic>}
+
+# LAW: a progressive SOF2 frame decodes as none
+law jpeg_sof2_none:
+  {Jpeg.decode([
+    255, 216, 255, 224, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 255, 194, 0, 11,
+    8, 0, 1, 0, 1, 1, 1, 17, 0, 255, 217
+  ]) == None{} : Maybe<&2, Jpeg.Pic>}
+
+# LAW: an arithmetic SOF9 frame decodes as none
+law jpeg_sof9_none:
+  {Jpeg.decode([
+    255, 216, 255, 201, 0, 11, 8, 0, 1, 0, 1, 1, 1, 17, 0, 255, 217
+  ]) == None{} : Maybe<&2, Jpeg.Pic>}
+
+# LAW: decode_jpeg returns the gray sample as a raster
+law jpeg_raster_gray:
+  {Img.decode_jpeg([
+    255, 216, 255, 224, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 255, 219, 0, 67,
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 255, 192, 0, 11, 8, 0, 1, 0, 1, 1, 1, 17, 0, 255, 196, 0, 20, 0, 1, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 196, 0, 20, 16, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 255, 218, 0, 8, 1, 1, 0, 0, 63, 0, 63, 255, 217
+  ]) == Some{Img.raster(1, 1, [128])} : Maybe<&2, Img.Raster>}

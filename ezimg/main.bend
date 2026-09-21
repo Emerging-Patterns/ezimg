@@ -1,7 +1,9 @@
 # ezimg: images for Bend 2. A Raster is a width, a height, and row-major
-# samples. PNG decode reads 8-bit images; JPEG decode returns none.
+# samples. PNG decode reads 8-bit images. JPEG decode reads a baseline
+# sequential frame.
 import Base
 import ./png.bend as Png
+import ./jpeg.bend as Jpeg
 
 # a picture: width, height, and opaque U32 samples in row-major order
 type Raster is Data:
@@ -276,7 +278,13 @@ def decode_png.of(m: Maybe<&2, List<&2, U32>>, +bytes: List<&2, U32>) -> Maybe<&
 def decode_png(+bytes: List<&2, U32>) -> Maybe<&2, Raster>:
   decode_png.of(parse_signature(bytes), bytes)
 
-# JPEG bytes, or none: the codec is not here yet
+def decode_jpeg.out(got: Maybe<&2, Jpeg.Pic>) -> Maybe<&2, Raster>:
+  match got:
+    case None{}:
+      None{}
+    case Some{Jpeg.Pic{w, h, px}}:
+      Some{Raster{w, h, px}}
+
+# a baseline sequential JPEG, or none when the bytes are not one
 def decode_jpeg(bytes: List<&2, U32>) -> Maybe<&2, Raster>:
-  +_n = List.length(&2, U32, bytes)
-  None{}
+  decode_jpeg.out(Jpeg.decode(bytes))
