@@ -1,0 +1,3 @@
+[package]
+name = "ezimg"
+entry = "ezimg/main.bend"
