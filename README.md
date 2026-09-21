@@ -39,6 +39,5 @@ Closed equalities in `ezimg/LAWS.bend`, proved in `ezimg/PROOF.bend`
   JPEG start-of-image marker.
 - JFIF, [ISO/IEC 10918-5](https://www.iso.org/standard/54989.html) | ITU-T
   T.871: the interchange format those bytes open.
-- Pixel-op laws: width, height, size, sample count, and a solid fill.
 
 Full codec conformance is not claimed yet.
