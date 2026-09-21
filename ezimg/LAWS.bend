@@ -63,3 +63,78 @@ law decode_png_none:
 # LAW: JPEG decode returns none
 law decode_jpeg_none:
   {Img.decode_jpeg(Img.jpeg_soi()) == None{} : Maybe<&2, Img.Raster>}
+
+# LAW: get reads the sample at a point inside the picture
+law get_inside:
+  {Img.get(swatch(), 1, 1) == Some{6} : Maybe<&2, U32>}
+
+# LAW: get is none when x is outside the picture
+law get_outside_x:
+  {Img.get(swatch(), 2, 0) == None{} : Maybe<&2, U32>}
+
+# LAW: get is none when y is outside the picture
+law get_outside_y:
+  {Img.get(swatch(), 0, 3) == None{} : Maybe<&2, U32>}
+
+# LAW: set writes the sample at a point inside the picture
+law set_inside:
+  {Img.set(swatch(), 1, 1, 1) == Img.raster(2, 3, [9, 8, 7, 1, 5, 4]) : Img.Raster}
+
+# LAW: set outside the picture leaves it unchanged
+law set_outside:
+  {Img.set(swatch(), 4, 1, 1) == swatch() : Img.Raster}
+
+# LAW: get reads back what set wrote
+law set_get:
+  {Img.get(Img.set(swatch(), 0, 2, 3), 0, 2) == Some{3} : Maybe<&2, U32>}
+
+# LAW: cropping the whole picture is the picture
+law crop_all:
+  {Img.crop(swatch(), 0, 0, 2, 3) == swatch() : Img.Raster}
+
+# LAW: crop keeps the rectangle that sits inside
+law crop_rect:
+  {Img.crop(swatch(), 1, 1, 1, 2) == Img.raster(1, 2, [6, 4]) : Img.Raster}
+
+# LAW: a rectangle past the edge is clipped to the picture
+law crop_clip:
+  {Img.crop(swatch(), 1, 2, 4, 4) == Img.raster(1, 1, [4]) : Img.Raster}
+
+# LAW: a rectangle that misses the picture is empty
+law crop_miss:
+  {Img.crop(swatch(), 2, 0, 1, 1) == Img.raster(0, 0, []) : Img.Raster}
+
+# LAW: a zero side is an empty picture
+law crop_zero:
+  {Img.crop(swatch(), 0, 0, 2, 0) == Img.raster(0, 0, []) : Img.Raster}
+
+# LAW: blit copies source samples onto dest at the offset
+law blit_at:
+  {Img.blit(Img.fill(3, 2, 0), Img.raster(2, 2, [1, 2, 3, 4]), 1, 0)
+    == Img.raster(3, 2, [0, 1, 2, 0, 3, 4]) : Img.Raster}
+
+# LAW: blit drops the source samples that fall outside dest
+law blit_clip:
+  {Img.blit(Img.fill(3, 2, 0), Img.raster(2, 2, [1, 2, 3, 4]), 2, 1)
+    == Img.raster(3, 2, [0, 0, 0, 0, 0, 1]) : Img.Raster}
+
+# LAW: blit entirely outside dest leaves dest unchanged
+law blit_miss:
+  {Img.blit(swatch(), Img.raster(1, 1, [9]), 5, 5) == swatch() : Img.Raster}
+
+# LAW: map sends every sample through the function
+law map_inc:
+  {Img.map(~(c => (c + 1 : U32)), swatch())
+    == Img.raster(2, 3, [10, 9, 8, 7, 6, 5]) : Img.Raster}
+
+# LAW: samples are opaque U32 values, so premultiply leaves the picture
+law premultiply_opaque:
+  {Img.premultiply(swatch()) == swatch() : Img.Raster}
+
+# LAW: an opaque sample is already straight, so straight leaves the picture
+law straight_opaque:
+  {Img.straight(swatch()) == swatch() : Img.Raster}
+
+# LAW: straight after premultiply is the picture
+law straight_premultiply:
+  {Img.straight(Img.premultiply(swatch())) == swatch() : Img.Raster}
