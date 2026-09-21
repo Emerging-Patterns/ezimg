@@ -1,6 +1,7 @@
 # ezimg: images for Bend 2. A Raster is a width, a height, and row-major
-# samples. PNG and JPEG decode return none until the codecs land.
+# samples. PNG decode reads 8-bit images; JPEG decode returns none.
 import Base
+import ./png.bend as Png
 
 # a picture: width, height, and opaque U32 samples in row-major order
 type Raster is Data:
@@ -255,10 +256,25 @@ def parse_signature(bytes: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
     case _other:
       None{}
 
-# PNG bytes, or none: the codec is not here yet
-def decode_png(bytes: List<&2, U32>) -> Maybe<&2, Raster>:
-  +_n = List.length(&2, U32, bytes)
-  None{}
+def decode_png.pic(m: Maybe<&2, Png.Pic>) -> Maybe<&2, Raster>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Png.Pic{+w, +h, px}}:
+      Some{Raster{w, h, px}}
+
+def decode_png.of(m: Maybe<&2, List<&2, U32>>, +bytes: List<&2, U32>) -> Maybe<&2, Raster>:
+  match m bytes:
+    case None{} _bytes:
+      None{}
+    case Some{_sig} 137 <> 80 <> 78 <> 71 <> 13 <> 10 <> 26 <> 10 <> rest:
+      decode_png.pic(Png.decode(rest))
+    case Some{_sig} _other:
+      None{}
+
+# PNG bytes, or none when the signature or the encoding is rejected
+def decode_png(+bytes: List<&2, U32>) -> Maybe<&2, Raster>:
+  decode_png.of(parse_signature(bytes), bytes)
 
 # JPEG bytes, or none: the codec is not here yet
 def decode_jpeg(bytes: List<&2, U32>) -> Maybe<&2, Raster>:

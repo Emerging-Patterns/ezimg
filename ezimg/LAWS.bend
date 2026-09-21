@@ -1,7 +1,10 @@
-# ezimg: the laws. Closed equalities for the signature, the markers, and the
-# pixel helpers. PROOF.bend fills them.
+# ezimg: the laws. Closed equalities for the signature, the markers, the
+# pixel helpers, and the PNG clauses. PROOF.bend fills them.
 import Base
 import ./main.bend as Img
+import ./crc.bend as Crc
+import ./inflate.bend as Inf
+import ./png.bend as Png
 
 # a 2 by 3 picture, six samples
 def swatch() -> Img.Raster:
@@ -138,3 +141,125 @@ law straight_opaque:
 # LAW: straight after premultiply is the picture
 law straight_premultiply:
   {Img.straight(Img.premultiply(swatch())) == swatch() : Img.Raster}
+
+# chunks of a 1 by 1 colour-type-2 image, after the signature
+def fix.rgb.body() -> List<&2, U32>:
+  [
+    0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0, 144, 119, 83, 222, 0, 0, 0, 15, 73, 68, 65, 84,
+    120, 1, 1, 4, 0, 251, 255, 0, 255, 0, 0, 3, 1, 1, 0, 141, 29, 229, 130, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+  ]
+
+# that image, signature included
+def fix.rgb() -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), fix.rgb.body())
+
+# chunks of a 1 by 1 colour-type-6 image
+def fix.rgba.body() -> List<&2, U32>:
+  [
+    0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 16, 73, 68, 65, 84,
+    120, 1, 1, 5, 0, 250, 255, 0, 255, 0, 0, 128, 4, 129, 1, 128, 25, 47, 133, 176, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66,
+    96, 130
+  ]
+
+# that image, signature included
+def fix.rgba() -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), fix.rgba.body())
+
+# chunks of a 1 by 1 colour-type-0 image
+def fix.grey.body() -> List<&2, U32>:
+  [
+    0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0, 0, 58, 126, 155, 85, 0, 0, 0, 13, 73, 68, 65, 84,
+    120, 1, 1, 2, 0, 253, 255, 0, 7, 0, 9, 0, 8, 185, 172, 134, 135, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+  ]
+
+# that image, signature included
+def fix.grey() -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), fix.grey.body())
+
+# chunks of a 1 by 1 colour-type-4 image
+def fix.ga.body() -> List<&2, U32>:
+  [
+    0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 4, 0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 14, 73, 68, 65, 84,
+    120, 1, 1, 3, 0, 252, 255, 0, 7, 200, 0, 217, 0, 208, 31, 173, 36, 248, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+  ]
+
+# that image, signature included
+def fix.ga() -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), fix.ga.body())
+
+# chunks of a 1 by 1 colour-type-3 image
+def fix.idx.body() -> List<&2, U32>:
+  [
+    0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 3, 0, 0, 0, 40, 203, 52, 187, 0, 0, 0, 3, 80, 76, 84, 69,
+    255, 0, 0, 25, 226, 9, 55, 0, 0, 0, 13, 73, 68, 65, 84, 120, 1, 1, 2, 0, 253, 255, 0, 0, 0, 2, 0, 1, 126, 5, 13,
+    210, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+  ]
+
+# that image, signature included
+def fix.idx() -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), fix.idx.body())
+
+# LAW: ISO 3309 / ITU-T V.42 — CRC-32 of the check digits is 3421780262
+law crc32_digits:
+  {Crc.crc32([49, 50, 51, 52, 53, 54, 55, 56, 57]) == 3421780262 : U32}
+
+# LAW: ISO/IEC 15948 / W3C PNG — CRC-32 of an IHDR type and its data
+law crc32_ihdr:
+  {Crc.crc32([73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]) == 2423739358 : U32}
+
+# LAW: ISO/IEC 15948 / W3C PNG — CRC-32 of the IEND type
+law crc32_iend:
+  {Crc.crc32([73, 69, 78, 68]) == 2923585666 : U32}
+
+# LAW: ISO/IEC 15948 / W3C PNG — IHDR is width, height, depth, colour, compression, filter, interlace
+law parse_ihdr_fields:
+  {Png.parse_ihdr([0, 0, 0, 2, 0, 0, 0, 3, 8, 2, 0, 0, 0]) == Some{Png.Ihdr{2, 3, 8, 2, 0, 0, 0}} : Maybe<&2, Png.Ihdr>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — filter None copies the scanline
+law unfilter_none:
+  {Png.unfilter([0, 10, 20, 30], 3, 1, 1) == Some{[10, 20, 30]} : Maybe<&2, List<&2, U32>>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — filter Sub adds the left neighbour
+law unfilter_sub:
+  {Png.unfilter([1, 10, 20, 30], 3, 1, 1) == Some{[10, 30, 60]} : Maybe<&2, List<&2, U32>>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — filter Up adds the byte above
+law unfilter_up:
+  {Png.unfilter([0, 1, 2, 3, 2, 4, 5, 6], 3, 2, 1) == Some{[1, 2, 3, 5, 7, 9]} : Maybe<&2, List<&2, U32>>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — filter Average adds the mean of left and above
+law unfilter_average:
+  {Png.unfilter([3, 10, 20], 2, 1, 1) == Some{[10, 25]} : Maybe<&2, List<&2, U32>>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — filter Paeth adds the Paeth predictor
+law unfilter_paeth:
+  {Png.unfilter([0, 10, 20, 4, 5, 6], 2, 2, 1) == Some{[10, 20, 15, 26]} : Maybe<&2, List<&2, U32>>}
+
+# LAW: PNG compression method 0 — a stored zlib block inflates to its payload
+law inflate_stored:
+  {Inf.inflate([120, 1, 1, 4, 0, 251, 255, 0, 255, 0, 0, 3, 1, 1, 0])
+    == Some{[0, 255, 0, 0]} : Maybe<&2, List<&2, U32>>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — chunks after the signature decode colour type 2
+law decode_chunks:
+  {Png.decode(fix.rgb.body()) == Some{Png.Pic{1, 1, [4294901760]}} : Maybe<&2, Png.Pic>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — 8-bit colour type 2, interlace 0, is opaque red
+law decode_png_rgb:
+  {Img.decode_png(fix.rgb()) == Some{Img.raster(1, 1, [4294901760])} : Maybe<&2, Img.Raster>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — 8-bit colour type 6 keeps the alpha sample
+law decode_png_rgba:
+  {Img.decode_png(fix.rgba()) == Some{Img.raster(1, 1, [2164195328])} : Maybe<&2, Img.Raster>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — 8-bit colour type 0 expands grey to opaque RGB
+law decode_png_grey:
+  {Img.decode_png(fix.grey()) == Some{Img.raster(1, 1, [4278650631])} : Maybe<&2, Img.Raster>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — 8-bit colour type 4 keeps grey and alpha
+law decode_png_ga:
+  {Img.decode_png(fix.ga()) == Some{Img.raster(1, 1, [3355903751])} : Maybe<&2, Img.Raster>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — 8-bit colour type 3 reads the palette index
+law decode_png_idx:
+  {Img.decode_png(fix.idx()) == Some{Img.raster(1, 1, [4294901760])} : Maybe<&2, Img.Raster>}
