@@ -43,3 +43,57 @@ def Laws.decode_png_none():
 
 def Laws.decode_jpeg_none():
   {==}
+
+def Laws.get_inside():
+  {==}
+
+def Laws.get_outside_x():
+  {==}
+
+def Laws.get_outside_y():
+  {==}
+
+def Laws.set_inside():
+  {==}
+
+def Laws.set_outside():
+  {==}
+
+def Laws.set_get():
+  {==}
+
+def Laws.crop_all():
+  {==}
+
+def Laws.crop_rect():
+  {==}
+
+def Laws.crop_clip():
+  {==}
+
+def Laws.crop_miss():
+  {==}
+
+def Laws.crop_zero():
+  {==}
+
+def Laws.blit_at():
+  {==}
+
+def Laws.blit_clip():
+  {==}
+
+def Laws.blit_miss():
+  {==}
+
+def Laws.map_inc():
+  {==}
+
+def Laws.premultiply_opaque():
+  {==}
+
+def Laws.straight_opaque():
+  {==}
+
+def Laws.straight_premultiply():
+  {==}
