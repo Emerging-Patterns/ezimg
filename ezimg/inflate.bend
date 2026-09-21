@@ -215,7 +215,7 @@ def lit.len1(b: Bool, c: Bool) -> U32:
       lit.len2(c)
 
 # fixed literal/length code length
-def lit.len(+s: U32, a: Bool, b: Bool, c: Bool) -> U32:
+def lit.len(+_s: U32, a: Bool, b: Bool, c: Bool) -> U32:
   match a:
     case True{}:
       8
@@ -641,7 +641,7 @@ def rd.clen(
   )
 
 # literal/length symbols again, after a distance
-def rd.back(wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
+def rd.back(_wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
   clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32,
     +run: U32, +sym: U32, +rep: U32) -> St:
   rd.sym(WLit{}, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, skew, hlit, hdist, run, sym, rep)
@@ -726,7 +726,7 @@ def rd.distsym(
 
 # extra length bits added to the base kept in `left`
 def rd.xlen(
-  +val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32,
+  +val: U32, _wh: Wh, final: Bool, +left: U32, +dist: U32,
   out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
   clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
   +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
@@ -817,8 +817,8 @@ def rd.lit(
 
 # both Huffman tables are built
 def rd.finish.at(
-  m: Maybe<&2, lens.Split>, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, clen: List<&2, U32>, +nleft: U32, +prev: U32,
+  m: Maybe<&2, lens.Split>, _wh: Wh, final: Bool, +left: U32, +dist: U32,
+  out: List<&2, U32>, clen: List<&2, U32>, +_nleft: U32, +prev: U32,
   +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
   +sym: U32, +rep: U32
 ) -> St:
@@ -869,7 +869,7 @@ def rd.rep16(
   out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
   clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
   +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  +sym: U32, +_rep: U32
 ) -> St:
   match z:
     case True{}:
@@ -900,7 +900,7 @@ def rd.clen.t(
 def rd.clen.s(
   z17: Bool, z18: Bool, wh: Wh, final: Bool, +left: U32, +dist: U32,
   out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
+  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +_prev: U32,
   +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +sym: U32
 ) -> St:
   match z17:
