@@ -627,6 +627,68 @@ def encode.finish(+w: U32, +h: U32, ent: List<&2, U32>, +dcc: List<&2, U32>, +dc
   +acc: List<&2, U32>, +acs: List<&2, U32>) -> List<&2, U32>:
   encode.join(encode.header(w, h, dcc, dcs, acc, acs), encode.join(ent, Jpeg.eoi()))
 
+def encode.scan.miss(eq: Bool) -> Bool:
+  match eq:
+    case _e:
+      False{}
+
+# packed 8421504 is Y = Cb = Cr = 128, so each block is the zero coefficient vector
+def encode.scan(left: Nat, xs: List<&2, U32>, eq: Bool) -> Bool:
+  match left:
+    case 0n:
+      +_x = encode.drop(xs)
+      eq
+    case 1n+k:
+      match xs:
+        case Nil{}:
+          encode.scan.miss(eq)
+        case +h <> t:
+          encode.scan(k, t, encode.flat.both(eq, U32.is_eq(h, 8421504)))
+
+def encode.z64() -> List<&2, U32>:
+  List.replicate(U32, 64n, 0)
+
+def encode.zero.block(p: Put, +pred: U32, dc: Tab, ac: Tab) -> Put:
+  encode.block.go(p, pred, encode.z64(), dc, ac)
+
+def encode.zero.tri(p: Put, +dc: Tab, +ac: Tab) -> Put:
+  encode.zero.block(encode.zero.block(encode.zero.block(p, 0, dc, ac), 0, dc, ac), 0, dc, ac)
+
+def encode.neutral.sink(p: Put, ctx: Ctx) -> Put:
+  match ctx:
+    case Ctx{cs, zig, qs, dc, ac}:
+      +_c = encode.drop(cs)
+      +_g = encode.drop(zig)
+      +_q = encode.drop(qs)
+      +_d = encode.sink(dc)
+      +_a = encode.sink(ac)
+      p
+
+def encode.neutral.step(p: Put, ctx: Ctx) -> Put:
+  match ctx:
+    case Ctx{+cs, +zig, +qs, dc, ac}:
+      +_c = encode.drop(cs)
+      +_g = encode.drop(zig)
+      +_q = encode.drop(qs)
+      encode.zero.tri(p, dc, ac)
+
+def encode.neutral.mcus(left: Nat, p: Put, +ctx: Ctx) -> Put:
+  match left:
+    case 0n:
+      encode.neutral.sink(p, ctx)
+    case 1n+nleft:
+      encode.neutral.mcus(nleft, encode.neutral.step(p, ctx), ctx)
+
+def encode.neutral(+w: U32, +h: U32) -> List<&2, U32>:
+  +dcc = encode.dccounts()
+  +dcs = encode.dcsyms()
+  +acc = encode.accounts()
+  +acs = encode.acsyms()
+  +mw = U32.div((w + 7 : U32), 8)
+  +mh = U32.div((h + 7 : U32), 8)
+  encode.finish(w, h, encode.pad(encode.neutral.mcus(U32.to_nat((mw * mh : U32)), encode.put0(),
+    encode.ctx(dcc, dcs, acc, acs))), dcc, dcs, acc, acs)
+
 def encode.go(+w: U32, +h: U32, +px: List<&2, U32>) -> List<&2, U32>:
   +dcc = encode.dccounts()
   +dcs = encode.dcsyms()
@@ -637,13 +699,24 @@ def encode.go(+w: U32, +h: U32, +px: List<&2, U32>) -> List<&2, U32>:
   encode.finish(w, h, encode.pad(encode.mcus(U32.to_nat((mw * mh : U32)), 0, 0, mw, w, h, px, 0, 0, 0,
     encode.put0(), encode.ctx(dcc, dcs, acc, acs))), dcc, dcs, acc, acs)
 
+def encode.dispatch(neu: Bool, +w: U32, +h: U32, px: List<&2, U32>) -> List<&2, U32>:
+  match neu:
+    case True{}:
+      +_d = encode.drop(px)
+      encode.neutral(w, h)
+    case False{}:
+      encode.go(w, h, px)
+
+def encode.arm(+w: U32, +h: U32, +px: List<&2, U32>) -> List<&2, U32>:
+  encode.dispatch(encode.scan(U32.to_nat((w * h : U32)), px, True{}), w, h, px)
+
 def encode.pick(bad: Bool, +w: U32, +h: U32, px: List<&2, U32>) -> List<&2, U32>:
   match bad:
     case True{}:
       +_d = encode.drop(px)
       encode.join(Jpeg.soi(), Jpeg.eoi())
     case False{}:
-      encode.go(w, h, px)
+      encode.arm(w, h, px)
 
 def spots.tail.go(xs: List<&2, U32>, +a: U32, +b: U32) -> List<&2, U32>:
   match xs:
