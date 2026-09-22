@@ -7,6 +7,7 @@
 # Both components share the Annex K luminance Huffman tables.
 # A coefficient indexes its symbol. The scan does not walk the table.
 # A mixed MCU reads each pixel once and keeps the three level planes in arrays.
+# Quant steps are 1, so the mixed scan emits coefficients without dividing.
 # A neutral solid (R = G = B = 128) is an all-zero block and round-trips exactly.
 # Other colours are lossy. Progressive and arithmetic frames are not written.
 # Width and height must sit in 1..65535; anything else is SOI then EOI.
@@ -46,9 +47,9 @@ type Planes is Type:
 type Tile is Type:
   Tile{pix: Array<U32>, ys: Array<U32>, bs: Array<U32>, rs: Array<U32>, fy: Bool, fb: Bool, fr: Bool}
 
-# frequency plane, quant steps left, the open zero run, and the AC coder
+# frequency plane, the open zero run, and the AC coder. Steps are 1, so no quant list.
 type Scan is Type:
-  Scan{arr: Array<U32>, qs: List<&2, U32>, run: U32, ac: Array<U32>, bit: Put}
+  Scan{arr: Array<U32>, run: U32, ac: Array<U32>, bit: Put}
 
 def encode.join(a: List<&2, U32>, b: List<&2, U32>) -> List<&2, U32>:
   List.append(&2, U32, a, b)
@@ -980,20 +981,20 @@ def encode.step.end(got: Array<U32> & Book & U32 & Put, +ydc: U32, +bdc: U32) ->
   (a, book, rdc, bit) = got
   (a, book, ydc, bdc, rdc, bit)
 
-def encode.scan.hit(got: Array<U32> & Put, arr: Array<U32>, qs: List<&2, U32>) -> Scan:
+def encode.scan.hit(got: Array<U32> & Put, arr: Array<U32>) -> Scan:
   (ac, bit) = got
-  Scan{arr, qs, 0, ac, bit}
+  Scan{arr, 0, ac, bit}
 
 def encode.scan.skip(sc: Scan, +c: U32) -> Scan:
   match sc:
-    case Scan{arr, qs, +run, ac, bit}:
+    case Scan{arr, +run, ac, bit}:
       +_c = (c - c : U32)
-      Scan{arr, qs, (run + 1 : U32), ac, bit}
+      Scan{arr, (run + 1 : U32), ac, bit}
 
 def encode.scan.keep(sc: Scan, +c: U32) -> Scan:
   match sc:
-    case Scan{arr, qs, +run, ac, bit}:
-      encode.scan.hit(encode.ac.step(c, run, (ac, bit)), arr, qs)
+    case Scan{arr, +run, ac, bit}:
+      encode.scan.hit(encode.ac.step(c, run, (ac, bit)), arr)
 
 def encode.scan.bump(z: Bool, sc: Scan, +c: U32) -> Scan:
   match z:
@@ -1002,22 +1003,20 @@ def encode.scan.bump(z: Bool, sc: Scan, +c: U32) -> Scan:
     case False{}:
       encode.scan.keep(sc, c)
 
-def encode.scan.val(got: Array<U32> & U32, qv: U32 & List<&2, U32>, +run: U32, st: Array<U32> & Put) -> Scan:
-  (arr, +v) = got
-  (+q, qt) = qv
+# step is 1, so the frequency is the coefficient
+def encode.scan.val(got: Array<U32> & U32, +run: U32, st: Array<U32> & Put) -> Scan:
+  (arr, +c) = got
   (ac, bit) = st
-  +c = encode.qdiv(v, q)
-  encode.scan.bump(U32.is_eq(c, 0), Scan{arr, qt, run, ac, bit}, c)
+  encode.scan.bump(U32.is_eq(c, 0), Scan{arr, run, ac, bit}, c)
 
 def encode.scan.step(sc: Scan, +g: U32) -> Scan:
   match sc:
-    case Scan{arr, qs, +run, ac, bit}:
-      encode.scan.val(Array.get(U32, arr, g), encode.zzq.take(qs), run, (ac, bit))
+    case Scan{arr, +run, ac, bit}:
+      encode.scan.val(Array.get(U32, arr, g), run, (ac, bit))
 
 def encode.scan.end(sc: Scan) -> Array<U32> & Put:
   match sc:
-    case Scan{arr, qs, +run, ac, bit}:
-      +_q = encode.drop(qs)
+    case Scan{arr, +run, ac, bit}:
       +_s = encode.pix.sink(arr)
       encode.eob.on(U32.is_gt(run, 0), (ac, bit))
 
@@ -1034,40 +1033,37 @@ def encode.scan.book(got: Array<U32> & Put, dc: Array<U32>, +d: U32) -> Book & U
   (Book{dc, ac}, d, p)
 
 def encode.scan.join(
-  got: Array<U32> & Put, ac: Array<U32>, +d: U32, rest: List<&2, U32>, arr: Array<U32>, qt: List<&2, U32>
+  got: Array<U32> & Put, ac: Array<U32>, +d: U32, rest: List<&2, U32>, arr: Array<U32>
 ) -> Book & U32 & Put:
   (dc, p) = got
-  encode.scan.book(encode.scan.ac(rest, Scan{arr, qt, 0, ac, p}), dc, d)
+  encode.scan.book(encode.scan.ac(rest, Scan{arr, 0, ac, p}), dc, d)
 
 def encode.scan.dc(
-  book: Book, p: Put, +pred: U32, +d0: U32, rest: List<&2, U32>, arr: Array<U32>, qt: List<&2, U32>
+  book: Book, p: Put, +pred: U32, +d0: U32, rest: List<&2, U32>, arr: Array<U32>
 ) -> Book & U32 & Put:
   match book:
     case Book{dc, ac}:
       +d = encode.clip(d0, 2047)
-      encode.scan.join(encode.dc(dc, p, (d - pred : U32)), ac, d, rest, arr, qt)
+      encode.scan.join(encode.dc(dc, p, (d - pred : U32)), ac, d, rest, arr)
 
 def encode.scan.open(
-  rest: List<&2, U32>, got: Array<U32> & U32, qv: U32 & List<&2, U32>, book: Book, p: Put, +pred: U32
+  rest: List<&2, U32>, got: Array<U32> & U32, book: Book, p: Put, +pred: U32
 ) -> Book & U32 & Put:
   (arr, +v) = got
-  (+q, qt) = qv
-  encode.scan.dc(book, p, pred, encode.qdiv(v, q), rest, arr, qt)
+  encode.scan.dc(book, p, pred, v, rest, arr)
 
-def encode.scan.none(book: Book, p: Put, arr: Array<U32>, qs: List<&2, U32>, +pred: U32) -> Book & U32 & Put:
+def encode.scan.none(book: Book, p: Put, arr: Array<U32>, +pred: U32) -> Book & U32 & Put:
   +_s = encode.pix.sink(arr)
-  +_q = encode.drop(qs)
   +_p = (pred - pred : U32)
   (book, 0, p)
 
 # DC at the first zigzag index, then the AC run, both read from the frequency plane
-def encode.scan(book: Book, p: Put, +pred: U32, arr: Array<U32>, zig: List<&2, U32>, qs: List<&2, U32>) ->
-  Book & U32 & Put:
+def encode.scan(book: Book, p: Put, +pred: U32, arr: Array<U32>, zig: List<&2, U32>) -> Book & U32 & Put:
   match zig:
     case Nil{}:
-      encode.scan.none(book, p, arr, qs, pred)
+      encode.scan.none(book, p, arr, pred)
     case +g <> gt:
-      encode.scan.open(gt, Array.get(U32, arr, g), encode.zzq.take(qs), book, p, pred)
+      encode.scan.open(gt, Array.get(U32, arr, g), book, p, pred)
 
 def encode.chan.flat(
   plane: Array<U32>, book: Book, p: Put, +pred: U32, +cs: List<&2, U32>, +zig: List<&2, U32>, +qs: List<&2, U32>
@@ -1081,7 +1077,8 @@ def encode.chan.flat(
 def encode.chan.mix(
   plane: Array<U32>, book: Book, p: Put, +pred: U32, +cs: List<&2, U32>, zig: List<&2, U32>, qs: List<&2, U32>
 ) -> Book & U32 & Put:
-  encode.scan(book, p, pred, encode.freq(plane, cs), zig, qs)
+  +_q = encode.drop(qs)
+  encode.scan(book, p, pred, encode.freq(plane, cs), zig)
 
 def encode.chan.go(
   flat: Bool, plane: Array<U32>, book: Book, p: Put, +pred: U32, +cs: List<&2, U32>, +zig: List<&2, U32>,
