@@ -754,17 +754,84 @@ def encode.hunt.go(left: Nat, xs: List<&2, U32>, eq: Bool, +h: U32, +seen: U32) 
             case True{}:
               encode.hunt.go(p, u, U32.is_eq(s, 8421504), s, (seen + 1 : U32))
 
-# one owner of the samples. An all-neutral image is consumed, not copied.
-def encode.hunt(left: Nat, xs: List<&2, U32>, +seen: U32) -> Bool & List<&2, U32>:
+# the area was one colour. `seen` of those samples are replayed only on a miss.
+def encode.hold.no(+seen: U32, +c: U32, tail: List<&2, U32>) -> Bool & List<&2, U32>:
+  (False{}, List.append(&2, U32, List.replicate(U32, U32.to_nat(seen), c), tail))
+
+def encode.hold.yes(xs: List<&2, U32>, +c: U32, +h: U32, +seen: U32) -> Bool & List<&2, U32>:
+  +_d = encode.drop(xs)
+  +_u = (c + h + seen : U32)
+  (True{}, [])
+
+def encode.hold.done(eq: Bool, +h: U32, xs: List<&2, U32>, +c: U32, +seen: U32) -> Bool & List<&2, U32>:
+  match eq:
+    case False{}:
+      encode.hold.no(seen, c, h <> xs)
+    case True{}:
+      encode.hold.yes(xs, c, h, seen)
+
+def encode.hold.empty(eq: Bool, +h: U32, +c: U32, +seen: U32) -> Bool & List<&2, U32>:
+  match eq:
+    case False{}:
+      encode.hold.no(seen, c, h <> [])
+    case True{}:
+      +_h = (h - h : U32)
+      encode.hold.no((seen + 1 : U32), c, [])
+
+# `h` was just read. `left` samples remain after it. `seen` copies of `c` precede it.
+def encode.hold.go(left: Nat, xs: List<&2, U32>, eq: Bool, +h: U32, +c: U32, +seen: U32) -> Bool & List<&2, U32>:
   match left:
     case 0n:
-      encode.hunt.rest(xs)
+      encode.hold.done(eq, h, xs, c, seen)
+    case 1n+p:
+      match xs:
+        case Nil{}:
+          encode.hold.empty(eq, h, c, seen)
+        case +s <> u:
+          match eq:
+            case False{}:
+              encode.hold.no(seen, c, h <> (s <> u))
+            case True{}:
+              encode.hold.go(p, u, U32.is_eq(s, c), s, c, (seen + 1 : U32))
+
+# 0 neutral, 1 one other colour, 2 mixed. A short list stays mixed: the plane's gaps are 0.
+def encode.watch.neu(got: Bool & List<&2, U32>) -> U32 & U32 & List<&2, U32>:
+  (ok, px) = got
+  match ok:
+    case True{}:
+      +_d = encode.drop(px)
+      (0, 0, [])
+    case False{}:
+      (2, 0, px)
+
+def encode.watch.sol(got: Bool & List<&2, U32>, +h: U32) -> U32 & U32 & List<&2, U32>:
+  (ok, px) = got
+  match ok:
+    case True{}:
+      +_d = encode.drop(px)
+      (1, h, [])
+    case False{}:
+      +_h = (h - h : U32)
+      (2, 0, px)
+
+def encode.watch.pick(neu: Bool, k: Nat, t: List<&2, U32>, +h: U32) -> U32 & U32 & List<&2, U32>:
+  match neu:
+    case True{}:
+      encode.watch.neu(encode.hunt.go(k, t, True{}, h, 0))
+    case False{}:
+      encode.watch.sol(encode.hold.go(k, t, True{}, h, h, 0), h)
+
+def encode.watch(left: Nat, xs: List<&2, U32>) -> U32 & U32 & List<&2, U32>:
+  match left:
+    case 0n:
+      +_d = encode.drop(xs)
+      (0, 0, [])
     case 1n+k:
       match xs:
         case Nil{}:
-          encode.hunt.nil(seen)
+          (2, 0, [])
         case +h <> t:
-          encode.hunt.go(k, t, U32.is_eq(h, 8421504), h, seen)
+          encode.watch.pick(U32.is_eq(h, 8421504), k, t, h)
 
 # low len bits of code join the open byte; a finished byte is stuffed
 def encode.pack.byte(+buf: U32, +len: U32, +code: U32) -> U32:
@@ -824,6 +891,36 @@ def encode.neutral(+w: U32, +h: U32) -> List<&2, U32>:
   encode.finish(w, h, encode.pad(encode.neutral.mcus(U32.to_nat((mw * mh : U32)), encode.put0())),
     dcc, dcs, acc, acs)
 
+# the rest of a solid picture is the same DC, so each later block is a zero difference
+def encode.solid.end(got: Array<U32> & Put) -> Put:
+  (a, bit) = got
+  +_s = encode.pix.sink(a)
+  bit
+
+def encode.solid.cr(got: Array<U32> & Put, +ctx: Ctx) -> Put:
+  (a, bit) = got
+  encode.solid.end(encode.block(bit, 0, a, 1, 1, 0, 0, 2, ctx))
+
+def encode.solid.cb(got: Array<U32> & Put, +ctx: Ctx) -> Put:
+  (a, bit) = got
+  encode.solid.cr(encode.block(bit, 0, a, 1, 1, 0, 0, 1, ctx), ctx)
+
+def encode.solid.y(a: Array<U32>, bit: Put, +ctx: Ctx) -> Put:
+  encode.solid.cb(encode.block(bit, 0, a, 1, 1, 0, 0, 0, ctx), ctx)
+
+# one colour repeated. The first MCU is that block; every later MCU is three zero differences.
+def encode.solid(+w: U32, +h: U32, +color: U32) -> List<&2, U32>:
+  +dcc = encode.dccounts()
+  +dcs = encode.dcsyms()
+  +acc = encode.accounts()
+  +acs = encode.acsyms()
+  +mw = U32.div((w + 7 : U32), 8)
+  +mh = U32.div((h + 7 : U32), 8)
+  +n = (mw * mh : U32)
+  encode.finish(w, h, encode.pad(encode.neutral.mcus(U32.to_nat((n - 1 : U32)),
+    encode.solid.y(Array.set(U32, Jpeg.decode.plane(1), 0, color), encode.put0(),
+      encode.ctx(dcc, dcs, acc, acs)))), dcc, dcs, acc, acs)
+
 def encode.go(+w: U32, +h: U32, px: List<&2, U32>) -> List<&2, U32>:
   +dcc = encode.dccounts()
   +dcs = encode.dcsyms()
@@ -836,16 +933,26 @@ def encode.go(+w: U32, +h: U32, px: List<&2, U32>) -> List<&2, U32>:
     (encode.pix.load(U32.to_nat(area), px, Jpeg.decode.plane(area), 0), 0, 0, 0, encode.put0()), 0, 0, mw, w, h,
     encode.ctx(dcc, dcs, acc, acs))), dcc, dcs, acc, acs)
 
-def encode.route(got: Bool & List<&2, U32>, +w: U32, +h: U32) -> List<&2, U32>:
-  (neu, px) = got
-  match neu:
-    case True{}:
+def encode.dispatch(+tag: U32, +color: U32, px: List<&2, U32>, +w: U32, +h: U32) -> List<&2, U32>:
+  match tag:
+    case 0:
+      +_c = (color - color : U32)
+      +_d = encode.drop(px)
       encode.neutral(w, h)
-    case False{}:
+    case 1:
+      +_d = encode.drop(px)
+      encode.solid(w, h, color)
+    case _:
+      +_c = (color - color : U32)
       encode.go(w, h, px)
 
+def encode.arm.use(got: U32 & U32 & List<&2, U32>, +w: U32, +h: U32) -> List<&2, U32>:
+  match got:
+    case (+tag, +color, px):
+      encode.dispatch(tag, color, px, w, h)
+
 def encode.arm(+w: U32, +h: U32, px: List<&2, U32>) -> List<&2, U32>:
-  encode.route(encode.hunt(U32.to_nat((w * h : U32)), px, 0), w, h)
+  encode.arm.use(encode.watch(U32.to_nat((w * h : U32)), px), w, h)
 
 def encode.pick(bad: Bool, +w: U32, +h: U32, px: List<&2, U32>) -> List<&2, U32>:
   match bad:
