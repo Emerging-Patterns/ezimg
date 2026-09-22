@@ -913,6 +913,26 @@ def enc.pred(n: Nat) -> Nat:
     case 1n+p:
       p
 
+# how many bytes, counted in a word
+def enc.len(xs: List<&2, U32>, +n: U32) -> U32:
+  match xs:
+    case Nil{}:
+      n
+    case _h <> t:
+      enc.len(t, (n + 1 : U32))
+
+# a reversed prefix, consed onto the suffix
+def enc.cat.go(xs: List<&2, U32>, ys: List<&2, U32>) -> List<&2, U32>:
+  match xs:
+    case Nil{}:
+      ys
+    case +h <> t:
+      enc.cat.go(t, {h <> ys : List<&2, U32>})
+
+# xs, then ys
+def enc.cat(xs: List<&2, U32>, ys: List<&2, U32>) -> List<&2, U32>:
+  enc.cat.go(List.reverse(&2, U32, xs), ys)
+
 # scanlines, filter None. `col` is how many samples remain after this one.
 # `row` is the current scanline newest-first; `done` is the finished rows,
 # also newest-first, each already closed by its filter byte.
@@ -924,7 +944,7 @@ def enc.raw(
       List.reverse(&2, U32, done)
     case +c <> t 0n:
       +row2 = enc.push(op, c, row)
-      +done2 = List.append(&2, U32, row2, {0 <> done : List<&2, U32>})
+      +done2 = enc.cat(row2, {0 <> done : List<&2, U32>})
       enc.raw(t, enc.pred(w), w, op, [], done2)
     case +c <> t 1n+p:
       enc.raw(t, p, w, op, enc.push(op, c, row), done)
@@ -939,8 +959,8 @@ def enc.head(fin: Bool, +len: U32, +nlen: U32) -> List<&2, U32>:
 
 # one stored DEFLATE block. `data` is chronological.
 def enc.stored(fin: Bool, +data: List<&2, U32>) -> List<&2, U32>:
-  +len = U32.from_nat(List.length(&2, U32, data))
-  List.append(&2, U32, enc.head(fin, len, (len .^. 65535 : U32)), data)
+  +len = enc.len(data, 0)
+  enc.cat(enc.head(fin, len, (len .^. 65535 : U32)), data)
 
 # stored blocks of at most `max` bytes. `z` means this byte opens a block.
 # `acc` is the open block, newest-first.
@@ -953,7 +973,7 @@ def enc.feed(
     case +h <> t True{}:
       +nxt = (max - 1 : U32)
       +blk = enc.stored(False{}, List.reverse(&2, U32, acc))
-      List.append(&2, U32, blk, enc.feed(t, U32.is_zero(nxt), nxt, max, [h]))
+      enc.cat(blk, enc.feed(t, U32.is_zero(nxt), nxt, max, [h]))
     case +h <> t False{}:
       +nxt = (room - 1 : U32)
       enc.feed(t, U32.is_zero(nxt), nxt, max, {h <> acc : List<&2, U32>})
@@ -964,14 +984,14 @@ def enc.blocks(+max: U32, xs: List<&2, U32>) -> List<&2, U32>:
 
 # a chunk: length, type, data, and CRC-32 over the type and the data
 def enc.chunk(+tag: U32, +data: List<&2, U32>) -> List<&2, U32>:
-  +body = List.append(&2, U32, enc.be(tag), data)
+  +body = enc.cat(enc.be(tag), data)
   +crc = Crc.crc32(body)
-  +n = U32.from_nat(List.length(&2, U32, data))
-  List.append(&2, U32, enc.be(n), List.append(&2, U32, body, enc.be(crc)))
+  +n = enc.len(data, 0)
+  enc.cat(enc.be(n), enc.cat(body, enc.be(crc)))
 
 # IHDR: width, height, depth 8, colour type, method 0, filter 0, interlace 0
 def enc.ihdr(+w: U32, +h: U32, +ct: U32) -> List<&2, U32>:
-  List.append(&2, U32, enc.be(w), List.append(&2, U32, enc.be(h), [8, ct, 0, 0, 0]))
+  enc.cat(enc.be(w), enc.cat(enc.be(h), [8, ct, 0, 0, 0]))
 
 # the eight-byte signature
 def enc.sig() -> List<&2, U32>:
@@ -988,13 +1008,13 @@ def enc.ct(op: Bool) -> U32:
 # zlib wrapper, CMF/FLG 120 1, around stored DEFLATE blocks and an Adler-32
 def enc.zlib(+raw: List<&2, U32>) -> List<&2, U32>:
   +sum = Inf.adler.of(raw)
-  List.append(&2, U32, [120, 1], List.append(&2, U32, enc.blocks(65535, raw), enc.be(sum)))
+  enc.cat([120, 1], enc.cat(enc.blocks(65535, raw), enc.be(sum)))
 
 # signature, IHDR, IDAT, IEND
 def enc.seal(+w: U32, +h: U32, op: Bool, raw: List<&2, U32>) -> List<&2, U32>:
   +ihdr = enc.chunk(tag.ihdr(), enc.ihdr(w, h, enc.ct(op)))
   +idat = enc.chunk(tag.idat(), enc.zlib(raw))
-  List.append(&2, U32, enc.sig(), List.append(&2, U32, ihdr, List.append(&2, U32, idat, enc.chunk(tag.iend(), []))))
+  enc.cat(enc.sig(), enc.cat(ihdr, enc.cat(idat, enc.chunk(tag.iend(), []))))
 
 # every sample so far is opaque, and `z` carries that fact forward
 def enc.opaque(px: List<&2, U32>, z: Bool) -> Bool:
@@ -1013,7 +1033,7 @@ def enc.area(+w: U32, +h: U32) -> Bool:
 # a positive area whose sample list covers it
 def enc.good(+w: U32, +h: U32, px: List<&2, U32>) -> Bool:
   +area = (w * h : U32)
-  +n = U32.from_nat(List.length(&2, U32, px))
+  +n = enc.len(px, 0)
   Bool.and(Bool.and(U32.is_gt(w, 0), U32.is_gt(h, 0)), Bool.and(enc.area(w, h), U32.is_eq(n, area)))
 
 # the PNG bytes of a picture already known to be in range
