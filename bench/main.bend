@@ -21,6 +21,7 @@ def u32.arg.go(m: Maybe<&2, U32>) -> U32:
 def u32.arg(s: String) -> U32:
   u32.arg.go(U32.read(s))
 
+# n copies of x, prepended onto acc
 def rep(n: Nat, +x: U32, acc: List<&2, U32>) -> List<&2, U32>:
   match n:
     case 0n:
@@ -28,6 +29,7 @@ def rep(n: Nat, +x: U32, acc: List<&2, U32>) -> List<&2, U32>:
     case 1n+p:
       rep(p, x, {x <> acc : List<&2, U32>})
 
+# a solid Raster filled with one packed sample
 def solid(+w: U32, +h: U32, +c: U32) -> Img.Raster:
   Img.raster(w, h, rep(U32.to_nat((w * h : U32)), c, []))
 
@@ -86,6 +88,7 @@ def parse.ezr(xs: List<&2, U32>) -> Maybe<&2, Img.Raster>:
     case _other:
       None{}
 
+# length of a byte list, accumulated in n
 def ulen(xs: List<&2, U32>, +n: U32) -> U32:
   match xs:
     case Nil{}:
@@ -101,11 +104,18 @@ def pixsum(px: List<&2, U32>, +a: U32) -> U32:
     case h <> t:
       pixsum(t, ((a + h : U32) + 1 : U32))
 
+# close the file once the write Result is Unit
+def wrote.close(file: File, ok: Unit) -> IO(Unit):
+  match ok:
+    case Unit{}:
+      File.close(file)
+
+# force a write Result, then close the file
 def wrote(pair: File & Result<&1, &1, U32 & String, Unit>) -> IO(Unit):
   (file, result) = pair
   do IO<Unit>:
-    u : Unit <- IO.pass(Unit, result)
-    File.close(file)
+    ok : Unit <- IO.pass(Unit, result)
+    wrote.close(file, ok)
 
 def write.file(path: String, data: List<&2, U32>) -> IO(Unit):
   do IO<Unit>:
@@ -113,12 +123,18 @@ def write.file(path: String, data: List<&2, U32>) -> IO(Unit):
     p : File & Result<&1, &1, U32 & String, Unit> <- File.write_bytes(f, data)
     wrote(p)
 
+# after reading bytes, close the file and return them
+def took.after(xs: List<&2, U32>, closed: Unit) -> List<&2, U32>:
+  match closed:
+    case Unit{}:
+      xs
+
 def took.bytes(pair: File & Result<&1, &1, U32 & String, List<&2, U32>>) -> IO(List<&2, U32>):
   (file, result) = pair
   do IO<List<&2, U32>>:
     xs : List<&2, U32> <- IO.pass(List<&2, U32>, result)
-    u : Unit <- File.close(file)
-    return xs
+    closed : Unit <- File.close(file)
+    return took.after(xs, closed)
 
 def read.n(pair: File & Result<&1, &1, U32 & String, U32>) -> IO(List<&2, U32>):
   (file, result) = pair
@@ -452,6 +468,7 @@ def run.named.at(z: Bool, +cmd: String, +a: String, +b: String, +c: String) -> I
 def run.named(+cmd: String, +a: String, +b: String, +c: String) -> IO(Unit):
   run.named.at(String.eq(cmd, "png-dec"), cmd, a, b, c)
 
+# the first four argv strings, empty when missing
 def args4(xs: List<String>) -> String & String & String & String:
   match xs:
     case a <> b <> c <> d <> _t:
