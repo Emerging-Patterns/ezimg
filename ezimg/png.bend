@@ -1150,6 +1150,184 @@ def enc.seal.body(
     case (+c, acc):
       enc.seal.run(enc.crc.list([120, 1], c, acc), raw, n, sum, ie)
 
+# Adler-32 reduced once. The sum stays below twice the modulus.
+def enc.add.at(z: Bool, +t: U32) -> U32:
+  match z:
+    case True{}:
+      (t - 65521 : U32)
+    case False{}:
+      t
+
+# one Adler-32 add, modulo 65521
+def enc.add(+s: U32, +x: U32) -> U32:
+  +t = (s + x : U32)
+  enc.add.at(U32.is_ge(t, 65521), t)
+
+# the running CRC, the newest-first bytes, and the packed Adler-32
+def enc.rgb.fin(+c: U32, acc: List<&2, U32>, +a: U32, +b: U32) -> (U32 & List<&2, U32>) & U32:
+  ((c, acc), ((b << 16n : U32) .|. a : U32))
+
+# stored blocks for colour type 2, one decreasing step at a time. zblock opens
+# a block and zspan counts its raw bytes. The other flags are the cursor: a
+# filter byte, red, green, or the last sample of the row. Block headers match
+# enc.pour. Adler-32 covers the raw bytes only.
+def enc.rgb.go(
+  fuel: Nat, zblock: Bool, zdone: Bool, zspan: Bool, zneed: Bool, filt: Bool, zred: Bool, zgrn: Bool,
+  zlast: Bool, px: List<&2, U32>, +col: U32, +row: U32, +w: U32, +need: U32, +c: U32,
+  acc: List<&2, U32>, +a: U32, +b: U32, +left: U32, +len: U32
+) -> (U32 & List<&2, U32>) & U32:
+  match fuel:
+    case 0n:
+      enc.rgb.fin(c, acc, a, b)
+    case 1n+p:
+      match zblock:
+        case True{}:
+          match zdone:
+            case True{}:
+              enc.rgb.fin(c, acc, a, b)
+            case False{}:
+              +len2 = enc.cap(left)
+              +bf = enc.bf(left)
+              +nlen = (len2 .^. 65535 : U32)
+              +b1 = enc.byte(len2)
+              +b2 = enc.hi(len2)
+              +b3 = enc.byte(nlen)
+              +b4 = enc.hi(nlen)
+              +c1 = Crc.crc.byte(c, bf)
+              +c2 = Crc.crc.byte(c1, b1)
+              +c3 = Crc.crc.byte(c2, b2)
+              +c4 = Crc.crc.byte(c3, b3)
+              +c5 = Crc.crc.byte(c4, b4)
+              +a0 = {bf <> acc : List<&2, U32>}
+              +a1 = {b1 <> a0 : List<&2, U32>}
+              +a2 = {b2 <> a1 : List<&2, U32>}
+              +a3 = {b3 <> a2 : List<&2, U32>}
+              +a4 = {b4 <> a3 : List<&2, U32>}
+              enc.rgb.go(
+                p, False{}, False{}, True{}, False{}, filt, zred, zgrn, zlast, px, col, row, w, len2, c5, a4, a,
+                b, left, len2
+              )
+        case False{}:
+          match zdone:
+            case _dn:
+              match zspan:
+                case False{}:
+                  enc.rgb.fin(c, acc, a, b)
+                case True{}:
+                  match zneed:
+                    case True{}:
+                      +left2 = (left - len : U32)
+                      enc.rgb.go(
+                        p, True{}, U32.is_zero(left2), False{}, False{}, filt, zred, zgrn, zlast, px, col, row, w,
+                        need, c, acc, a, b, left2, len
+                      )
+                    case False{}:
+                      match filt:
+                        case True{}:
+                          +need2 = (need - 1 : U32)
+                          +a2 = enc.add(a, 0)
+                          +b2 = enc.add(b, a2)
+                          enc.rgb.go(
+                            p, False{}, False{}, True{}, U32.is_zero(need2), False{}, True{}, False{}, False{}, px,
+                            col, row, w, need2, Crc.crc.byte(c, 0), {0 <> acc : List<&2, U32>}, a2, b2, left, len
+                          )
+                        case False{}:
+                          match zred:
+                            case True{}:
+                              match zgrn:
+                                case _gn:
+                                  match zlast:
+                                    case _ls:
+                                      match px:
+                                        case Nil{}:
+                                          +need2 = (need - 1 : U32)
+                                          +a2 = enc.add(a, 0)
+                                          +b2 = enc.add(b, a2)
+                                          enc.rgb.go(
+                                            p, False{}, False{}, True{}, U32.is_zero(need2), False{}, False{}, True{},
+                                            False{}, [], 0, row, w, need2, Crc.crc.byte(c, 0),
+                                            {0 <> acc : List<&2, U32>}, a2, b2, left, len
+                                          )
+                                        case +s <> t:
+                                          +x = enc.r(s)
+                                          +need2 = (need - 1 : U32)
+                                          +a2 = enc.add(a, x)
+                                          +b2 = enc.add(b, a2)
+                                          enc.rgb.go(
+                                            p, False{}, False{}, True{}, U32.is_zero(need2), False{}, False{}, True{},
+                                            False{}, t, s, row, w, need2, Crc.crc.byte(c, x),
+                                            {x <> acc : List<&2, U32>}, a2, b2, left, len
+                                          )
+                            case False{}:
+                              match zgrn:
+                                case True{}:
+                                  +x = enc.g(col)
+                                  +need2 = (need - 1 : U32)
+                                  +a2 = enc.add(a, x)
+                                  +b2 = enc.add(b, a2)
+                                  enc.rgb.go(
+                                    p, False{}, False{}, True{}, U32.is_zero(need2), False{}, False{}, False{},
+                                    U32.is_eq(row, 1), px, col, row, w, need2, Crc.crc.byte(c, x),
+                                    {x <> acc : List<&2, U32>}, a2, b2, left, len
+                                  )
+                                case False{}:
+                                  match zlast:
+                                    case True{}:
+                                      +x = enc.b(col)
+                                      +need2 = (need - 1 : U32)
+                                      +a2 = enc.add(a, x)
+                                      +b2 = enc.add(b, a2)
+                                      enc.rgb.go(
+                                        p, False{}, False{}, True{}, U32.is_zero(need2), True{}, True{}, False{},
+                                        False{}, px, col, w, w, need2, Crc.crc.byte(c, x),
+                                        {x <> acc : List<&2, U32>}, a2, b2, left, len
+                                      )
+                                    case False{}:
+                                      +x = enc.b(col)
+                                      +need2 = (need - 1 : U32)
+                                      +a2 = enc.add(a, x)
+                                      +b2 = enc.add(b, a2)
+                                      enc.rgb.go(
+                                        p, False{}, False{}, True{}, U32.is_zero(need2), False{}, True{}, False{},
+                                        False{}, px, col, (row - 1 : U32), w, need2, Crc.crc.byte(c, x),
+                                        {x <> acc : List<&2, U32>}, a2, b2, left, len
+                                      )
+
+def enc.wide.rgb.out(p: (U32 & List<&2, U32>) & U32, ie: List<&2, U32>) -> List<&2, U32>:
+  match p:
+    case ((+c, acc), +sum):
+      enc.seal.adler((c, acc), sum, ie)
+
+# zlib header, then the stored blocks written from the samples
+def enc.wide.rgb.z(
+  p: U32 & List<&2, U32>, px: List<&2, U32>, +w: U32, +n: U32, ie: List<&2, U32>
+) -> List<&2, U32>:
+  match p:
+    case (+c, acc):
+      +steps = ((n + (enc.nblk(n) * 2 : U32) : U32) - 1 : U32)
+      got = enc.rgb.go(
+        U32.to_nat(steps), True{}, False{}, False{}, False{}, True{}, True{}, False{}, False{}, px, 0, w, w, 0, c,
+        acc, 1, 0, n, 0
+      )
+      enc.wide.rgb.out(got, ie)
+
+# IDAT type, then the zlib stream
+def enc.wide.rgb.go(
+  p: U32 & List<&2, U32>, px: List<&2, U32>, +w: U32, +n: U32, ie: List<&2, U32>
+) -> List<&2, U32>:
+  match p:
+    case (+c, acc):
+      enc.wide.rgb.z(enc.crc.list([120, 1], c, acc), px, w, n, ie)
+
+# a colour-type-2 picture whose filtered bytes do not fit in one stored block.
+# Each filter and channel byte is consed into its stored block, with Adler-32
+# and the IDAT CRC, so the raw scanline list is not built.
+def enc.wide.rgb(+w: U32, +h: U32, px: List<&2, U32>, +n: U32) -> List<&2, U32>:
+  +ih = enc.chunk(tag.ihdr(), enc.ihdr(w, h, enc.ct(True{})))
+  +ie = enc.chunk(tag.iend(), [])
+  +acc = enc.cat.go(enc.be(enc.idat.ln(n)), enc.cat.go(ih, enc.cat.go(enc.sig(), [])))
+  enc.wide.rgb.go(enc.crc.list(enc.be(tag.idat()), 4294967295, acc), px, w, n, ie)
+
 # one picture whose filtered bytes do not fit in a single stored block.
 # Signature, IHDR, the IDAT length, and the payload are consed newest-first
 # and reversed once. Adler-32 stays a separate pass over the raw bytes.
@@ -1204,10 +1382,34 @@ def enc.good(+w: U32, +h: U32, px: List<&2, U32>) -> Bool:
   +n = enc.len(px, 0)
   Bool.and(Bool.and(U32.is_gt(w, 0), U32.is_gt(h, 0)), Bool.and(enc.area(w, h), U32.is_eq(n, area)))
 
+# filtered bytes: one per row, plus the channels of every sample
+def enc.nbytes(op: Bool, +w: U32, +h: U32) -> U32:
+  (h * ((w * enc.nch(op) : U32) + 1 : U32) : U32)
+
+# colour type 6, and a colour type 2 that fits in one block, still build the
+# raw list. A larger colour type 2 writes its stored blocks from the samples.
+def enc.paint.wide(
+  op: Bool, +w: U32, +h: U32, px: List<&2, U32>, +n: U32
+) -> List<&2, U32>:
+  match op:
+    case True{}:
+      enc.wide.rgb(w, h, px, n)
+    case False{}:
+      enc.seal(w, h, False{}, enc.raw(px, 0n, U32.to_nat(w), False{}, [], 0))
+
+def enc.paint.at(
+  z: Bool, +w: U32, +h: U32, +op: Bool, px: List<&2, U32>, +n: U32
+) -> List<&2, U32>:
+  match z:
+    case False{}:
+      enc.seal(w, h, op, enc.raw(px, 0n, U32.to_nat(w), op, [], 0))
+    case True{}:
+      enc.paint.wide(op, w, h, px, n)
+
 # the PNG bytes of a picture already known to be in range
 def enc.paint(+w: U32, +h: U32, +op: Bool, px: List<&2, U32>) -> List<&2, U32>:
-  +wn = U32.to_nat(w)
-  enc.seal(w, h, op, enc.raw(px, 0n, wn, op, [], 0))
+  +n = enc.nbytes(op, w, h)
+  enc.paint.at(U32.is_gt(n, 65535), w, h, op, px, n)
 
 # the bytes, or none when the picture is not encodable
 def enc.open(z: Bool, +w: U32, +h: U32, +px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
