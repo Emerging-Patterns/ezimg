@@ -265,6 +265,76 @@ law decode_png_ga:
 law decode_png_idx:
   {Img.decode_png(fix.idx()) == Some{Img.raster(1, 1, [4294901760])} : Maybe<&2, Img.Raster>}
 
+# an encoding, decoded; none stays none
+def enc.back(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Img.Raster>:
+  match m:
+    case None{}:
+      None{}
+    case Some{xs}:
+      Img.decode_png(xs)
+
+# a 2 by 2 opaque picture: black, red, green, blue
+def enc.quad() -> Img.Raster:
+  Img.raster(2, 2, [4278190080, 4294901760, 4278255360, 4278190335])
+
+# a 2 by 1 picture with one partial alpha, so colour type 6
+def enc.fade() -> Img.Raster:
+  Img.raster(2, 1, [2164195328, 4278190335])
+
+# a 1 by 2 picture, two colour-type-6 scanlines
+def enc.stack() -> Img.Raster:
+  Img.raster(1, 2, [2164195328, 16777215])
+
+# LAW: ISO/IEC 15948 / W3C PNG — compression method 0, one stored block
+law stored_block:
+  {Png.enc.blocks(65535, [0, 255, 0, 0]) == [1, 4, 0, 251, 255, 0, 255, 0, 0] : List<&2, U32>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — a stored block splits, LEN and NLEN little-endian
+law stored_split:
+  {Png.enc.blocks(2, [9, 8, 7]) == [0, 2, 0, 253, 255, 9, 8, 1, 1, 0, 254, 255, 7] : List<&2, U32>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — opaque red encodes as the colour-type-2 fixture
+law encode_png_rgb:
+  {Img.encode_png(Img.raster(1, 1, [4294901760])) == Some{fix.rgb()} : Maybe<&2, List<&2, U32>>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — partial alpha encodes as the colour-type-6 fixture
+law encode_png_rgba:
+  {Img.encode_png(Img.raster(1, 1, [2164195328])) == Some{fix.rgba()} : Maybe<&2, List<&2, U32>>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — encode then decode is the opaque red sample
+law encode_round_rgb:
+  {enc.back(Img.encode_png(Img.raster(1, 1, [4294901760])))
+    == Some{Img.raster(1, 1, [4294901760])} : Maybe<&2, Img.Raster>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — encode then decode keeps the alpha sample
+law encode_round_rgba:
+  {enc.back(Img.encode_png(Img.raster(1, 1, [2164195328])))
+    == Some{Img.raster(1, 1, [2164195328])} : Maybe<&2, Img.Raster>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — encode then decode is a 2 by 2 opaque picture
+law encode_round_quad:
+  {enc.back(Img.encode_png(enc.quad())) == Some{enc.quad()} : Maybe<&2, Img.Raster>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — encode then decode keeps a mixed-alpha row
+law encode_round_fade:
+  {enc.back(Img.encode_png(enc.fade())) == Some{enc.fade()} : Maybe<&2, Img.Raster>}
+
+# LAW: ISO/IEC 15948 / W3C PNG — encode then decode keeps two colour-type-6 rows
+law encode_round_stack:
+  {enc.back(Img.encode_png(enc.stack())) == Some{enc.stack()} : Maybe<&2, Img.Raster>}
+
+# LAW: a zero side does not encode
+law encode_png_empty:
+  {Img.encode_png(Img.raster(0, 0, [])) == None{} : Maybe<&2, List<&2, U32>>}
+
+# LAW: a short sample list does not encode
+law encode_png_short:
+  {Img.encode_png(Img.raster(2, 1, [1])) == None{} : Maybe<&2, List<&2, U32>>}
+
+# LAW: a wrapped area does not encode
+law encode_png_area:
+  {Img.encode_png(Img.raster(65536, 65536, [])) == None{} : Maybe<&2, List<&2, U32>>}
+
 # LAW: ISO/IEC 10918-1 Table B.1 — SOI is FF D8
 law jpeg_soi_bytes:
   {Jpeg.soi() == Img.jpeg_soi() : List<&2, U32>}

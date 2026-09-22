@@ -52,5 +52,9 @@ Closed equalities in `ezimg/LAWS.bend`, proved in `ezimg/PROOF.bend`
 - IDAT as zlib-wrapped DEFLATE, PNG compression method 0 (proved on a stored
   block).
 - 8-bit colour types 0, 2, 3, 4, and 6, interlace method 0.
+- Encoding 8-bit colour type 2 when every sample is opaque, and colour type 6
+  otherwise, interlace method 0, filter None, a zlib stored-block IDAT
+  (compression method 0), and CRC-32 on IHDR, IDAT, and IEND. Decoding that
+  encoding returns the picture.
 
 Full codec conformance is not claimed yet.
