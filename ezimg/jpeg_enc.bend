@@ -368,18 +368,19 @@ def encode.sink(tab: Tab) -> U32:
     case Tab{codes, lens, syms}:
       U32.or(encode.drop(codes), U32.or(encode.drop(lens), encode.drop(syms)))
 
-def encode.block.ac(p: Put, +pred: U32, +dc0: U32, rest: List<&2, U32>, dc: Tab, ac: Tab) -> Put:
+# the clipped DC is written and kept, so the next block can predict from it
+def encode.block.ac(p: Put, +pred: U32, +dc0: U32, rest: List<&2, U32>, dc: Tab, ac: Tab) -> U32 & Put:
   match ac:
     case Tab{+acodes, +alens, +asyms}:
       +d = encode.clip(dc0, 2047)
-      encode.ac(rest, 0, encode.dc(p, (d - pred : U32), dc), acodes, alens, asyms)
+      (d, encode.ac(rest, 0, encode.dc(p, (d - pred : U32), dc), acodes, alens, asyms))
 
-def encode.block.go(p: Put, +pred: U32, zz: List<&2, U32>, dc: Tab, ac: Tab) -> Put:
+def encode.block.go(p: Put, +pred: U32, zz: List<&2, U32>, dc: Tab, ac: Tab) -> U32 & Put:
   match zz:
     case Nil{}:
       +_d = encode.sink(dc)
       +_a = encode.sink(ac)
-      p
+      (0, p)
     case +dc0 <> rest:
       encode.block.ac(p, pred, dc0, rest, dc, ac)
 
@@ -586,14 +587,6 @@ def encode.rows(left: Nat, got: Array<U32> & List<&2, U32> & Bool, +w: U32, +h: 
       encode.rows.join(row, rf, encode.rows(1n+q, encode.rowpix(8n, encode.sample(a, w, h, x, (y + 1 : U32), ch),
         w, h, x, (y + 1 : U32), ch), w, h, x, (y + 1 : U32), ch))
 
-def encode.coef.go(zz: List<&2, U32>) -> U32:
-  match zz:
-    case Nil{}:
-      0
-    case +dc0 <> rest:
-      +_r = encode.drop(rest)
-      encode.clip(dc0, 2047)
-
 def encode.droprows(rows: List<&2, List<&2, U32>>) -> U32:
   match rows:
     case Nil{}:
@@ -615,26 +608,18 @@ def encode.zz(flat: Bool, rows: List<&2, List<&2, U32>>, +cs: List<&2, U32>, +zi
     case False{}:
       encode.zzq(zig, encode.fdct(encode.levels(rows), cs), qs, [])
 
-def encode.coef.use(got: Array<U32> & List<&2, List<&2, U32>> & Bool, +cs: List<&2, U32>, +zig: List<&2, U32>,
-  +qs: List<&2, U32>) -> Array<U32> & U32:
-  (a, rows, flat) = got
-  (a, encode.coef.go(encode.zz(flat, rows, cs, zig, qs)))
-
-def encode.coef(a: Array<U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32, ctx: Ctx) -> Array<U32> & U32:
-  match ctx:
-    case Ctx{+cs, +zig, +qs, dc, ac}:
-      +_d = encode.sink(dc)
-      +_a = encode.sink(ac)
-      encode.coef.use(encode.rows(8n, encode.rowpix(8n, encode.sample(a, w, h, x, y, ch), w, h, x, y, ch), w, h, x,
-        y, ch), cs, zig, qs)
+def encode.block.pair(got: U32 & Put, a: Array<U32>) -> Array<U32> & U32 & Put:
+  match got:
+    case (+dc, bit):
+      (a, dc, bit)
 
 def encode.block.use(p: Put, +pred: U32, got: Array<U32> & List<&2, List<&2, U32>> & Bool, +cs: List<&2, U32>,
-  +zig: List<&2, U32>, +qs: List<&2, U32>, dc: Tab, ac: Tab) -> Array<U32> & Put:
+  +zig: List<&2, U32>, +qs: List<&2, U32>, dc: Tab, ac: Tab) -> Array<U32> & U32 & Put:
   (a, rows, flat) = got
-  (a, encode.block.go(p, pred, encode.zz(flat, rows, cs, zig, qs), dc, ac))
+  encode.block.pair(encode.block.go(p, pred, encode.zz(flat, rows, cs, zig, qs), dc, ac), a)
 
 def encode.block(p: Put, +pred: U32, a: Array<U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32,
-  ctx: Ctx) -> Array<U32> & Put:
+  ctx: Ctx) -> Array<U32> & U32 & Put:
   match ctx:
     case Ctx{+cs, +zig, +qs, dc, ac}:
       encode.block.use(p, pred, encode.rows(8n, encode.rowpix(8n, encode.sample(a, w, h, x, y, ch), w, h, x, y, ch),
@@ -654,39 +639,24 @@ def encode.ny(more: Bool, +my: U32) -> U32:
     case False{}:
       (my + 1 : U32)
 
-def encode.step.end(got: Array<U32> & Put, +ydc: U32, +bdc: U32, +rdc: U32) ->
-  Array<U32> & U32 & U32 & U32 & Put:
-  (a, bit) = got
+def encode.step.end(got: Array<U32> & U32 & Put, +ydc: U32, +bdc: U32) -> Array<U32> & U32 & U32 & U32 & Put:
+  (a, rdc, bit) = got
   (a, ydc, bdc, rdc, bit)
 
-def encode.step.br(got: Array<U32> & Put, +ydc: U32, +bdc: U32, +rdc: U32, +pr: U32, +x: U32, +y: U32,
-  +w: U32, +h: U32, ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
-  (a, bit) = got
-  encode.step.end(encode.block(bit, pr, a, w, h, x, y, 2, ctx), ydc, bdc, rdc)
+def encode.step.r(got: Array<U32> & U32 & Put, +ydc: U32, +pr: U32, +x: U32, +y: U32, +w: U32, +h: U32,
+  +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
+  (a, bdc, bit) = got
+  encode.step.end(encode.block(bit, pr, a, w, h, x, y, 2, ctx), ydc, bdc)
 
-def encode.step.bb(got: Array<U32> & Put, +ydc: U32, +bdc: U32, +rdc: U32, +pb: U32, +pr: U32, +x: U32,
-  +y: U32, +w: U32, +h: U32, +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
-  (a, bit) = got
-  encode.step.br(encode.block(bit, pb, a, w, h, x, y, 1, ctx), ydc, bdc, rdc, pr, x, y, w, h, ctx)
+def encode.step.b(got: Array<U32> & U32 & Put, +pb: U32, +pr: U32, +x: U32, +y: U32, +w: U32, +h: U32,
+  +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
+  (a, ydc, bit) = got
+  encode.step.r(encode.block(bit, pb, a, w, h, x, y, 1, ctx), ydc, pr, x, y, w, h, ctx)
 
-def encode.step.by(got: Array<U32> & U32, bit: Put, +ydc: U32, +bdc: U32, +py: U32, +pb: U32, +pr: U32,
-  +x: U32, +y: U32, +w: U32, +h: U32, +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
-  (a, rdc) = got
-  encode.step.bb(encode.block(bit, py, a, w, h, x, y, 0, ctx), ydc, bdc, rdc, pb, pr, x, y, w, h, ctx)
-
-def encode.step.cr(got: Array<U32> & U32, bit: Put, +ydc: U32, +py: U32, +pb: U32, +pr: U32, +x: U32,
-  +y: U32, +w: U32, +h: U32, +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
-  (a, bdc) = got
-  encode.step.by(encode.coef(a, w, h, x, y, 2, ctx), bit, ydc, bdc, py, pb, pr, x, y, w, h, ctx)
-
-def encode.step.cb(got: Array<U32> & U32, bit: Put, +py: U32, +pb: U32, +pr: U32, +x: U32, +y: U32,
-  +w: U32, +h: U32, +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
-  (a, ydc) = got
-  encode.step.cr(encode.coef(a, w, h, x, y, 1, ctx), bit, ydc, py, pb, pr, x, y, w, h, ctx)
-
+# one pass per channel: the block's clipped DC is the next predictor
 def encode.step.y(a: Array<U32>, bit: Put, +py: U32, +pb: U32, +pr: U32, +x: U32, +y: U32, +w: U32,
   +h: U32, +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
-  encode.step.cb(encode.coef(a, w, h, x, y, 0, ctx), bit, py, pb, pr, x, y, w, h, ctx)
+  encode.step.b(encode.block(bit, py, a, w, h, x, y, 0, ctx), pb, pr, x, y, w, h, ctx)
 
 def encode.mcus.done(got: Array<U32> & U32 & U32 & U32 & Put) -> Put:
   (a, ydc, bdc, rdc, bit) = got
@@ -892,17 +862,20 @@ def encode.neutral(+w: U32, +h: U32) -> List<&2, U32>:
     dcc, dcs, acc, acs)
 
 # the rest of a solid picture is the same DC, so each later block is a zero difference
-def encode.solid.end(got: Array<U32> & Put) -> Put:
-  (a, bit) = got
+def encode.solid.end(got: Array<U32> & U32 & Put) -> Put:
+  (a, +dc, bit) = got
   +_s = encode.pix.sink(a)
+  +_d = (dc - dc : U32)
   bit
 
-def encode.solid.cr(got: Array<U32> & Put, +ctx: Ctx) -> Put:
-  (a, bit) = got
+def encode.solid.cr(got: Array<U32> & U32 & Put, +ctx: Ctx) -> Put:
+  (a, +dc, bit) = got
+  +_d = (dc - dc : U32)
   encode.solid.end(encode.block(bit, 0, a, 1, 1, 0, 0, 2, ctx))
 
-def encode.solid.cb(got: Array<U32> & Put, +ctx: Ctx) -> Put:
-  (a, bit) = got
+def encode.solid.cb(got: Array<U32> & U32 & Put, +ctx: Ctx) -> Put:
+  (a, +dc, bit) = got
+  +_d = (dc - dc : U32)
   encode.solid.cr(encode.block(bit, 0, a, 1, 1, 0, 0, 1, ctx), ctx)
 
 def encode.solid.y(a: Array<U32>, bit: Put, +ctx: Ctx) -> Put:
