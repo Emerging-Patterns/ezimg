@@ -248,9 +248,6 @@ def Laws.jpeg_enc_dc():
 def Laws.jpeg_enc_solid():
   {==}
 
-def Laws.jpeg_enc_frame():
-  {==}
-
 def Laws.jpeg_fdct_flat():
   {==}
 
