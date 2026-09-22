@@ -83,6 +83,11 @@ type Cursor is Data:
 type Comps is Data:
   Comps{ids: List<&2, U32>, hs: List<&2, U32>, vs: List<&2, U32>, tq: List<&2, U32>, bad: U32}
 
+# the eight cosine columns of the A.3.3 matrix, one list per frequency
+type Cols is Data:
+  Cols{c0: List<&2, U32>, c1: List<&2, U32>, c2: List<&2, U32>, c3: List<&2, U32>, c4: List<&2, U32>,
+    c5: List<&2, U32>, c6: List<&2, U32>, c7: List<&2, U32>}
+
 def decode.sign(+a: U32) -> U32:
   U32.shrn(a, 31n)
 
@@ -232,15 +237,18 @@ def decode.column(+cs: List<&2, U32>, +x: U32) -> List<&2, U32>:
     decode.at(cs, (b + 3 : U32)), decode.at(cs, (b + 4 : U32)), decode.at(cs, (b + 5 : U32)),
     decode.at(cs, (b + 6 : U32)), decode.at(cs, (b + 7 : U32))]
 
-def decode.row8(+row: List<&2, U32>, +cs: List<&2, U32>) -> List<&2, U32>:
-  [decode.dot(row, decode.column(cs, 0), False{}, (0, 0), 0, 0),
-    decode.dot(row, decode.column(cs, 1), False{}, (0, 0), 0, 0),
-    decode.dot(row, decode.column(cs, 2), False{}, (0, 0), 0, 0),
-    decode.dot(row, decode.column(cs, 3), False{}, (0, 0), 0, 0),
-    decode.dot(row, decode.column(cs, 4), False{}, (0, 0), 0, 0),
-    decode.dot(row, decode.column(cs, 5), False{}, (0, 0), 0, 0),
-    decode.dot(row, decode.column(cs, 6), False{}, (0, 0), 0, 0),
-    decode.dot(row, decode.column(cs, 7), False{}, (0, 0), 0, 0)]
+# one copy of each cosine column, reused for every row of the block
+def decode.cols(+cs: List<&2, U32>) -> Cols:
+  Cols{decode.column(cs, 0), decode.column(cs, 1), decode.column(cs, 2), decode.column(cs, 3),
+    decode.column(cs, 4), decode.column(cs, 5), decode.column(cs, 6), decode.column(cs, 7)}
+
+def decode.row8(+row: List<&2, U32>, +cols: Cols) -> List<&2, U32>:
+  match cols:
+    case Cols{+c0, +c1, +c2, +c3, +c4, +c5, +c6, +c7}:
+      [decode.dot(row, c0, False{}, (0, 0), 0, 0), decode.dot(row, c1, False{}, (0, 0), 0, 0),
+        decode.dot(row, c2, False{}, (0, 0), 0, 0), decode.dot(row, c3, False{}, (0, 0), 0, 0),
+        decode.dot(row, c4, False{}, (0, 0), 0, 0), decode.dot(row, c5, False{}, (0, 0), 0, 0),
+        decode.dot(row, c6, False{}, (0, 0), 0, 0), decode.dot(row, c7, False{}, (0, 0), 0, 0)]
 
 def decode.cos() -> List<&2, U32>:
   [46341, 64277, 60547, 54491, 46341, 36410, 25080, 12785, 46341, 54491, 25080, 4294954511, 4294920955,
@@ -250,7 +258,7 @@ def decode.cos() -> List<&2, U32>:
     60547, 4294912805, 46341, 4294912805, 25080, 12785, 4294920955, 64277, 4294906749, 36410, 46341, 4294903019,
     60547, 4294912805, 46341, 4294930886, 25080, 4294954511]
 
-def decode.pass(left: Nat, coeffs: List<&2, U32>, +cs: List<&2, U32>, acc: List<&2, List<&2, U32>>) ->
+def decode.pass(left: Nat, coeffs: List<&2, U32>, +cols: Cols, acc: List<&2, List<&2, U32>>) ->
   List<&2, List<&2, U32>>:
   match left:
     case 0n:
@@ -258,7 +266,7 @@ def decode.pass(left: Nat, coeffs: List<&2, U32>, +cs: List<&2, U32>, acc: List<
     case 1n+p:
       match coeffs:
         case a <> b <> c <> d <> e <> f <> g <> h <> rest:
-          decode.pass(p, rest, cs, decode.row8([a, b, c, d, e, f, g, h], cs) <> acc)
+          decode.pass(p, rest, cols, decode.row8([a, b, c, d, e, f, g, h], cols) <> acc)
         case _:
           List.reverse(&2, List<&2, U32>, acc)
 
@@ -269,11 +277,11 @@ def decode.col(+rows: List<&2, List<&2, U32>>, +x: U32, acc: List<&2, U32>) -> L
     case h <> t:
       decode.col(t, x, decode.at(h, x) <> acc)
 
-def decode.backs(+rows: List<&2, List<&2, U32>>, +cs: List<&2, U32>) -> List<&2, List<&2, U32>>:
-  [decode.row8(decode.col(rows, 0, []), cs), decode.row8(decode.col(rows, 1, []), cs),
-    decode.row8(decode.col(rows, 2, []), cs), decode.row8(decode.col(rows, 3, []), cs),
-    decode.row8(decode.col(rows, 4, []), cs), decode.row8(decode.col(rows, 5, []), cs),
-    decode.row8(decode.col(rows, 6, []), cs), decode.row8(decode.col(rows, 7, []), cs)]
+def decode.backs(+rows: List<&2, List<&2, U32>>, +cols: Cols) -> List<&2, List<&2, U32>>:
+  [decode.row8(decode.col(rows, 0, []), cols), decode.row8(decode.col(rows, 1, []), cols),
+    decode.row8(decode.col(rows, 2, []), cols), decode.row8(decode.col(rows, 3, []), cols),
+    decode.row8(decode.col(rows, 4, []), cols), decode.row8(decode.col(rows, 5, []), cols),
+    decode.row8(decode.col(rows, 6, []), cols), decode.row8(decode.col(rows, 7, []), cols)]
 
 def decode.rows.of(+backs: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
   [decode.col(backs, 0, []), decode.col(backs, 1, []), decode.col(backs, 2, []),
@@ -326,8 +334,8 @@ def decode.zeros(n: Nat, acc: List<&2, U32>) -> List<&2, U32>:
       decode.zeros(p, 0 <> acc)
 
 def decode.idct(nat: List<&2, U32>) -> List<&2, U32>:
-  +cs = decode.cos()
-  decode.level(decode.flat(decode.rows.of(decode.backs(decode.pass(8n, nat, cs, []), cs))), [])
+  +cols = decode.cols(decode.cos())
+  decode.level(decode.flat(decode.rows.of(decode.backs(decode.pass(8n, nat, cols, []), cols))), [])
 
 def decode.huff0() -> Huff:
   Huff{[], [], []}
