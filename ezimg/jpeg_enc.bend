@@ -24,6 +24,11 @@ type Tab is Data:
 type Ctx is Data:
   Ctx{cs: List<&2, U32>, zig: List<&2, U32>, quant: List<&2, U32>, dc: Tab, ac: Tab}
 
+# the eight frequency columns of the A.3.3 matrix, one list per frequency
+type Cols is Data:
+  Cols{c0: List<&2, U32>, c1: List<&2, U32>, c2: List<&2, U32>, c3: List<&2, U32>, c4: List<&2, U32>,
+    c5: List<&2, U32>, c6: List<&2, U32>, c7: List<&2, U32>}
+
 def encode.join(a: List<&2, U32>, b: List<&2, U32>) -> List<&2, U32>:
   List.append(&2, U32, a, b)
 
@@ -354,15 +359,6 @@ def encode.qdiv.s(+s: U32, +v: U32, +q: U32) -> U32:
 def encode.qdiv(+v: U32, +q: U32) -> U32:
   encode.qdiv.s(Jpeg.decode.sign(v), v, encode.qnz(q))
 
-def encode.zzq(zig: List<&2, U32>, +nat: List<&2, U32>, +qs: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
-  match zig:
-    case Nil{}:
-      +_n = encode.drop(nat)
-      +_q = encode.drop(qs)
-      List.reverse(&2, U32, acc)
-    case +g <> gt:
-      encode.zzq(gt, nat, encode.tail(qs), encode.qdiv(Jpeg.decode.at(nat, g), encode.head(qs)) <> acc)
-
 def encode.sink(tab: Tab) -> U32:
   match tab:
     case Tab{codes, lens, syms}:
@@ -390,38 +386,33 @@ def encode.crow(+cs: List<&2, U32>, +u: U32) -> List<&2, U32>:
     Jpeg.decode.at(cs, (u + 24 : U32)), Jpeg.decode.at(cs, (u + 32 : U32)),
     Jpeg.decode.at(cs, (u + 40 : U32)), Jpeg.decode.at(cs, (u + 48 : U32)), Jpeg.decode.at(cs, (u + 56 : U32))]
 
+# one copy of each frequency column, reused for every row of the block
+def encode.cols(+cs: List<&2, U32>) -> Cols:
+  Cols{encode.crow(cs, 0), encode.crow(cs, 1), encode.crow(cs, 2), encode.crow(cs, 3), encode.crow(cs, 4),
+    encode.crow(cs, 5), encode.crow(cs, 6), encode.crow(cs, 7)}
+
 def encode.dot(+a: List<&2, U32>, +b: List<&2, U32>) -> U32:
   Jpeg.decode.dot(a, b, False{}, (0, 0), 0, 0)
 
-def encode.trow(+row: List<&2, U32>, +cs: List<&2, U32>) -> List<&2, U32>:
-  [encode.dot(row, encode.crow(cs, 0)), encode.dot(row, encode.crow(cs, 1)), encode.dot(row, encode.crow(cs, 2)),
-    encode.dot(row, encode.crow(cs, 3)), encode.dot(row, encode.crow(cs, 4)), encode.dot(row, encode.crow(cs, 5)),
-    encode.dot(row, encode.crow(cs, 6)), encode.dot(row, encode.crow(cs, 7))]
+def encode.trow(+row: List<&2, U32>, +cols: Cols) -> List<&2, U32>:
+  match cols:
+    case Cols{+c0, +c1, +c2, +c3, +c4, +c5, +c6, +c7}:
+      [encode.dot(row, c0), encode.dot(row, c1), encode.dot(row, c2), encode.dot(row, c3), encode.dot(row, c4),
+        encode.dot(row, c5), encode.dot(row, c6), encode.dot(row, c7)]
 
-def encode.pass1(rows: List<&2, List<&2, U32>>, +cs: List<&2, U32>, acc: List<&2, List<&2, U32>>) ->
+def encode.pass1(rows: List<&2, List<&2, U32>>, +cols: Cols, acc: List<&2, List<&2, U32>>) ->
   List<&2, List<&2, U32>>:
   match rows:
     case Nil{}:
       List.reverse(&2, List<&2, U32>, acc)
     case h <> t:
-      encode.pass1(t, cs, encode.trow(h, cs) <> acc)
+      encode.pass1(t, cols, encode.trow(h, cols) <> acc)
 
 def encode.srow(+c0: List<&2, U32>, +c1: List<&2, U32>, +c2: List<&2, U32>, +c3: List<&2, U32>,
-  +c4: List<&2, U32>, +c5: List<&2, U32>, +c6: List<&2, U32>, +c7: List<&2, U32>, +cs: List<&2, U32>,
-  +v: U32) -> List<&2, U32>:
-  +row = encode.crow(cs, v)
-  [encode.dot(c0, row), encode.dot(c1, row), encode.dot(c2, row), encode.dot(c3, row), encode.dot(c4, row),
-    encode.dot(c5, row), encode.dot(c6, row), encode.dot(c7, row)]
-
-def encode.srows(left: Nat, +v: U32, +c0: List<&2, U32>, +c1: List<&2, U32>, +c2: List<&2, U32>,
-  +c3: List<&2, U32>, +c4: List<&2, U32>, +c5: List<&2, U32>, +c6: List<&2, U32>, +c7: List<&2, U32>,
-  +cs: List<&2, U32>) -> List<&2, List<&2, U32>>:
-  match left:
-    case 0n:
-      Nil{}
-    case 1n+p:
-      encode.srow(c0, c1, c2, c3, c4, c5, c6, c7, cs, v) <> encode.srows(p, (v + 1 : U32), c0, c1, c2, c3, c4,
-        c5, c6, c7, cs)
+  +c4: List<&2, U32>, +c5: List<&2, U32>, +c6: List<&2, U32>, +c7: List<&2, U32>, +col: List<&2, U32>) ->
+  List<&2, U32>:
+  [encode.dot(c0, col), encode.dot(c1, col), encode.dot(c2, col), encode.dot(c3, col), encode.dot(c4, col),
+    encode.dot(c5, col), encode.dot(c6, col), encode.dot(c7, col)]
 
 def encode.flat(rows: List<&2, List<&2, U32>>) -> List<&2, U32>:
   match rows:
@@ -430,19 +421,32 @@ def encode.flat(rows: List<&2, List<&2, U32>>) -> List<&2, U32>:
     case h <> t:
       encode.join(h, encode.flat(t))
 
-def encode.pass2(+ts: List<&2, List<&2, U32>>, +cs: List<&2, U32>) -> List<&2, U32>:
-  +c0 = Jpeg.decode.col(ts, 0, [])
-  +c1 = Jpeg.decode.col(ts, 1, [])
-  +c2 = Jpeg.decode.col(ts, 2, [])
-  +c3 = Jpeg.decode.col(ts, 3, [])
-  +c4 = Jpeg.decode.col(ts, 4, [])
-  +c5 = Jpeg.decode.col(ts, 5, [])
-  +c6 = Jpeg.decode.col(ts, 6, [])
-  +c7 = Jpeg.decode.col(ts, 7, [])
-  encode.flat(encode.srows(8n, 0, c0, c1, c2, c3, c4, c5, c6, c7, cs))
+def encode.pass2.rows(+ts: List<&2, List<&2, U32>>, +k0: List<&2, U32>, +k1: List<&2, U32>, +k2: List<&2, U32>,
+  +k3: List<&2, U32>, +k4: List<&2, U32>, +k5: List<&2, U32>, +k6: List<&2, U32>, +k7: List<&2, U32>) ->
+  List<&2, U32>:
+  +s0 = Jpeg.decode.col(ts, 0, [])
+  +s1 = Jpeg.decode.col(ts, 1, [])
+  +s2 = Jpeg.decode.col(ts, 2, [])
+  +s3 = Jpeg.decode.col(ts, 3, [])
+  +s4 = Jpeg.decode.col(ts, 4, [])
+  +s5 = Jpeg.decode.col(ts, 5, [])
+  +s6 = Jpeg.decode.col(ts, 6, [])
+  +s7 = Jpeg.decode.col(ts, 7, [])
+  encode.flat([encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k0), encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k1),
+    encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k2), encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k3),
+    encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k4), encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k5),
+    encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k6), encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k7)])
+
+def encode.pass2(+ts: List<&2, List<&2, U32>>, +cols: Cols) -> List<&2, U32>:
+  match cols:
+    case Cols{+k0, +k1, +k2, +k3, +k4, +k5, +k6, +k7}:
+      encode.pass2.rows(ts, k0, k1, k2, k3, k4, k5, k6, k7)
+
+def encode.fdct.cols(rows: List<&2, List<&2, U32>>, +cols: Cols) -> List<&2, U32>:
+  encode.pass2(encode.pass1(rows, cols, []), cols)
 
 def encode.fdct(rows: List<&2, List<&2, U32>>, +cs: List<&2, U32>) -> List<&2, U32>:
-  encode.pass2(encode.pass1(rows, cs, []), cs)
+  encode.fdct.cols(rows, encode.cols(cs))
 
 def encode.level(xs: List<&2, U32>) -> List<&2, U32>:
   match xs:
@@ -594,6 +598,53 @@ def encode.droprows(rows: List<&2, List<&2, U32>>) -> U32:
     case h <> t:
       +_h = encode.drop(h)
       encode.droprows(t)
+
+# the next quant step, or 0 when the table has run out (qdiv turns 0 into 1)
+def encode.zzq.take(qs: List<&2, U32>) -> U32 & List<&2, U32>:
+  match qs:
+    case Nil{}:
+      (0, [])
+    case +q <> qt:
+      (q, qt)
+
+# `got` is the coefficient at the zigzag index just read. `rest` is the indexes after it.
+def encode.zzq.go(rest: List<&2, U32>, got: Array<U32> & U32, qv: U32 & List<&2, U32>, acc: List<&2, U32>) ->
+  List<&2, U32>:
+  match rest:
+    case Nil{}:
+      match got:
+        case (a, +v):
+          match qv:
+            case (+q, qt):
+              +_s = encode.pix.sink(a)
+              +_d = encode.drop(qt)
+              List.reverse(&2, U32, encode.qdiv(v, q) <> acc)
+    case +g <> gt:
+      match got:
+        case (a, +v):
+          match qv:
+            case (+q, qt):
+              encode.zzq.go(gt, Array.get(U32, a, g), encode.zzq.take(qt), encode.qdiv(v, q) <> acc)
+
+def encode.zzq.enter(zig: List<&2, U32>, arr: Array<U32>, qs: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
+  match zig:
+    case Nil{}:
+      +_s = encode.pix.sink(arr)
+      +_q = encode.drop(qs)
+      List.reverse(&2, U32, acc)
+    case +g <> gt:
+      encode.zzq.go(gt, Array.get(U32, arr, g), encode.zzq.take(qs), acc)
+
+def encode.zzq.load(nat: List<&2, U32>, arr: Array<U32>, +at: U32) -> Array<U32>:
+  match nat:
+    case Nil{}:
+      arr
+    case +h <> t:
+      encode.zzq.load(t, Array.set(U32, arr, at, h), (at + 1 : U32))
+
+# the coefficient block is an array, so each zigzag step is an index
+def encode.zzq(zig: List<&2, U32>, +nat: List<&2, U32>, +qs: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
+  encode.zzq.enter(zig, encode.zzq.load(nat, Jpeg.decode.plane(64), 0), qs, acc)
 
 # 128 level-shifts to 0, and the integer DCT of that block is 0, so quant by 1 stays 0
 def encode.zz(flat: Bool, rows: List<&2, List<&2, U32>>, +cs: List<&2, U32>, +zig: List<&2, U32>,
