@@ -8,6 +8,7 @@
 # A coefficient indexes its symbol. The scan does not walk the table.
 # A mixed MCU reads each pixel once and keeps the three level planes in arrays.
 # Quant steps are 1, so the mixed scan emits coefficients without dividing.
+# The cosine kernel is built once per encode and shared by every block.
 # A neutral solid (R = G = B = 128) is an all-zero block and round-trips exactly.
 # Other colours are lossy. Progressive and arithmetic frames are not written.
 # Width and height must sit in 1..65535; anything else is SOI then EOI.
@@ -19,9 +20,13 @@ import ./jpeg.bend as Jpeg
 type Put is Data:
   Put{out: List<&2, U32>, buf: U32, n: U32}
 
-# the cosine matrix, zigzag, and the all-ones quant table
+# cosine weights shared by symmetric samples: DC, two even weights, four odd weights
+type Kern is Data:
+  Kern{k0: U32, k2: U32, k6: U32, o0: U32, o1: U32, o2: U32, o3: U32}
+
+# the cosine kernel, zigzag, and the all-ones quant table
 type Ctx is Data:
-  Ctx{cs: List<&2, U32>, zig: List<&2, U32>, quant: List<&2, U32>}
+  Ctx{kern: Kern, zig: List<&2, U32>, quant: List<&2, U32>}
 
 # DC and AC symbols indexed to a packed code: length in the high half, code in the low half
 type Book is Type:
@@ -30,10 +35,6 @@ type Book is Type:
 # one looked-up Huffman code
 type Code is Data:
   Code{len: U32, bits: U32}
-
-# cosine weights shared by symmetric samples: DC, two even weights, four odd weights
-type Kern is Data:
-  Kern{k0: U32, k2: U32, k6: U32, o0: U32, o1: U32, o2: U32, o3: U32}
 
 # eight values, the first at frequency 0
 type Oct is Data:
@@ -105,8 +106,25 @@ def encode.header(+w: U32, +h: U32, +dcc: List<&2, U32>, +dcs: List<&2, U32>, +a
   encode.join(Jpeg.soi(), encode.join(encode.app0(), encode.join(encode.dqt(), encode.join(encode.sof(w, h),
     encode.join(encode.dht(0, dcc, dcs), encode.join(encode.dht(16, acc, acs), encode.sos()))))))
 
+# C[0][0], C[0][2], C[0][6], and the first four weights of frequency 1
+def encode.kern(+cs: List<&2, U32>) -> Kern:
+  Kern{Jpeg.decode.at(cs, 0), Jpeg.decode.at(cs, 2), Jpeg.decode.at(cs, 6), Jpeg.decode.at(cs, 1),
+    Jpeg.decode.at(cs, 9), Jpeg.decode.at(cs, 17), Jpeg.decode.at(cs, 25)}
+
+def encode.kern.drop(kern: Kern) -> U32:
+  match kern:
+    case Kern{+k0, +k2, +k6, +o0, +o1, +o2, +o3}:
+      +z0 = (k0 - k0 : U32)
+      +z2 = (k2 - k2 : U32)
+      +z6 = (k6 - k6 : U32)
+      +a0 = (o0 - o0 : U32)
+      +a1 = (o1 - o1 : U32)
+      +a2 = (o2 - o2 : U32)
+      +a3 = (o3 - o3 : U32)
+      (z0 + z2 + z6 + a0 + a1 + a2 + a3 : U32)
+
 def encode.ctx() -> Ctx:
-  Ctx{Jpeg.decode.cos(), Jpeg.decode.zig(), encode.quant()}
+  Ctx{encode.kern(Jpeg.decode.cos()), Jpeg.decode.zig(), encode.quant()}
 
 # length sits above the 16-bit code
 def encode.word(+len: U32, +code: U32) -> U32:
@@ -538,23 +556,6 @@ def encode.scatter(o: Oct, a: Array<U32>, +at: U32) -> Array<U32>:
     case Oct{+f0, +f1, +f2, +f3, +f4, +f5, +f6, +f7}:
       encode.put8(f0, f1, f2, f3, f4, f5, f6, f7, a, at, 8)
 
-# C[0][0], C[0][2], C[0][6], and the first four weights of frequency 1
-def encode.kern(+cs: List<&2, U32>) -> Kern:
-  Kern{Jpeg.decode.at(cs, 0), Jpeg.decode.at(cs, 2), Jpeg.decode.at(cs, 6), Jpeg.decode.at(cs, 1),
-    Jpeg.decode.at(cs, 9), Jpeg.decode.at(cs, 17), Jpeg.decode.at(cs, 25)}
-
-def encode.kern.drop(kern: Kern) -> U32:
-  match kern:
-    case Kern{+k0, +k2, +k6, +o0, +o1, +o2, +o3}:
-      +z0 = (k0 - k0 : U32)
-      +z2 = (k2 - k2 : U32)
-      +z6 = (k6 - k6 : U32)
-      +a0 = (o0 - o0 : U32)
-      +a1 = (o1 - o1 : U32)
-      +a2 = (o2 - o2 : U32)
-      +a3 = (o3 - o3 : U32)
-      (z0 + z2 + z6 + a0 + a1 + a2 + a3 : U32)
-
 def encode.oct.pack(
   +s0: U32, +s1: U32, +s2: U32, +s3: U32, +s4: U32, +s5: U32, +s6: U32, +s7: U32, a: Array<U32>
 ) -> Array<U32> & Oct:
@@ -703,8 +704,7 @@ def encode.pass.mid(src: Array<U32>, +kern: Kern) -> Array<U32>:
   encode.pass.rows(8n, Planes{src, Jpeg.decode.plane(64), 0}, kern)
 
 # level plane in, natural-order frequencies out
-def encode.freq(src: Array<U32>, +cs: List<&2, U32>) -> Array<U32>:
-  +kern = encode.kern(cs)
+def encode.freq(src: Array<U32>, +kern: Kern) -> Array<U32>:
   encode.pass2(8n, Planes{encode.pass.mid(src, kern), Jpeg.decode.plane(64), 0}, kern)
 
 def encode.drain.pack(got: Array<U32> & U32, acc: List<&2, U32>) -> Array<U32> & U32 & List<&2, U32>:
@@ -933,17 +933,17 @@ def encode.zzq(zig: List<&2, U32>, +nat: List<&2, U32>, +qs: List<&2, U32>, acc:
   encode.zzq.enter(zig, encode.zzq.load(nat, Jpeg.decode.plane(64), 0), qs, acc)
 
 # 128 level-shifts to 0, and the integer DCT of that block is 0, so quant by 1 stays 0
-def encode.zz(flat: Bool, rows: List<&2, List<&2, U32>>, +cs: List<&2, U32>, +zig: List<&2, U32>,
+def encode.zz(flat: Bool, rows: List<&2, List<&2, U32>>, +kern: Kern, +zig: List<&2, U32>,
   +qs: List<&2, U32>) -> List<&2, U32>:
   match flat:
     case True{}:
       +_r = encode.droprows(rows)
-      +_c = encode.drop(cs)
+      +_k = encode.kern.drop(kern)
       +_g = encode.drop(zig)
       +_q = encode.drop(qs)
       List.replicate(U32, 64n, 0)
     case False{}:
-      encode.zzq(zig, encode.fdct(encode.levels(rows), cs), qs, [])
+      encode.zzq(zig, encode.fdct.go(encode.pass1(encode.levels(rows), kern, Jpeg.decode.plane(64), 0), kern), qs, [])
 
 def encode.block.pair(got: Book & U32 & Put, a: Array<U32>) -> Array<U32> & Book & U32 & Put:
   match got:
@@ -951,16 +951,16 @@ def encode.block.pair(got: Book & U32 & Put, a: Array<U32>) -> Array<U32> & Book
       (a, book, dc, bit)
 
 def encode.block.use(book: Book, p: Put, +pred: U32, got: Array<U32> & List<&2, List<&2, U32>> & Bool,
-  +cs: List<&2, U32>, +zig: List<&2, U32>, +qs: List<&2, U32>) -> Array<U32> & Book & U32 & Put:
+  +kern: Kern, +zig: List<&2, U32>, +qs: List<&2, U32>) -> Array<U32> & Book & U32 & Put:
   (a, rows, flat) = got
-  encode.block.pair(encode.block.go(book, p, pred, encode.zz(flat, rows, cs, zig, qs)), a)
+  encode.block.pair(encode.block.go(book, p, pred, encode.zz(flat, rows, kern, zig, qs)), a)
 
 def encode.block(book: Book, p: Put, +pred: U32, a: Array<U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32,
   ctx: Ctx) -> Array<U32> & Book & U32 & Put:
   match ctx:
-    case Ctx{+cs, +zig, +qs}:
+    case Ctx{+kern, +zig, +qs}:
       encode.block.use(book, p, pred, encode.rows(8n, encode.rowpix(8n, encode.sample(a, w, h, x, y, ch), w, h, x, y,
-        ch), w, h, x, y, ch), cs, zig, qs)
+        ch), w, h, x, y, ch), kern, zig, qs)
 
 def encode.nx(more: Bool, +mx: U32) -> U32:
   match more:
@@ -1066,29 +1066,29 @@ def encode.scan(book: Book, p: Put, +pred: U32, arr: Array<U32>, zig: List<&2, U
       encode.scan.open(gt, Array.get(U32, arr, g), book, p, pred)
 
 def encode.chan.flat(
-  plane: Array<U32>, book: Book, p: Put, +pred: U32, +cs: List<&2, U32>, +zig: List<&2, U32>, +qs: List<&2, U32>
+  plane: Array<U32>, book: Book, p: Put, +pred: U32, +kern: Kern, +zig: List<&2, U32>, +qs: List<&2, U32>
 ) -> Book & U32 & Put:
   +_s = encode.pix.sink(plane)
-  +_c = encode.drop(cs)
+  +_k = encode.kern.drop(kern)
   +_g = encode.drop(zig)
   +_q = encode.drop(qs)
   encode.block.go(book, p, pred, List.replicate(U32, 64n, 0))
 
 def encode.chan.mix(
-  plane: Array<U32>, book: Book, p: Put, +pred: U32, +cs: List<&2, U32>, zig: List<&2, U32>, qs: List<&2, U32>
+  plane: Array<U32>, book: Book, p: Put, +pred: U32, +kern: Kern, zig: List<&2, U32>, qs: List<&2, U32>
 ) -> Book & U32 & Put:
   +_q = encode.drop(qs)
-  encode.scan(book, p, pred, encode.freq(plane, cs), zig)
+  encode.scan(book, p, pred, encode.freq(plane, kern), zig)
 
 def encode.chan.go(
-  flat: Bool, plane: Array<U32>, book: Book, p: Put, +pred: U32, +cs: List<&2, U32>, +zig: List<&2, U32>,
+  flat: Bool, plane: Array<U32>, book: Book, p: Put, +pred: U32, +kern: Kern, +zig: List<&2, U32>,
   +qs: List<&2, U32>
 ) -> Book & U32 & Put:
   match flat:
     case True{}:
-      encode.chan.flat(plane, book, p, pred, cs, zig, qs)
+      encode.chan.flat(plane, book, p, pred, kern, zig, qs)
     case False{}:
-      encode.chan.mix(plane, book, p, pred, cs, zig, qs)
+      encode.chan.mix(plane, book, p, pred, kern, zig, qs)
 
 def encode.pix.at(a: Array<U32>, +w: U32, +h: U32, +x: U32, +y: U32) -> Array<U32> & U32:
   Array.get(U32, a, (encode.sat(U32.is_ge(y, h), y, h) * w + encode.sat(U32.is_ge(x, w), x, w) : U32))
@@ -1139,33 +1139,33 @@ def encode.chan.pair(got: Book & U32 & Put, a: Array<U32>) -> Array<U32> & Book 
       (a, book, dc, bit)
 
 def encode.step.cr(
-  got: Book & U32 & Put, a: Array<U32>, rs: Array<U32>, fr: Bool, +ydc: U32, +pr: U32, +cs: List<&2, U32>,
+  got: Book & U32 & Put, a: Array<U32>, rs: Array<U32>, fr: Bool, +ydc: U32, +pr: U32, +kern: Kern,
   +zig: List<&2, U32>, +qs: List<&2, U32>
 ) -> Array<U32> & Book & U32 & U32 & U32 & Put:
   (book, +bdc, bit) = got
-  encode.step.end(encode.chan.pair(encode.chan.go(fr, rs, book, bit, pr, cs, zig, qs), a), ydc, bdc)
+  encode.step.end(encode.chan.pair(encode.chan.go(fr, rs, book, bit, pr, kern, zig, qs), a), ydc, bdc)
 
 def encode.step.cb(
   got: Book & U32 & Put, a: Array<U32>, bs: Array<U32>, rs: Array<U32>, fb: Bool, fr: Bool, +pb: U32, +pr: U32,
-  +cs: List<&2, U32>, +zig: List<&2, U32>, +qs: List<&2, U32>
+  +kern: Kern, +zig: List<&2, U32>, +qs: List<&2, U32>
 ) -> Array<U32> & Book & U32 & U32 & U32 & Put:
   (book, +ydc, bit) = got
-  encode.step.cr(encode.chan.go(fb, bs, book, bit, pb, cs, zig, qs), a, rs, fr, ydc, pr, cs, zig, qs)
+  encode.step.cr(encode.chan.go(fb, bs, book, bit, pb, kern, zig, qs), a, rs, fr, ydc, pr, kern, zig, qs)
 
 def encode.step.tile(
-  t: Tile, book: Book, bit: Put, +py: U32, +pb: U32, +pr: U32, +cs: List<&2, U32>, +zig: List<&2, U32>,
+  t: Tile, book: Book, bit: Put, +py: U32, +pb: U32, +pr: U32, +kern: Kern, +zig: List<&2, U32>,
   +qs: List<&2, U32>
 ) -> Array<U32> & Book & U32 & U32 & U32 & Put:
   match t:
     case Tile{pix, ys, bs, rs, fy, fb, fr}:
-      encode.step.cb(encode.chan.go(fy, ys, book, bit, py, cs, zig, qs), pix, bs, rs, fb, fr, pb, pr, cs, zig, qs)
+      encode.step.cb(encode.chan.go(fy, ys, book, bit, py, kern, zig, qs), pix, bs, rs, fb, fr, pb, pr, kern, zig, qs)
 
 # one walk of the MCU, then Y, Cb, and Cr. Each clipped DC is the next predictor.
 def encode.step.y(a: Array<U32>, book: Book, bit: Put, +py: U32, +pb: U32, +pr: U32, +x: U32, +y: U32, +w: U32,
   +h: U32, +ctx: Ctx) -> Array<U32> & Book & U32 & U32 & U32 & Put:
   match ctx:
-    case Ctx{+cs, +zig, +qs}:
-      encode.step.tile(encode.tile(a, w, h, x, y), book, bit, py, pb, pr, cs, zig, qs)
+    case Ctx{+kern, +zig, +qs}:
+      encode.step.tile(encode.tile(a, w, h, x, y), book, bit, py, pb, pr, kern, zig, qs)
 
 def encode.mcus.done(got: Array<U32> & Book & U32 & U32 & U32 & Put) -> Put:
   (a, book, ydc, bdc, rdc, bit) = got
