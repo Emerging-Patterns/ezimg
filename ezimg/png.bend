@@ -877,33 +877,6 @@ def enc.be(+n: U32) -> List<&2, U32>:
 def enc.a(+c: U32) -> U32:
   ((c >> 24n : U32) .&. 255 : U32)
 
-# red of a 0xAARRGGBB sample
-def enc.r(+c: U32) -> U32:
-  ((c >> 16n : U32) .&. 255 : U32)
-
-# green of a 0xAARRGGBB sample
-def enc.g(+c: U32) -> U32:
-  ((c >> 8n : U32) .&. 255 : U32)
-
-# blue of a 0xAARRGGBB sample
-def enc.b(+c: U32) -> U32:
-  (c .&. 255 : U32)
-
-# one opaque pixel, newest-first, so a later reverse is R, G, B
-def enc.push.rgb(+c: U32, acc: List<&2, U32>) -> List<&2, U32>:
-  {enc.b(c) <> enc.g(c) <> enc.r(c) <> acc : List<&2, U32>}
-
-# one pixel, newest-first, so a later reverse is R, G, B, A
-def enc.push.rgba(+c: U32, acc: List<&2, U32>) -> List<&2, U32>:
-  {enc.a(c) <> enc.b(c) <> enc.g(c) <> enc.r(c) <> acc : List<&2, U32>}
-
-# the channels of one sample
-def enc.push(op: Bool, +c: U32, acc: List<&2, U32>) -> List<&2, U32>:
-  match op:
-    case True{}:
-      enc.push.rgb(c, acc)
-    case False{}:
-      enc.push.rgba(c, acc)
 
 # one less, or zero
 def enc.pred(n: Nat) -> Nat:
@@ -912,14 +885,6 @@ def enc.pred(n: Nat) -> Nat:
       0n
     case 1n+p:
       p
-
-# how many bytes, counted in a word
-def enc.len(xs: List<&2, U32>, +n: U32) -> U32:
-  match xs:
-    case Nil{}:
-      n
-    case _h <> t:
-      enc.len(t, (n + 1 : U32))
 
 # a reversed prefix, consed onto the suffix
 def enc.cat.go(xs: List<&2, U32>, ys: List<&2, U32>) -> List<&2, U32>:
@@ -933,29 +898,18 @@ def enc.cat.go(xs: List<&2, U32>, ys: List<&2, U32>) -> List<&2, U32>:
 def enc.cat(xs: List<&2, U32>, ys: List<&2, U32>) -> List<&2, U32>:
   enc.cat.go(List.reverse(&2, U32, xs), ys)
 
-# channels written for one sample
-def enc.nch(op: Bool) -> U32:
-  match op:
+# Adler-32 sum reduced once. s is below twice the modulus.
+def enc.add.at(z: Bool, +t: U32) -> U32:
+  match z:
     case True{}:
-      3
+      (t - 65521 : U32)
     case False{}:
-      4
+      t
 
-# scanlines, filter None, newest-first. `left` is 0 at the first sample of a
-# row, where the filter byte is written; otherwise it is the samples still
-# to come after this one. `n` is how many bytes are in `acc`. One reverse at
-# the end puts the bytes in order.
-def enc.raw(
-  px: List<&2, U32>, left: Nat, +w: Nat, +op: Bool, acc: List<&2, U32>, +n: U32
-) -> List<&2, U32> & U32:
-  match px left:
-    case Nil{} _left:
-      (List.reverse(&2, U32, acc), n)
-    case +c <> t 0n:
-      +n2 = ((n + 1 : U32) + enc.nch(op) : U32)
-      enc.raw(t, enc.pred(w), w, op, enc.push(op, c, {0 <> acc : List<&2, U32>}), n2)
-    case +c <> t 1n+p:
-      enc.raw(t, p, w, op, enc.push(op, c, acc), (n + enc.nch(op) : U32))
+# one Adler add, modulo 65521
+def enc.add(+s: U32, +x: U32) -> U32:
+  +t = (s + x : U32)
+  enc.add.at(U32.is_ge(t, 65521), t)
 
 # the five-byte stored-block header: BFINAL, then LEN and NLEN, little-endian
 def enc.head(fin: Bool, +len: U32, +nlen: U32) -> List<&2, U32>:
@@ -965,111 +919,454 @@ def enc.head(fin: Bool, +len: U32, +nlen: U32) -> List<&2, U32>:
     case False{}:
       [0, enc.byte(len), enc.hi(len), enc.byte(nlen), enc.hi(nlen)]
 
-# one stored DEFLATE block. `data` is chronological.
-def enc.stored(fin: Bool, +data: List<&2, U32>) -> List<&2, U32>:
-  +len = enc.len(data, 0)
+# one stored DEFLATE block. `data` is chronological and is used once.
+def enc.stored(fin: Bool, +len: U32, data: List<&2, U32>) -> List<&2, U32>:
   enc.cat(enc.head(fin, len, (len .^. 65535 : U32)), data)
 
 # stored blocks of at most `max` bytes. `z` means this byte opens a block.
-# `acc` is the open block, newest-first.
+# `room` is the space left in the open block, so its length is `max - room`.
 def enc.feed(
-  xs: List<&2, U32>, z: Bool, +room: U32, +max: U32, acc: List<&2, U32>
+  xs: List<&2, U32>,
+  z: Bool,
+  +room: U32,
+  +max: U32,
+  acc: List<&2, U32>
 ) -> List<&2, U32>:
   match xs z:
     case Nil{} _z:
-      enc.stored(True{}, List.reverse(&2, U32, acc))
+      enc.stored(True{}, (max - room : U32), List.reverse(&2, U32, acc))
     case +h <> t True{}:
       +nxt = (max - 1 : U32)
-      +blk = enc.stored(False{}, List.reverse(&2, U32, acc))
+      +len = (max - room : U32)
+      +blk = enc.stored(False{}, len, List.reverse(&2, U32, acc))
       enc.cat(blk, enc.feed(t, U32.is_zero(nxt), nxt, max, [h]))
     case +h <> t False{}:
       +nxt = (room - 1 : U32)
       enc.feed(t, U32.is_zero(nxt), nxt, max, {h <> acc : List<&2, U32>})
 
-# one final stored block when the payload already fits
-def enc.blocks.fit(z: Bool, +max: U32, +n: U32, +xs: List<&2, U32>) -> List<&2, U32>:
-  match z:
-    case True{}:
-      enc.cat(enc.head(True{}, n, (n .^. 65535 : U32)), xs)
-    case False{}:
-      enc.feed(xs, U32.is_zero(max), max, max, [])
-
 # stored DEFLATE blocks, each at most `max` bytes, the last one final
-def enc.blocks(+max: U32, +xs: List<&2, U32>) -> List<&2, U32>:
-  +n = enc.len(xs, 0)
-  enc.blocks.fit(U32.is_le(n, max), max, n, xs)
+def enc.blocks(+max: U32, xs: List<&2, U32>) -> List<&2, U32>:
+  enc.feed(xs, U32.is_zero(max), max, max, [])
 
-# a chunk: length, type, data, and CRC-32 over the type and the data
-def enc.chunk(+tag: U32, +data: List<&2, U32>) -> List<&2, U32>:
+# a chunk: length, type, data, and a CRC-32 already folded over type and data
+def enc.chunk(+tag: U32, data: List<&2, U32>, +n: U32, +crc: U32) -> List<&2, U32>:
   +body = enc.cat(enc.be(tag), data)
-  +crc = Crc.crc32(body)
-  +n = enc.len(data, 0)
   enc.cat(enc.be(n), enc.cat(body, enc.be(crc)))
 
 # IHDR: width, height, depth 8, colour type, method 0, filter 0, interlace 0
 def enc.ihdr(+w: U32, +h: U32, +ct: U32) -> List<&2, U32>:
   enc.cat(enc.be(w), enc.cat(enc.be(h), [8, ct, 0, 0, 0]))
 
+# CRC-32 of the IHDR type and its thirteen data bytes
+def enc.ihdr.crc(+w: U32, +h: U32, +ct: U32) -> U32:
+  +body = enc.cat(enc.be(tag.ihdr()), enc.ihdr(w, h, ct))
+  (Crc.crc.fold(body, 4294967295) .^. 4294967295 : U32)
+
+# CRC-32 of the IEND type
+def enc.iend.crc() -> U32:
+  (Crc.crc.fold(enc.be(tag.iend()), 4294967295) .^. 4294967295 : U32)
+
+# running CRC after the IDAT type, the zlib header, and one stored-block header
+def enc.idat.crc0(+n: U32) -> U32:
+  +nlen = (n .^. 65535 : U32)
+  +pre = enc.cat(enc.be(tag.idat()), enc.cat([120, 1], enc.head(True{}, n, nlen)))
+  Crc.crc.fold(pre, 4294967295)
+
 # the eight-byte signature
 def enc.sig() -> List<&2, U32>:
   [137, 80, 78, 71, 13, 10, 26, 10]
 
-# colour type 2 when opaque, otherwise 6
-def enc.ct(op: Bool) -> U32:
-  match op:
-    case True{}:
-      2
-    case False{}:
-      6
+# signature, IHDR, IDAT, IEND. Each list is consumed once.
+def enc.wrap(
+  +w: U32,
+  +h: U32,
+  +ct: U32,
+  idat: List<&2, U32>,
+  +ln: U32,
+  +crc: U32
+) -> List<&2, U32>:
+  +ih = enc.chunk(tag.ihdr(), enc.ihdr(w, h, ct), 13, enc.ihdr.crc(w, h, ct))
+  +id = enc.chunk(tag.idat(), idat, ln, crc)
+  +ie = enc.chunk(tag.iend(), [], 0, enc.iend.crc())
+  enc.cat(enc.sig(), enc.cat(ih, enc.cat(id, ie)))
 
-# zlib wrapper, CMF/FLG 120 1, around stored DEFLATE blocks and an Adler-32.
-# `n` is the length of `raw`, already counted while the scanlines were built.
-def enc.zlib(+raw: List<&2, U32>, +n: U32) -> List<&2, U32>:
-  +sum = Inf.adler.of(raw)
-  enc.cat([120, 1], enc.cat(enc.blocks.fit(U32.is_le(n, 65535), 65535, n, raw), enc.be(sum)))
+# how many stored blocks cover `n` raw bytes
+def enc.nblk(+n: U32) -> U32:
+  U32.div((n + 65534 : U32), 65535)
 
-# signature, IHDR, IDAT, IEND
-def enc.seal(+w: U32, +h: U32, op: Bool, got: List<&2, U32> & U32) -> List<&2, U32>:
+# fold CRC while reversing, then the fix restores order
+def enc.crc.spin(xs: List<&2, U32>, acc: List<&2, U32>, +c: U32) -> List<&2, U32> & U32:
+  match xs:
+    case Nil{}:
+      (acc, c)
+    case +h <> t:
+      enc.crc.spin(t, {h <> acc : List<&2, U32>}, Crc.crc.byte(c, h))
+
+# chronological bytes and the running CRC from a newest-first fold
+def enc.crc.fix(got: List<&2, U32> & U32) -> List<&2, U32> & U32:
   match got:
-    case (raw, +n):
-      +ihdr = enc.chunk(tag.ihdr(), enc.ihdr(w, h, enc.ct(op)))
-      +idat = enc.chunk(tag.idat(), enc.zlib(raw, n))
-      enc.cat(enc.sig(), enc.cat(ihdr, enc.cat(idat, enc.chunk(tag.iend(), []))))
+    case (rev, +c):
+      (List.reverse(&2, U32, rev), c)
 
-# every sample so far is opaque, and `z` carries that fact forward
-def enc.opaque(px: List<&2, U32>, z: Bool) -> Bool:
-  match px z:
-    case _px False{}:
-      False{}
-    case Nil{} True{}:
-      True{}
-    case +c <> t True{}:
-      enc.opaque(t, U32.is_eq(enc.a(c), 255))
+# IDAT from a rebuilt chunk body and its running CRC
+def enc.large.crc(
+  +w: U32,
+  +h: U32,
+  +ct: U32,
+  +ln: U32,
+  got: List<&2, U32> & U32
+) -> List<&2, U32>:
+  match got:
+    case (body, +c):
+      enc.wrap(w, h, ct, body, ln, (c .^. 4294967295 : U32))
+
+# zlib bytes of several stored blocks. `raw` is newest-first.
+def enc.large(
+  +w: U32,
+  +h: U32,
+  +ct: U32,
+  +n: U32,
+  raw: List<&2, U32>,
+  +a: U32,
+  +b: U32,
+  _c: U32
+) -> List<&2, U32>:
+  +sum = ((b << 16n : U32) .|. a : U32)
+  +ln = ((n + (enc.nblk(n) * 5 : U32) : U32) + 6 : U32)
+  +z = enc.cat([120, 1], enc.cat(enc.blocks(65535, List.reverse(&2, U32, raw)), enc.be(sum)))
+  +body = enc.cat(enc.be(tag.idat()), z)
+  enc.large.crc(w, h, ct, ln, enc.crc.fix(enc.crc.spin(body, [], 4294967295)))
+
+# one stored block. `raw` is newest-first; `c` already covers the block header.
+def enc.small(
+  +w: U32,
+  +h: U32,
+  +ct: U32,
+  +n: U32,
+  raw: List<&2, U32>,
+  +a: U32,
+  +b: U32,
+  +c: U32
+) -> List<&2, U32>:
+  +sum = ((b << 16n : U32) .|. a : U32)
+  +crc = (Crc.crc.fold(enc.be(sum), c) .^. 4294967295 : U32)
+  +nlen = (n .^. 65535 : U32)
+  +body = enc.cat.go(raw, enc.be(sum))
+  +payload = enc.cat([120, 1], enc.cat(enc.head(True{}, n, nlen), body))
+  enc.wrap(w, h, ct, payload, (n + 11 : U32), crc)
+
+# one block when the raw bytes fit, otherwise several
+def enc.fit(
+  z: Bool,
+  +w: U32,
+  +h: U32,
+  +ct: U32,
+  +n: U32,
+  raw: List<&2, U32>,
+  +a: U32,
+  +b: U32,
+  +c: U32
+) -> List<&2, U32>:
+  match z:
+    case True{}:
+      enc.small(w, h, ct, n, raw, a, b, c)
+    case False{}:
+      enc.large(w, h, ct, n, raw, a, b, c)
+
+# RGB fold: newest-first bytes, Adler, CRC, backup samples, samples seen
+type Es is Data:
+  Es{acc: List<&2, U32>, +a: U32, +b: U32, +c: U32, bak: List<&2, U32>, +seen: U32}
+
+# RGBA fold: newest-first bytes, Adler, CRC, samples seen
+type Ea is Data:
+  Ea{acc: List<&2, U32>, +a: U32, +b: U32, +c: U32, +seen: U32}
+
+# an RGB fold result: bytes or restored samples, sums, and whether to retry
+type Ey is Data:
+  Ey{raw: List<&2, U32>, +a: U32, +b: U32, +c: U32, ok: Bool, redo: Bool}
+
+# an RGBA fold result
+type Ez is Data:
+  Ez{raw: List<&2, U32>, +a: U32, +b: U32, +c: U32, ok: Bool}
+
+# free a list
+def enc.drop(xs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match xs:
+    case Nil{}:
+      None{}
+    case _h <> t:
+      enc.drop(t)
+
+# drop the backup pixels and keep the scanline bytes
+def enc.free(xs: List<&2, U32>, acc: List<&2, U32>, +a: U32, +b: U32, +c: U32) -> Ey:
+  match xs:
+    case Nil{}:
+      Ey{acc, a, b, c, True{}, False{}}
+    case _h <> t:
+      enc.free(t, acc, a, b, c)
+
+# drop both buffers; the picture was the wrong length
+def enc.bad.ys(ys: List<&2, U32>) -> Ey:
+  match ys:
+    case Nil{}:
+      Ey{[], 0, 0, 0, False{}, False{}}
+    case _h <> t:
+      enc.bad.ys(t)
+
+# drop the backup, then the scanline bytes
+def enc.bad(xs: List<&2, U32>, ys: List<&2, U32>) -> Ey:
+  match xs:
+    case Nil{}:
+      enc.bad.ys(ys)
+    case _h <> t:
+      enc.bad(t, ys)
+
+# bytes when the sample count matches the area, otherwise nothing
+def enc.end(ok: Bool, bak: List<&2, U32>, acc: List<&2, U32>, +a: U32, +b: U32, +c: U32) -> Ey:
+  match ok:
+    case True{}:
+      enc.free(bak, acc, a, b, c)
+    case False{}:
+      enc.bad(bak, acc)
+
+# drop the RGB bytes and hand back every sample, chronological
+def enc.redo(acc: List<&2, U32>, px: List<&2, U32>) -> Ey:
+  match acc:
+    case Nil{}:
+      Ey{px, 0, 0, 0, False{}, True{}}
+    case _h <> t:
+      enc.redo(t, px)
+
+# a later sample is translucent: encode the whole picture as RGBA instead
+def enc.redo.at(acc: List<&2, U32>, bak: List<&2, U32>, +s: U32, rest: List<&2, U32>) -> Ey:
+  enc.redo(acc, enc.cat.go(bak, {s <> rest : List<&2, U32>}))
+
+# open the RGB fold and restart from its state
+def enc.rgb.back(st: Es, +s: U32, rest: List<&2, U32>) -> Ey:
+  match st:
+    case Es{acc, +_a, +_b, +_c, bak, +_seen}:
+      enc.redo.at(acc, bak, s, rest)
+
+# close the RGB fold when the last sample has been written
+def enc.rgb.fin(st: Es, +need: U32) -> Ey:
+  match st:
+    case Es{acc, +a, +b, +c, bak, +seen}:
+      enc.end(U32.is_eq(seen, need), bak, acc, a, b, c)
+
+# filter None, then R, G, B. Adler and CRC follow that order.
+def enc.rgb.row(+s: U32, st: Es) -> Es:
+  match st:
+    case Es{acc, +a, +b, +c, bak, +seen}:
+      +r = ((s >> 16n : U32) .&. 255 : U32)
+      +g = ((s >> 8n : U32) .&. 255 : U32)
+      +bb = (s .&. 255 : U32)
+      +bak2 = {s <> bak : List<&2, U32>}
+      +seen2 = (seen + 1 : U32)
+      +b0 = enc.add(b, a)
+      +c0 = Crc.crc.byte(c, 0)
+      +a1 = enc.add(a, r)
+      +b1 = enc.add(b0, a1)
+      +c1 = Crc.crc.byte(c0, r)
+      +a2 = enc.add(a1, g)
+      +b2 = enc.add(b1, a2)
+      +c2 = Crc.crc.byte(c1, g)
+      +a3 = enc.add(a2, bb)
+      +b3 = enc.add(b2, a3)
+      +c3 = Crc.crc.byte(c2, bb)
+      +acc2 = {bb <> g <> r <> 0 <> acc : List<&2, U32>}
+      Es{acc2, a3, b3, c3, bak2, seen2}
+
+# R, G, B in the middle of a scanline
+def enc.rgb.mid(+s: U32, st: Es) -> Es:
+  match st:
+    case Es{acc, +a, +b, +c, bak, +seen}:
+      +r = ((s >> 16n : U32) .&. 255 : U32)
+      +g = ((s >> 8n : U32) .&. 255 : U32)
+      +bb = (s .&. 255 : U32)
+      +bak2 = {s <> bak : List<&2, U32>}
+      +seen2 = (seen + 1 : U32)
+      +a1 = enc.add(a, r)
+      +b1 = enc.add(b, a1)
+      +c1 = Crc.crc.byte(c, r)
+      +a2 = enc.add(a1, g)
+      +b2 = enc.add(b1, a2)
+      +c2 = Crc.crc.byte(c1, g)
+      +a3 = enc.add(a2, bb)
+      +b3 = enc.add(b2, a3)
+      +c3 = Crc.crc.byte(c2, bb)
+      +acc2 = {bb <> g <> r <> acc : List<&2, U32>}
+      Es{acc2, a3, b3, c3, bak2, seen2}
+
+# one owner of the samples. Opaque bytes carry Adler and CRC; a translucent
+# sample rebuilds the picture and the caller encodes it as RGBA.
+def enc.raw.rgb(
+  rest: List<&2, U32>, +s: U32, op: Bool, left: Nat, +w: Nat, st: Es, +need: U32
+) -> Ey:
+  match rest op left:
+    case Nil{} False{} _left:
+      enc.rgb.back(st, s, [])
+    case +s2 <> t2 False{} _left:
+      enc.rgb.back(st, s, {s2 <> t2 : List<&2, U32>})
+    case Nil{} True{} 0n:
+      enc.rgb.fin(enc.rgb.row(s, st), need)
+    case Nil{} True{} 1n+p:
+      enc.rgb.fin(enc.rgb.mid(s, st), need)
+    case +s2 <> t2 True{} 0n:
+      enc.raw.rgb(t2, s2, U32.is_eq(enc.a(s2), 255), enc.pred(w), w, enc.rgb.row(s, st), need)
+    case +s2 <> t2 True{} 1n+p:
+      enc.raw.rgb(t2, s2, U32.is_eq(enc.a(s2), 255), p, w, enc.rgb.mid(s, st), need)
+
+# the first sample, then the fold
+def enc.rgb.enter(px: List<&2, U32>, left: Nat, +w: Nat, st: Es, +need: U32) -> Ey:
+  match px:
+    case Nil{}:
+      enc.rgb.fin(st, need)
+    case +s <> t:
+      enc.raw.rgb(t, s, U32.is_eq(enc.a(s), 255), left, w, st, need)
+
+# drop scanline bytes after a short or long sample list
+def enc.rgba.bad(acc: List<&2, U32>) -> Ez:
+  match acc:
+    case Nil{}:
+      Ez{[], 0, 0, 0, False{}}
+    case _h <> t:
+      enc.rgba.bad(t)
+
+# the byte list when the sample count matches, otherwise an empty failure
+def enc.rgba.ok(ok: Bool, acc: List<&2, U32>, +a: U32, +b: U32, +c: U32) -> Ez:
+  match ok:
+    case True{}:
+      Ez{acc, a, b, c, True{}}
+    case False{}:
+      enc.rgba.bad(acc)
+
+# close an RGBA fold
+def enc.rgba.fin(st: Ea, +need: U32) -> Ez:
+  match st:
+    case Ea{acc, +a, +b, +c, +seen}:
+      enc.rgba.ok(U32.is_eq(seen, need), acc, a, b, c)
+
+# filter None, then R, G, B, A
+def enc.rgba.row(+s: U32, st: Ea) -> Ea:
+  match st:
+    case Ea{acc, +a, +b, +c, +seen}:
+      +r = ((s >> 16n : U32) .&. 255 : U32)
+      +g = ((s >> 8n : U32) .&. 255 : U32)
+      +bb = (s .&. 255 : U32)
+      +aa = enc.a(s)
+      +seen2 = (seen + 1 : U32)
+      +b0 = enc.add(b, a)
+      +c0 = Crc.crc.byte(c, 0)
+      +a1 = enc.add(a, r)
+      +b1 = enc.add(b0, a1)
+      +c1 = Crc.crc.byte(c0, r)
+      +a2 = enc.add(a1, g)
+      +b2 = enc.add(b1, a2)
+      +c2 = Crc.crc.byte(c1, g)
+      +a3 = enc.add(a2, bb)
+      +b3 = enc.add(b2, a3)
+      +c3 = Crc.crc.byte(c2, bb)
+      +a4 = enc.add(a3, aa)
+      +b4 = enc.add(b3, a4)
+      +c4 = Crc.crc.byte(c3, aa)
+      +acc2 = {aa <> bb <> g <> r <> 0 <> acc : List<&2, U32>}
+      Ea{acc2, a4, b4, c4, seen2}
+
+# R, G, B, A in the middle of a scanline
+def enc.rgba.mid(+s: U32, st: Ea) -> Ea:
+  match st:
+    case Ea{acc, +a, +b, +c, +seen}:
+      +r = ((s >> 16n : U32) .&. 255 : U32)
+      +g = ((s >> 8n : U32) .&. 255 : U32)
+      +bb = (s .&. 255 : U32)
+      +aa = enc.a(s)
+      +seen2 = (seen + 1 : U32)
+      +a1 = enc.add(a, r)
+      +b1 = enc.add(b, a1)
+      +c1 = Crc.crc.byte(c, r)
+      +a2 = enc.add(a1, g)
+      +b2 = enc.add(b1, a2)
+      +c2 = Crc.crc.byte(c1, g)
+      +a3 = enc.add(a2, bb)
+      +b3 = enc.add(b2, a3)
+      +c3 = Crc.crc.byte(c2, bb)
+      +a4 = enc.add(a3, aa)
+      +b4 = enc.add(b3, a4)
+      +c4 = Crc.crc.byte(c3, aa)
+      +acc2 = {aa <> bb <> g <> r <> acc : List<&2, U32>}
+      Ea{acc2, a4, b4, c4, seen2}
+
+# filter-None RGBA scanlines, newest-first, with Adler and CRC inline
+def enc.raw.rgba(px: List<&2, U32>, left: Nat, +w: Nat, st: Ea, +need: U32) -> Ez:
+  match px left:
+    case Nil{} _left:
+      enc.rgba.fin(st, need)
+    case +s <> t 0n:
+      enc.raw.rgba(t, enc.pred(w), w, enc.rgba.row(s, st), need)
+    case +s <> t 1n+p:
+      enc.raw.rgba(t, p, w, enc.rgba.mid(s, st), need)
+
+# wrap a finished RGBA fold, or none when the sample count was wrong
+def enc.rgba.out(+w: U32, +h: U32, +n: U32, got: Ez) -> Maybe<&2, List<&2, U32>>:
+  match got:
+    case Ez{raw, +a, +b, +c, True{}}:
+      Some{enc.fit(U32.is_le(n, 65535), w, h, 6, n, raw, a, b, c)}
+    case Ez{raw, _a, _b, _c, False{}}:
+      enc.drop(raw)
+
+# Adler 1, 0 and a running CRC, before any RGBA byte
+def enc.rgba.st(+c: U32) -> Ea:
+  Ea{[], 1, 0, c, 0}
+
+# colour type 6 from samples already known to need an alpha channel
+def enc.image.rgba(+w: U32, +h: U32, px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  +n = (h * ((w * 4 : U32) + 1 : U32) : U32)
+  +need = (w * h : U32)
+  +wn = U32.to_nat(w)
+  enc.rgba.out(w, h, n, enc.raw.rgba(px, 0n, wn, enc.rgba.st(enc.idat.crc0(n)), need))
+
+# a translucent sample restarts; a bad count is none
+def enc.route.no(redo: Bool, +w: U32, +h: U32, raw: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match redo:
+    case True{}:
+      enc.image.rgba(w, h, raw)
+    case False{}:
+      enc.drop(raw)
+
+# RGB bytes, or a restart as RGBA, or none when the count is wrong
+def enc.route(+w: U32, +h: U32, +n: U32, got: Ey) -> Maybe<&2, List<&2, U32>>:
+  match got:
+    case Ey{raw, +a, +b, +c, True{}, _redo}:
+      Some{enc.fit(U32.is_le(n, 65535), w, h, 2, n, raw, a, b, c)}
+    case Ey{raw, _a, _b, _c, False{}, redo}:
+      enc.route.no(redo, w, h, raw)
+
+# Adler 1, 0, a running CRC, and an empty sample backup
+def enc.rgb.st(+c: U32) -> Es:
+  Es{[], 1, 0, c, [], 0}
+
+# colour type 2 until a translucent sample appears
+def enc.image(+w: U32, +h: U32, px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  +n = (h * ((w * 3 : U32) + 1 : U32) : U32)
+  +need = (w * h : U32)
+  +wn = U32.to_nat(w)
+  enc.route(w, h, n, enc.rgb.enter(px, 0n, wn, enc.rgb.st(enc.idat.crc0(n)), need))
 
 # width times height fits in a U32
 def enc.area(+w: U32, +h: U32) -> Bool:
   Bool.or(U32.is_zero(w), U32.is_le(h, U32.div(4294967295, w)))
 
-# a positive area whose sample list covers it
-def enc.good(+w: U32, +h: U32, px: List<&2, U32>) -> Bool:
-  +area = (w * h : U32)
-  +n = enc.len(px, 0)
-  Bool.and(Bool.and(U32.is_gt(w, 0), U32.is_gt(h, 0)), Bool.and(enc.area(w, h), U32.is_eq(n, area)))
-
-# the PNG bytes of a picture already known to be in range
-def enc.paint(+w: U32, +h: U32, +op: Bool, px: List<&2, U32>) -> List<&2, U32>:
-  +wn = U32.to_nat(w)
-  enc.seal(w, h, op, enc.raw(px, 0n, wn, op, [], 0))
-
-# the bytes, or none when the picture is not encodable
-def enc.open(z: Bool, +w: U32, +h: U32, +px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+# the bytes when the sides are in range, otherwise none
+def enc.live(z: Bool, +w: U32, +h: U32, px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match z:
     case False{}:
-      None{}
+      enc.drop(px)
     case True{}:
-      Some{enc.paint(w, h, enc.opaque(px, True{}), px)}
+      enc.image(w, h, px)
 
 # ISO/IEC 15948 / W3C PNG — an 8-bit encoding, interlace 0, filter None.
 # Colour type 2 when every sample is opaque, otherwise colour type 6.
-def enc.file(+w: U32, +h: U32, +px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  enc.open(enc.good(w, h, px), w, h, px)
+# Each byte list has one owner: Adler-32 and CRC-32 fold as the bytes are written.
+def enc.file(+w: U32, +h: U32, px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  +z = Bool.and(Bool.and(U32.is_gt(w, 0), U32.is_gt(h, 0)), enc.area(w, h))
+  enc.live(z, w, h, px)
