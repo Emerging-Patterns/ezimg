@@ -1028,13 +1028,161 @@ def enc.zlib(+raw: List<&2, U32>, +n: U32) -> List<&2, U32>:
   +sum = Inf.adler.of(raw)
   enc.cat([120, 1], enc.cat(enc.blocks.fit(U32.is_le(n, 65535), 65535, n, raw), enc.be(sum)))
 
+# how many stored blocks cover `n` raw bytes
+def enc.nblk.at(z: Bool, +q: U32) -> U32:
+  match z:
+    case True{}:
+      q
+    case False{}:
+      (q + 1 : U32)
+
+# ceil(n / 65535). An exact multiple stays `q`.
+def enc.nblk(+n: U32) -> U32:
+  enc.nblk.at(U32.is_zero((n % 65535 : U32)), U32.div(n, 65535))
+
+# IDAT data length: zlib header, stored-block headers, raw bytes, Adler-32
+def enc.idat.ln(+n: U32) -> U32:
+  ((n + (enc.nblk(n) * 5 : U32) : U32) + 6 : U32)
+
+# CRC-32 and cons chronological bytes onto a newest-first accumulator
+def enc.crc.list(xs: List<&2, U32>, +c: U32, acc: List<&2, U32>) -> U32 & List<&2, U32>:
+  match xs:
+    case Nil{}:
+      (c, acc)
+    case +h <> t:
+      enc.crc.list(t, Crc.crc.byte(c, h), {h <> acc : List<&2, U32>})
+
+# the stored-block length: the bytes still open, at most 65535
+def enc.cap.at(z: Bool, +n: U32) -> U32:
+  match z:
+    case True{}:
+      n
+    case False{}:
+      65535
+
+# min(n, 65535)
+def enc.cap(+n: U32) -> U32:
+  enc.cap.at(U32.is_le(n, 65535), n)
+
+# BFINAL is 1 when this block holds every byte still open
+def enc.bf.at(z: Bool) -> U32:
+  match z:
+    case True{}:
+      1
+    case False{}:
+      0
+
+# 1 when `n` fits in one stored block, otherwise 0
+def enc.bf(+n: U32) -> U32:
+  enc.bf.at(U32.is_le(n, 65535))
+
+# stored blocks, newest-first, CRC running over headers and data. `znew` means
+# this byte opens a block of length `len` with BFINAL `bf`. `zlast` means this
+# data byte closes the block. `room` is the data bytes left in the open block,
+# including this one. `left` counts raw bytes still to come, including `h`.
+def enc.pour(
+  xs: List<&2, U32>, znew: Bool, zlast: Bool, +room: U32, +left: U32, +len: U32, +bf: U32,
+  +c: U32, acc: List<&2, U32>
+) -> U32 & List<&2, U32>:
+  match xs znew zlast:
+    case Nil{} _z _last:
+      (c, acc)
+    case +h <> t False{} False{}:
+      +room2 = (room - 1 : U32)
+      enc.pour(
+        t, False{}, U32.is_eq(room2, 1), room2, (left - 1 : U32), len, bf, Crc.crc.byte(c, h),
+        {h <> acc : List<&2, U32>}
+      )
+    case +h <> t False{} True{}:
+      +left2 = (left - 1 : U32)
+      enc.pour(
+        t, True{}, False{}, 0, left2, enc.cap(left2), enc.bf(left2), Crc.crc.byte(c, h),
+        {h <> acc : List<&2, U32>}
+      )
+    case +h <> t True{} _last:
+      +nlen = (len .^. 65535 : U32)
+      +b1 = enc.byte(len)
+      +b2 = enc.hi(len)
+      +b3 = enc.byte(nlen)
+      +b4 = enc.hi(nlen)
+      +c1 = Crc.crc.byte(c, bf)
+      +c2 = Crc.crc.byte(c1, b1)
+      +c3 = Crc.crc.byte(c2, b2)
+      +c4 = Crc.crc.byte(c3, b3)
+      +c5 = Crc.crc.byte(c4, b4)
+      +c6 = Crc.crc.byte(c5, h)
+      +a0 = {bf <> acc : List<&2, U32>}
+      +a1 = {b1 <> a0 : List<&2, U32>}
+      +a2 = {b2 <> a1 : List<&2, U32>}
+      +a3 = {b3 <> a2 : List<&2, U32>}
+      +a4 = {b4 <> a3 : List<&2, U32>}
+      +a5 = {h <> a4 : List<&2, U32>}
+      +left2 = (left - 1 : U32)
+      +room2 = (len - 1 : U32)
+      enc.pour(t, U32.is_zero(room2), U32.is_eq(room2, 1), room2, left2, enc.cap(left2), enc.bf(left2), c6, a5)
+
+# Adler-32, then the CRC field, then IEND, then one reverse of the whole file
+def enc.seal.crc(p: U32 & List<&2, U32>, ie: List<&2, U32>) -> List<&2, U32>:
+  match p:
+    case (+c, acc):
+      +crc = (c .^. 4294967295 : U32)
+      List.reverse(&2, U32, enc.cat.go(ie, enc.cat.go(enc.be(crc), acc)))
+
+# the four Adler bytes belong to the IDAT data and to its CRC
+def enc.seal.adler(p: U32 & List<&2, U32>, +sum: U32, ie: List<&2, U32>) -> List<&2, U32>:
+  match p:
+    case (+c, acc):
+      enc.seal.crc(enc.crc.list(enc.be(sum), c, acc), ie)
+
+# zlib header, then the stored blocks
+def enc.seal.run(
+  p: U32 & List<&2, U32>, raw: List<&2, U32>, +n: U32, +sum: U32, ie: List<&2, U32>
+) -> List<&2, U32>:
+  match p:
+    case (+c, acc):
+      enc.seal.adler(enc.pour(raw, True{}, False{}, 0, n, enc.cap(n), enc.bf(n), c, acc), sum, ie)
+
+# IDAT type, then the zlib stream
+def enc.seal.body(
+  p: U32 & List<&2, U32>, raw: List<&2, U32>, +n: U32, +sum: U32, ie: List<&2, U32>
+) -> List<&2, U32>:
+  match p:
+    case (+c, acc):
+      enc.seal.run(enc.crc.list([120, 1], c, acc), raw, n, sum, ie)
+
+# one picture whose filtered bytes do not fit in a single stored block.
+# Signature, IHDR, the IDAT length, and the payload are consed newest-first
+# and reversed once. Adler-32 stays a separate pass over the raw bytes.
+def enc.seal.wide(
+  +w: U32, +h: U32, op: Bool, +raw: List<&2, U32>, +n: U32
+) -> List<&2, U32>:
+  +ih = enc.chunk(tag.ihdr(), enc.ihdr(w, h, enc.ct(op)))
+  +ie = enc.chunk(tag.iend(), [])
+  +sum = Inf.adler.of(raw)
+  +acc = enc.cat.go(enc.be(enc.idat.ln(n)), enc.cat.go(ih, enc.cat.go(enc.sig(), [])))
+  enc.seal.body(enc.crc.list(enc.be(tag.idat()), 4294967295, acc), raw, n, sum, ie)
+
+# signature, IHDR, IDAT, IEND when the raw bytes fit in one stored block
+def enc.seal.one(+w: U32, +h: U32, op: Bool, +raw: List<&2, U32>, +n: U32) -> List<&2, U32>:
+  +ihdr = enc.chunk(tag.ihdr(), enc.ihdr(w, h, enc.ct(op)))
+  +idat = enc.chunk(tag.idat(), enc.zlib(raw, n))
+  enc.cat(enc.sig(), enc.cat(ihdr, enc.cat(idat, enc.chunk(tag.iend(), []))))
+
+# one stored block when the payload fits; several blocks written once otherwise
+def enc.seal.at(
+  z: Bool, +w: U32, +h: U32, op: Bool, raw: List<&2, U32>, +n: U32
+) -> List<&2, U32>:
+  match z:
+    case False{}:
+      enc.seal.one(w, h, op, raw, n)
+    case True{}:
+      enc.seal.wide(w, h, op, raw, n)
+
 # signature, IHDR, IDAT, IEND
 def enc.seal(+w: U32, +h: U32, op: Bool, got: List<&2, U32> & U32) -> List<&2, U32>:
   match got:
     case (raw, +n):
-      +ihdr = enc.chunk(tag.ihdr(), enc.ihdr(w, h, enc.ct(op)))
-      +idat = enc.chunk(tag.idat(), enc.zlib(raw, n))
-      enc.cat(enc.sig(), enc.cat(ihdr, enc.cat(idat, enc.chunk(tag.iend(), []))))
+      enc.seal.at(U32.is_gt(n, 65535), w, h, op, raw, n)
 
 # every sample so far is opaque, and `z` carries that fact forward
 def enc.opaque(px: List<&2, U32>, z: Bool) -> Bool:
