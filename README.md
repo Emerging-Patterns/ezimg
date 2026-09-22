@@ -42,8 +42,9 @@ Closed equalities in `ezimg/LAWS.bend`, proved in `ezimg/PROOF.bend`
   baseline sequential 8-bit Huffman frame (SOF0) decoded to gray and to
   4:4:4 YCbCr samples. Progressive SOF2 and arithmetic SOF9 decode as none.
   A baseline SOF0 encode of the same shape writes SOI, APP0, the JFIF
-  identifier, DQT, SOF0, DHT, SOS, and EOI. A 1 by 1 and a 2 by 2 neutral
-  solid (packed sample 8421504) round-trip through that encode and decode.
+  identifier, DQT, SOF0, DHT, SOS, and EOI. A 1 by 1, a 2 by 2, and an
+  8 by 8 neutral solid (packed sample 8421504) round-trip through that encode
+  and decode.
   Annex A.3.3: a constant level-shifted block has no AC coefficient, and the
   forward and inverse transforms restore an 8 by 8 horizontal step. An 8 by 1
   picture of that step round-trips through encode and the all-ones quantiser.
