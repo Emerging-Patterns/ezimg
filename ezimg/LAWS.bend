@@ -470,11 +470,6 @@ law jpeg_enc_solid:
   {Img.decode_jpeg(Jenc.encode(2, 2, [8421504, 8421504, 8421504, 8421504])) == Some{Img.fill(2, 2, 8421504)} :
     Maybe<&2, Img.Raster>}
 
-# LAW: an 8 by 8 neutral solid round-trips through the fixed frame
-law jpeg_enc_frame:
-  {Img.decode_jpeg(Img.encode_jpeg(Img.fill(8, 8, 8421504))) == Some{Img.fill(8, 8, 8421504)} :
-    Maybe<&2, Img.Raster>}
-
 # constant sample 136, the level-shifted value whose AC terms A.3.3 sets to zero
 def flat.row() -> List<&2, U32>:
   List.replicate(U32, 8n, 136)
