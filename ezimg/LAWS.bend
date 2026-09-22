@@ -469,3 +469,39 @@ law jpeg_enc_dc:
 law jpeg_enc_solid:
   {Img.decode_jpeg(Jenc.encode(2, 2, [8421504, 8421504, 8421504, 8421504])) == Some{Img.fill(2, 2, 8421504)} :
     Maybe<&2, Img.Raster>}
+
+# constant sample 136, the level-shifted value whose AC terms A.3.3 sets to zero
+def flat.row() -> List<&2, U32>:
+  List.replicate(U32, 8n, 136)
+
+def flat.block() -> List<&2, List<&2, U32>>:
+  [flat.row(), flat.row(), flat.row(), flat.row(), flat.row(), flat.row(), flat.row(), flat.row()]
+
+# one channel-row of a horizontal step, samples 0 then 255
+def step.tone() -> List<&2, U32>:
+  [0, 0, 0, 0, 255, 255, 255, 255]
+
+def step.block() -> List<&2, List<&2, U32>>:
+  [step.tone(), step.tone(), step.tone(), step.tone(), step.tone(), step.tone(), step.tone(), step.tone()]
+
+def step.pack(+v: U32) -> U32:
+  U32.or(U32.shln(v, 16n), U32.or(U32.shln(v, 8n), v))
+
+def step.packed() -> List<&2, U32>:
+  [step.pack(0), step.pack(0), step.pack(0), step.pack(0), step.pack(255), step.pack(255), step.pack(255),
+    step.pack(255)]
+
+# LAW: ITU-T T.81 A.3.3 — after the level shift, constant sample 136 has no AC term
+law jpeg_fdct_flat:
+  {List.drop(&2, U32, Jenc.encode.fdct(Jenc.encode.levels(flat.block()), Jpeg.decode.cos()), 1n) ==
+    List.replicate(U32, 63n, 0) : List<&2, U32>}
+
+# LAW: ITU-T T.81 A.3.3 — forward then inverse DCT restores this horizontal step
+law jpeg_dct_step:
+  {Jpeg.decode.idct(Jenc.encode.fdct(Jenc.encode.levels(step.block()), Jpeg.decode.cos())) ==
+    Jpeg.decode.flat(step.block()) : List<&2, U32>}
+
+# LAW: ITU-T T.81 A.3.3 and A.3.4 — an 8 by 1 step round-trips at quantisation step 1
+law jpeg_enc_step:
+  {Img.decode_jpeg(Img.encode_jpeg(Img.raster(8, 1, step.packed()))) == Some{Img.raster(8, 1, step.packed())} :
+    Maybe<&2, Img.Raster>}

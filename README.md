@@ -44,6 +44,9 @@ Closed equalities in `ezimg/LAWS.bend`, proved in `ezimg/PROOF.bend`
   A baseline SOF0 encode of the same shape writes SOI, APP0, the JFIF
   identifier, DQT, SOF0, DHT, SOS, and EOI. A 1 by 1 and a 2 by 2 neutral
   solid (packed sample 8421504) round-trip through that encode and decode.
+  Annex A.3.3: a constant level-shifted block has no AC coefficient, and the
+  forward and inverse transforms restore an 8 by 8 horizontal step. An 8 by 1
+  picture of that step round-trips through encode and the all-ones quantiser.
 - JFIF, [ISO/IEC 10918-5](https://www.iso.org/standard/54989.html) | ITU-T
   T.871: the APP0 identifier `JFIF`, and the neutral and one saturated
   YCbCr triple converted to a packed RGB sample.
