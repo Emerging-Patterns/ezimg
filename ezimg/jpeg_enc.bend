@@ -645,39 +645,53 @@ def encode.scan(left: Nat, xs: List<&2, U32>, eq: Bool) -> Bool:
         case +h <> t:
           encode.scan(k, t, encode.flat.both(eq, U32.is_eq(h, 8421504)))
 
-def encode.z64() -> List<&2, U32>:
-  List.replicate(U32, 64n, 0)
+# low len bits of code join the open byte; a finished byte is stuffed
+def encode.pack.byte(+buf: U32, +len: U32, +code: U32) -> U32:
+  U32.or(U32.shln(buf, U32.to_nat(len)), code)
 
-def encode.zero.block(p: Put, +pred: U32, dc: Tab, ac: Tab) -> Put:
-  encode.block.go(p, pred, encode.z64(), dc, ac)
+def encode.pack.full(full: Bool, out: List<&2, U32>, +buf: U32, +n: U32, +len: U32, +code: U32) -> Put:
+  match full:
+    case True{}:
+      encode.stuff(out, encode.pack.byte(buf, len, code))
+    case False{}:
+      Put{out, encode.pack.byte(buf, len, code), (n + len : U32)}
 
-def encode.zero.tri(p: Put, +dc: Tab, +ac: Tab) -> Put:
-  encode.zero.block(encode.zero.block(encode.zero.block(p, 0, dc, ac), 0, dc, ac), 0, dc, ac)
+def encode.pack.keep(p: Put, +lo: U32, +rest: U32) -> Put:
+  match p:
+    case Put{out, _buf, _n}:
+      Put{out, rest, lo}
 
-def encode.neutral.sink(p: Put, ctx: Ctx) -> Put:
-  match ctx:
-    case Ctx{cs, zig, qs, dc, ac}:
-      +_c = encode.drop(cs)
-      +_g = encode.drop(zig)
-      +_q = encode.drop(qs)
-      +_d = encode.sink(dc)
-      +_a = encode.sink(ac)
-      p
+def encode.pack.span(out: List<&2, U32>, +buf: U32, +n: U32, +len: U32, +code: U32) -> Put:
+  +room = (8 - n : U32)
+  +lo = (len - room : U32)
+  encode.pack.keep(encode.stuff(out, U32.or(U32.shln(buf, U32.to_nat(room)),
+    U32.shrn(code, U32.to_nat(lo)))), lo, U32.and(code, (U32.shln(1, U32.to_nat(lo)) - 1 : U32)))
 
-def encode.neutral.step(p: Put, ctx: Ctx) -> Put:
-  match ctx:
-    case Ctx{+cs, +zig, +qs, dc, ac}:
-      +_c = encode.drop(cs)
-      +_g = encode.drop(zig)
-      +_q = encode.drop(qs)
-      encode.zero.tri(p, dc, ac)
+def encode.pack.fit(fit: Bool, out: List<&2, U32>, +buf: U32, +n: U32, +len: U32, +code: U32) -> Put:
+  match fit:
+    case True{}:
+      encode.pack.full(U32.is_eq((n + len : U32), 8), out, buf, n, len, code)
+    case False{}:
+      encode.pack.span(out, buf, n, len, code)
 
-def encode.neutral.mcus(left: Nat, p: Put, +ctx: Ctx) -> Put:
+def encode.pack(p: Put, +len: U32, +code: U32) -> Put:
+  match p:
+    case Put{out, +buf, +n}:
+      encode.pack.fit(U32.is_le((n + len : U32), 8), out, buf, n, len, code)
+
+# Annex K luminance: a zero block is DC 00 then EOB 1010
+def encode.zput(p: Put) -> Put:
+  encode.pack(p, 6, 10)
+
+def encode.ztri(p: Put) -> Put:
+  encode.zput(encode.zput(encode.zput(p)))
+
+def encode.neutral.mcus(left: Nat, p: Put) -> Put:
   match left:
     case 0n:
-      encode.neutral.sink(p, ctx)
+      p
     case 1n+nleft:
-      encode.neutral.mcus(nleft, encode.neutral.step(p, ctx), ctx)
+      encode.neutral.mcus(nleft, encode.ztri(p))
 
 def encode.neutral(+w: U32, +h: U32) -> List<&2, U32>:
   +dcc = encode.dccounts()
@@ -686,8 +700,8 @@ def encode.neutral(+w: U32, +h: U32) -> List<&2, U32>:
   +acs = encode.acsyms()
   +mw = U32.div((w + 7 : U32), 8)
   +mh = U32.div((h + 7 : U32), 8)
-  encode.finish(w, h, encode.pad(encode.neutral.mcus(U32.to_nat((mw * mh : U32)), encode.put0(),
-    encode.ctx(dcc, dcs, acc, acs))), dcc, dcs, acc, acs)
+  encode.finish(w, h, encode.pad(encode.neutral.mcus(U32.to_nat((mw * mh : U32)), encode.put0())),
+    dcc, dcs, acc, acs)
 
 def encode.go(+w: U32, +h: U32, +px: List<&2, U32>) -> List<&2, U32>:
   +dcc = encode.dccounts()
