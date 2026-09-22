@@ -627,23 +627,60 @@ def encode.finish(+w: U32, +h: U32, ent: List<&2, U32>, +dcc: List<&2, U32>, +dc
   +acc: List<&2, U32>, +acs: List<&2, U32>) -> List<&2, U32>:
   encode.join(encode.header(w, h, dcc, dcs, acc, acs), encode.join(ent, Jpeg.eoi()))
 
-def encode.scan.miss(eq: Bool) -> Bool:
-  match eq:
-    case _e:
-      False{}
+# samples before a mismatch were packed 8421504, so that prefix can be replayed
+def encode.hunt.nil(+seen: U32) -> Bool & List<&2, U32>:
+  (False{}, List.replicate(U32, U32.to_nat(seen), 8421504))
 
-# packed 8421504 is Y = Cb = Cr = 128, so each block is the zero coefficient vector
-def encode.scan(left: Nat, xs: List<&2, U32>, eq: Bool) -> Bool:
+def encode.hunt.mix(+seen: U32, +h: U32, t: List<&2, U32>) -> Bool & List<&2, U32>:
+  (False{}, List.append(&2, U32, List.replicate(U32, U32.to_nat(seen), 8421504), h <> t))
+
+def encode.hunt.rest(xs: List<&2, U32>) -> Bool & List<&2, U32>:
+  +_d = encode.drop(xs)
+  (True{}, [])
+
+# no samples remain after `h`
+def encode.hunt.done(eq: Bool, +h: U32, xs: List<&2, U32>, +seen: U32) -> Bool & List<&2, U32>:
+  match eq:
+    case False{}:
+      encode.hunt.mix(seen, h, xs)
+    case True{}:
+      encode.hunt.rest(xs)
+
+# the list ended before the area did
+def encode.hunt.empty(eq: Bool, +h: U32, +seen: U32) -> Bool & List<&2, U32>:
+  match eq:
+    case False{}:
+      encode.hunt.mix(seen, h, [])
+    case True{}:
+      encode.hunt.nil((seen + 1 : U32))
+
+# `h` was just read. `left` samples remain after it. `seen` neutral samples precede it.
+def encode.hunt.go(left: Nat, xs: List<&2, U32>, eq: Bool, +h: U32, +seen: U32) -> Bool & List<&2, U32>:
   match left:
     case 0n:
-      +_x = encode.drop(xs)
-      eq
+      encode.hunt.done(eq, h, xs, seen)
+    case 1n+p:
+      match xs:
+        case Nil{}:
+          encode.hunt.empty(eq, h, seen)
+        case +s <> u:
+          match eq:
+            case False{}:
+              encode.hunt.mix(seen, h, s <> u)
+            case True{}:
+              encode.hunt.go(p, u, U32.is_eq(s, 8421504), s, (seen + 1 : U32))
+
+# one owner of the samples. An all-neutral image is consumed, not copied.
+def encode.hunt(left: Nat, xs: List<&2, U32>, +seen: U32) -> Bool & List<&2, U32>:
+  match left:
+    case 0n:
+      encode.hunt.rest(xs)
     case 1n+k:
       match xs:
         case Nil{}:
-          encode.scan.miss(eq)
+          encode.hunt.nil(seen)
         case +h <> t:
-          encode.scan(k, t, encode.flat.both(eq, U32.is_eq(h, 8421504)))
+          encode.hunt.go(k, t, U32.is_eq(h, 8421504), h, seen)
 
 # low len bits of code join the open byte; a finished byte is stuffed
 def encode.pack.byte(+buf: U32, +len: U32, +code: U32) -> U32:
@@ -713,16 +750,16 @@ def encode.go(+w: U32, +h: U32, +px: List<&2, U32>) -> List<&2, U32>:
   encode.finish(w, h, encode.pad(encode.mcus(U32.to_nat((mw * mh : U32)), 0, 0, mw, w, h, px, 0, 0, 0,
     encode.put0(), encode.ctx(dcc, dcs, acc, acs))), dcc, dcs, acc, acs)
 
-def encode.dispatch(neu: Bool, +w: U32, +h: U32, px: List<&2, U32>) -> List<&2, U32>:
+def encode.route(got: Bool & List<&2, U32>, +w: U32, +h: U32) -> List<&2, U32>:
+  (neu, px) = got
   match neu:
     case True{}:
-      +_d = encode.drop(px)
       encode.neutral(w, h)
     case False{}:
       encode.go(w, h, px)
 
-def encode.arm(+w: U32, +h: U32, +px: List<&2, U32>) -> List<&2, U32>:
-  encode.dispatch(encode.scan(U32.to_nat((w * h : U32)), px, True{}), w, h, px)
+def encode.arm(+w: U32, +h: U32, px: List<&2, U32>) -> List<&2, U32>:
+  encode.route(encode.hunt(U32.to_nat((w * h : U32)), px, 0), w, h)
 
 def encode.pick(bad: Bool, +w: U32, +h: U32, px: List<&2, U32>) -> List<&2, U32>:
   match bad:
