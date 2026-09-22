@@ -2,6 +2,8 @@
 # Colour is 4:4:4 YCbCr, no subsampling: one 8 by 8 block per component per MCU.
 # Samples are packed RGB, (R << 16) | (G << 8) | B, the same layout decode returns.
 # Quantisation steps are all 1, so an integer coefficient is kept whole.
+# The forward DCT (T.81 A.3.3) contracts each axis with a frequency column of
+# the cosine matrix. Frequency u lives at indices x*8+u.
 # Both components share the Annex K luminance Huffman tables.
 # A neutral solid (R = G = B = 128) is an all-zero block and round-trips exactly.
 # Other colours are lossy. Progressive and arithmetic frames are not written.
@@ -381,11 +383,11 @@ def encode.block.go(p: Put, +pred: U32, zz: List<&2, U32>, dc: Tab, ac: Tab) -> 
     case +dc0 <> rest:
       encode.block.ac(p, pred, dc0, rest, dc, ac)
 
+# frequency column u of the A.3.3 matrix, sample x at index x*8+u
 def encode.crow(+cs: List<&2, U32>, +u: U32) -> List<&2, U32>:
-  +b = (u * 8 : U32)
-  [Jpeg.decode.at(cs, b), Jpeg.decode.at(cs, (b + 1 : U32)), Jpeg.decode.at(cs, (b + 2 : U32)),
-    Jpeg.decode.at(cs, (b + 3 : U32)), Jpeg.decode.at(cs, (b + 4 : U32)), Jpeg.decode.at(cs, (b + 5 : U32)),
-    Jpeg.decode.at(cs, (b + 6 : U32)), Jpeg.decode.at(cs, (b + 7 : U32))]
+  [Jpeg.decode.at(cs, u), Jpeg.decode.at(cs, (u + 8 : U32)), Jpeg.decode.at(cs, (u + 16 : U32)),
+    Jpeg.decode.at(cs, (u + 24 : U32)), Jpeg.decode.at(cs, (u + 32 : U32)),
+    Jpeg.decode.at(cs, (u + 40 : U32)), Jpeg.decode.at(cs, (u + 48 : U32)), Jpeg.decode.at(cs, (u + 56 : U32))]
 
 def encode.dot(+a: List<&2, U32>, +b: List<&2, U32>) -> U32:
   Jpeg.decode.dot(a, b, False{}, (0, 0), 0, 0)
