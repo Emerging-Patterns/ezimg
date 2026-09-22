@@ -504,8 +504,31 @@ def encode.chan.w(+ch: U32, +r: U32, +g: U32, +b: U32) -> U32:
 def encode.chan(+pix: U32, +ch: U32) -> U32:
   encode.chan.w(ch, U32.and(U32.shrn(pix, 16n), 255), U32.and(U32.shrn(pix, 8n), 255), U32.and(pix, 255))
 
-def encode.sample(+px: List<&2, U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32) -> U32:
-  encode.chan(Jpeg.decode.at(px, (encode.sat(U32.is_ge(y, h), y, h) * w + encode.sat(U32.is_ge(x, w), x, w) :
+def encode.pix.sink(a: Array<U32>) -> U32:
+  match a:
+    case ALeaf{_x}:
+      0
+    case ANode{xs, ys}:
+      U32.or(encode.pix.sink(xs), encode.pix.sink(ys))
+
+# the first `left` samples, then the rest of the list is unused
+def encode.pix.load(left: Nat, px: List<&2, U32>, a: Array<U32>, +i: U32) -> Array<U32>:
+  match left px:
+    case 0n rest:
+      +_d = encode.drop(rest)
+      a
+    case 1n+k Nil{}:
+      a
+    case 1n+k +h <> t:
+      encode.pix.load(k, t, Array.set(U32, a, i, h), (i + 1 : U32))
+
+def encode.sample.use(got: Array<U32> & U32, +ch: U32) -> Array<U32> & U32:
+  (a, pix) = got
+  (a, encode.chan(pix, ch))
+
+# one index into the sample array, instead of a walk from the head of the list
+def encode.sample(a: Array<U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32) -> Array<U32> & U32:
+  encode.sample.use(Array.get(U32, a, (encode.sat(U32.is_ge(y, h), y, h) * w + encode.sat(U32.is_ge(x, w), x, w) :
     U32)), ch)
 
 # both samples are the neutral level
@@ -518,31 +541,50 @@ def encode.flat.both(a: Bool, b: Bool) -> Bool:
     case True{}:
       b
 
-def encode.rowpix.step(+s: U32, got: List<&2, U32> & Bool) -> List<&2, U32> & Bool:
-  (rest, flat) = got
-  (s <> rest, encode.flat.both(U32.is_eq(s, 128), flat))
+def encode.rowpix.step(+s: U32, got: Array<U32> & List<&2, U32> & Bool) -> Array<U32> & List<&2, U32> & Bool:
+  (a, rest, flat) = got
+  (a, s <> rest, encode.flat.both(U32.is_eq(s, 128), flat))
 
-def encode.rowpix(left: Nat, +px: List<&2, U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32) ->
-  List<&2, U32> & Bool:
+def encode.rowpix.one(+s: U32, a: Array<U32>) -> Array<U32> & List<&2, U32> & Bool:
+  (a, s <> Nil{}, encode.flat.both(U32.is_eq(s, 128), True{}))
+
+# `got` is the sample at x. `left` counts it and the samples after it.
+def encode.rowpix(left: Nat, got: Array<U32> & U32, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32) ->
+  Array<U32> & List<&2, U32> & Bool:
   match left:
     case 0n:
-      (Nil{}, True{})
-    case 1n+p:
-      encode.rowpix.step(encode.sample(px, w, h, x, y, ch), encode.rowpix(p, px, w, h, (x + 1 : U32), y, ch))
+      (a, s) = got
+      encode.rowpix.one(s, a)
+    case 1n+0n:
+      (a, s) = got
+      encode.rowpix.one(s, a)
+    case 1n+1n+q:
+      (a, s) = got
+      encode.rowpix.step(s, encode.rowpix(1n+q, encode.sample(a, w, h, (x + 1 : U32), y, ch), w, h,
+        (x + 1 : U32), y, ch))
 
-def encode.rows.step(got: List<&2, U32> & Bool, rest: List<&2, List<&2, U32>> & Bool) ->
-  List<&2, List<&2, U32>> & Bool:
-  (row, rf) = got
-  (tail, flat) = rest
-  (row <> tail, encode.flat.both(rf, flat))
+def encode.rows.join(+row: List<&2, U32>, rf: Bool, rest: Array<U32> & List<&2, List<&2, U32>> & Bool) ->
+  Array<U32> & List<&2, List<&2, U32>> & Bool:
+  (a, tail, flat) = rest
+  (a, row <> tail, encode.flat.both(rf, flat))
 
-def encode.rows(left: Nat, +px: List<&2, U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32) ->
-  List<&2, List<&2, U32>> & Bool:
+def encode.rows.one(+row: List<&2, U32>, rf: Bool, a: Array<U32>) -> Array<U32> & List<&2, List<&2, U32>> & Bool:
+  (a, row <> Nil{}, rf)
+
+# `got` is the row at y. `left` counts it and the rows after it.
+def encode.rows(left: Nat, got: Array<U32> & List<&2, U32> & Bool, +w: U32, +h: U32, +x: U32, +y: U32,
+  +ch: U32) -> Array<U32> & List<&2, List<&2, U32>> & Bool:
   match left:
     case 0n:
-      (Nil{}, True{})
-    case 1n+p:
-      encode.rows.step(encode.rowpix(8n, px, w, h, x, y, ch), encode.rows(p, px, w, h, x, (y + 1 : U32), ch))
+      (a, row, rf) = got
+      encode.rows.one(row, rf, a)
+    case 1n+0n:
+      (a, row, rf) = got
+      encode.rows.one(row, rf, a)
+    case 1n+1n+q:
+      (a, row, rf) = got
+      encode.rows.join(row, rf, encode.rows(1n+q, encode.rowpix(8n, encode.sample(a, w, h, x, (y + 1 : U32), ch),
+        w, h, x, (y + 1 : U32), ch), w, h, x, (y + 1 : U32), ch))
 
 def encode.coef.go(zz: List<&2, U32>) -> U32:
   match zz:
@@ -573,28 +615,30 @@ def encode.zz(flat: Bool, rows: List<&2, List<&2, U32>>, +cs: List<&2, U32>, +zi
     case False{}:
       encode.zzq(zig, encode.fdct(encode.levels(rows), cs), qs, [])
 
-def encode.coef.use(got: List<&2, List<&2, U32>> & Bool, +cs: List<&2, U32>, +zig: List<&2, U32>,
-  +qs: List<&2, U32>) -> U32:
-  (rows, flat) = got
-  encode.coef.go(encode.zz(flat, rows, cs, zig, qs))
+def encode.coef.use(got: Array<U32> & List<&2, List<&2, U32>> & Bool, +cs: List<&2, U32>, +zig: List<&2, U32>,
+  +qs: List<&2, U32>) -> Array<U32> & U32:
+  (a, rows, flat) = got
+  (a, encode.coef.go(encode.zz(flat, rows, cs, zig, qs)))
 
-def encode.coef(+px: List<&2, U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32, ctx: Ctx) -> U32:
+def encode.coef(a: Array<U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32, ctx: Ctx) -> Array<U32> & U32:
   match ctx:
     case Ctx{+cs, +zig, +qs, dc, ac}:
       +_d = encode.sink(dc)
       +_a = encode.sink(ac)
-      encode.coef.use(encode.rows(8n, px, w, h, x, y, ch), cs, zig, qs)
+      encode.coef.use(encode.rows(8n, encode.rowpix(8n, encode.sample(a, w, h, x, y, ch), w, h, x, y, ch), w, h, x,
+        y, ch), cs, zig, qs)
 
-def encode.block.use(p: Put, +pred: U32, got: List<&2, List<&2, U32>> & Bool, +cs: List<&2, U32>,
-  +zig: List<&2, U32>, +qs: List<&2, U32>, dc: Tab, ac: Tab) -> Put:
-  (rows, flat) = got
-  encode.block.go(p, pred, encode.zz(flat, rows, cs, zig, qs), dc, ac)
+def encode.block.use(p: Put, +pred: U32, got: Array<U32> & List<&2, List<&2, U32>> & Bool, +cs: List<&2, U32>,
+  +zig: List<&2, U32>, +qs: List<&2, U32>, dc: Tab, ac: Tab) -> Array<U32> & Put:
+  (a, rows, flat) = got
+  (a, encode.block.go(p, pred, encode.zz(flat, rows, cs, zig, qs), dc, ac))
 
-def encode.block(p: Put, +pred: U32, +px: List<&2, U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32,
-  ctx: Ctx) -> Put:
+def encode.block(p: Put, +pred: U32, a: Array<U32>, +w: U32, +h: U32, +x: U32, +y: U32, +ch: U32,
+  ctx: Ctx) -> Array<U32> & Put:
   match ctx:
     case Ctx{+cs, +zig, +qs, dc, ac}:
-      encode.block.use(p, pred, encode.rows(8n, px, w, h, x, y, ch), cs, zig, qs, dc, ac)
+      encode.block.use(p, pred, encode.rows(8n, encode.rowpix(8n, encode.sample(a, w, h, x, y, ch), w, h, x, y, ch),
+        w, h, x, y, ch), cs, zig, qs, dc, ac)
 
 def encode.nx(more: Bool, +mx: U32) -> U32:
   match more:
@@ -610,18 +654,58 @@ def encode.ny(more: Bool, +my: U32) -> U32:
     case False{}:
       (my + 1 : U32)
 
-def encode.mcus(left: Nat, +mx: U32, +my: U32, +mw: U32, +w: U32, +h: U32, +px: List<&2, U32>, +py: U32,
-  +pb: U32, +pr: U32, p: Put, +ctx: Ctx) -> Put:
+def encode.step.end(got: Array<U32> & Put, +ydc: U32, +bdc: U32, +rdc: U32) ->
+  Array<U32> & U32 & U32 & U32 & Put:
+  (a, bit) = got
+  (a, ydc, bdc, rdc, bit)
+
+def encode.step.br(got: Array<U32> & Put, +ydc: U32, +bdc: U32, +rdc: U32, +pr: U32, +x: U32, +y: U32,
+  +w: U32, +h: U32, ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
+  (a, bit) = got
+  encode.step.end(encode.block(bit, pr, a, w, h, x, y, 2, ctx), ydc, bdc, rdc)
+
+def encode.step.bb(got: Array<U32> & Put, +ydc: U32, +bdc: U32, +rdc: U32, +pb: U32, +pr: U32, +x: U32,
+  +y: U32, +w: U32, +h: U32, +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
+  (a, bit) = got
+  encode.step.br(encode.block(bit, pb, a, w, h, x, y, 1, ctx), ydc, bdc, rdc, pr, x, y, w, h, ctx)
+
+def encode.step.by(got: Array<U32> & U32, bit: Put, +ydc: U32, +bdc: U32, +py: U32, +pb: U32, +pr: U32,
+  +x: U32, +y: U32, +w: U32, +h: U32, +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
+  (a, rdc) = got
+  encode.step.bb(encode.block(bit, py, a, w, h, x, y, 0, ctx), ydc, bdc, rdc, pb, pr, x, y, w, h, ctx)
+
+def encode.step.cr(got: Array<U32> & U32, bit: Put, +ydc: U32, +py: U32, +pb: U32, +pr: U32, +x: U32,
+  +y: U32, +w: U32, +h: U32, +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
+  (a, bdc) = got
+  encode.step.by(encode.coef(a, w, h, x, y, 2, ctx), bit, ydc, bdc, py, pb, pr, x, y, w, h, ctx)
+
+def encode.step.cb(got: Array<U32> & U32, bit: Put, +py: U32, +pb: U32, +pr: U32, +x: U32, +y: U32,
+  +w: U32, +h: U32, +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
+  (a, ydc) = got
+  encode.step.cr(encode.coef(a, w, h, x, y, 1, ctx), bit, ydc, py, pb, pr, x, y, w, h, ctx)
+
+def encode.step.y(a: Array<U32>, bit: Put, +py: U32, +pb: U32, +pr: U32, +x: U32, +y: U32, +w: U32,
+  +h: U32, +ctx: Ctx) -> Array<U32> & U32 & U32 & U32 & Put:
+  encode.step.cb(encode.coef(a, w, h, x, y, 0, ctx), bit, py, pb, pr, x, y, w, h, ctx)
+
+def encode.mcus.done(got: Array<U32> & U32 & U32 & U32 & Put) -> Put:
+  (a, ydc, bdc, rdc, bit) = got
+  +_s = encode.pix.sink(a)
+  +_u = (ydc + bdc + rdc : U32)
+  bit
+
+def encode.mcus(left: Nat, got: Array<U32> & U32 & U32 & U32 & Put, +mx: U32, +my: U32, +mw: U32, +w: U32,
+  +h: U32, +ctx: Ctx) -> Put:
   match left:
     case 0n:
-      p
+      encode.mcus.done(got)
     case 1n+nleft:
+      (a, py, pb, pr, bit) = got
       +x = (mx * 8 : U32)
       +y = (my * 8 : U32)
       +more = U32.is_lt((mx + 1 : U32), mw)
-      encode.mcus(nleft, encode.nx(more, mx), encode.ny(more, my), mw, w, h, px, encode.coef(px, w, h, x, y, 0, ctx),
-        encode.coef(px, w, h, x, y, 1, ctx), encode.coef(px, w, h, x, y, 2, ctx), encode.block(encode.block(
-        encode.block(p, py, px, w, h, x, y, 0, ctx), pb, px, w, h, x, y, 1, ctx), pr, px, w, h, x, y, 2, ctx), ctx)
+      encode.mcus(nleft, encode.step.y(a, bit, py, pb, pr, x, y, w, h, ctx), encode.nx(more, mx),
+        encode.ny(more, my), mw, w, h, ctx)
 
 def encode.finish(+w: U32, +h: U32, ent: List<&2, U32>, +dcc: List<&2, U32>, +dcs: List<&2, U32>,
   +acc: List<&2, U32>, +acs: List<&2, U32>) -> List<&2, U32>:
@@ -740,15 +824,17 @@ def encode.neutral(+w: U32, +h: U32) -> List<&2, U32>:
   encode.finish(w, h, encode.pad(encode.neutral.mcus(U32.to_nat((mw * mh : U32)), encode.put0())),
     dcc, dcs, acc, acs)
 
-def encode.go(+w: U32, +h: U32, +px: List<&2, U32>) -> List<&2, U32>:
+def encode.go(+w: U32, +h: U32, px: List<&2, U32>) -> List<&2, U32>:
   +dcc = encode.dccounts()
   +dcs = encode.dcsyms()
   +acc = encode.accounts()
   +acs = encode.acsyms()
   +mw = U32.div((w + 7 : U32), 8)
   +mh = U32.div((h + 7 : U32), 8)
-  encode.finish(w, h, encode.pad(encode.mcus(U32.to_nat((mw * mh : U32)), 0, 0, mw, w, h, px, 0, 0, 0,
-    encode.put0(), encode.ctx(dcc, dcs, acc, acs))), dcc, dcs, acc, acs)
+  +area = (w * h : U32)
+  encode.finish(w, h, encode.pad(encode.mcus(U32.to_nat((mw * mh : U32)),
+    (encode.pix.load(U32.to_nat(area), px, Jpeg.decode.plane(area), 0), 0, 0, 0, encode.put0()), 0, 0, mw, w, h,
+    encode.ctx(dcc, dcs, acc, acs))), dcc, dcs, acc, acs)
 
 def encode.route(got: Bool & List<&2, U32>, +w: U32, +h: U32) -> List<&2, U32>:
   (neu, px) = got
