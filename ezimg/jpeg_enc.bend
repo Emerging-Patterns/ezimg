@@ -8,7 +8,6 @@
 # A coefficient indexes its symbol. The scan does not walk the table.
 # A mixed MCU reads each pixel once and keeps the three level planes in arrays.
 # Quant steps are 1, so the mixed scan emits coefficients without dividing.
-# The cosine kernel is built once per encode and shared by every block.
 # A neutral solid (R = G = B = 128) is an all-zero block and round-trips exactly.
 # Other colours are lossy. Progressive and arithmetic frames are not written.
 # Width and height must sit in 1..65535; anything else is SOI then EOI.
@@ -20,11 +19,9 @@ import ./jpeg.bend as Jpeg
 type Put is Data:
   Put{out: List<&2, U32>, buf: U32, n: U32}
 
-# cosine weights shared by symmetric samples: DC, two even weights, four odd weights
 type Kern is Data:
   Kern{k0: U32, k2: U32, k6: U32, o0: U32, o1: U32, o2: U32, o3: U32}
 
-# the cosine kernel, zigzag, and the all-ones quant table
 type Ctx is Data:
   Ctx{kern: Kern, zig: List<&2, U32>, quant: List<&2, U32>}
 
