@@ -146,6 +146,42 @@ def Laws.decode_png_ga():
 def Laws.decode_png_idx():
   {==}
 
+def Laws.stored_block():
+  {==}
+
+def Laws.stored_split():
+  {==}
+
+def Laws.encode_png_rgb():
+  {==}
+
+def Laws.encode_png_rgba():
+  {==}
+
+def Laws.encode_round_rgb():
+  {==}
+
+def Laws.encode_round_rgba():
+  {==}
+
+def Laws.encode_round_quad():
+  {==}
+
+def Laws.encode_round_fade():
+  {==}
+
+def Laws.encode_round_stack():
+  {==}
+
+def Laws.encode_png_empty():
+  {==}
+
+def Laws.encode_png_short():
+  {==}
+
+def Laws.encode_png_area():
+  {==}
+
 def Laws.jpeg_soi_bytes():
   {==}
 

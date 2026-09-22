@@ -1,5 +1,6 @@
-# ezimg/png: PNG decode (ISO/IEC 15948 / W3C PNG). Chunks, IHDR, zlib
-# method 0, and filter method 0 for 8-bit colour types 0, 2, 3, 4, and 6.
+# ezimg/png: PNG decode and encode (ISO/IEC 15948 / W3C PNG). Chunks, IHDR,
+# zlib method 0, and filter method 0. Decode reads 8-bit colour types 0, 2, 3,
+# 4, and 6. Encode writes colour type 2 or 6, filter None, and a stored IDAT.
 import Base
 import ./crc.bend as Crc
 import ./inflate.bend as Inf
@@ -857,3 +858,178 @@ def png.go(
 # data, then IDAT inflated as zlib DEFLATE (compression method 0).
 def decode(xs: List<&2, U32>) -> Maybe<&2, Pic>:
   png.go(xs, ZLen{}, False{}, 0, 0, [], [], pg.empty())
+
+# ---- encode (colour type 2 or 6, filter None, stored-block IDAT) ----
+
+# the low byte
+def enc.byte(+n: U32) -> U32:
+  (n .&. 255 : U32)
+
+# the next byte up
+def enc.hi(+n: U32) -> U32:
+  ((n >> 8n : U32) .&. 255 : U32)
+
+# four bytes, big-endian
+def enc.be(+n: U32) -> List<&2, U32>:
+  [((n >> 24n : U32) .&. 255 : U32), ((n >> 16n : U32) .&. 255 : U32), enc.hi(n), enc.byte(n)]
+
+# alpha of a 0xAARRGGBB sample
+def enc.a(+c: U32) -> U32:
+  ((c >> 24n : U32) .&. 255 : U32)
+
+# red of a 0xAARRGGBB sample
+def enc.r(+c: U32) -> U32:
+  ((c >> 16n : U32) .&. 255 : U32)
+
+# green of a 0xAARRGGBB sample
+def enc.g(+c: U32) -> U32:
+  ((c >> 8n : U32) .&. 255 : U32)
+
+# blue of a 0xAARRGGBB sample
+def enc.b(+c: U32) -> U32:
+  (c .&. 255 : U32)
+
+# one opaque pixel, newest-first, so a later reverse is R, G, B
+def enc.push.rgb(+c: U32, acc: List<&2, U32>) -> List<&2, U32>:
+  {enc.b(c) <> enc.g(c) <> enc.r(c) <> acc : List<&2, U32>}
+
+# one pixel, newest-first, so a later reverse is R, G, B, A
+def enc.push.rgba(+c: U32, acc: List<&2, U32>) -> List<&2, U32>:
+  {enc.a(c) <> enc.b(c) <> enc.g(c) <> enc.r(c) <> acc : List<&2, U32>}
+
+# the channels of one sample
+def enc.push(op: Bool, +c: U32, acc: List<&2, U32>) -> List<&2, U32>:
+  match op:
+    case True{}:
+      enc.push.rgb(c, acc)
+    case False{}:
+      enc.push.rgba(c, acc)
+
+# one less, or zero
+def enc.pred(n: Nat) -> Nat:
+  match n:
+    case 0n:
+      0n
+    case 1n+p:
+      p
+
+# scanlines, filter None. `col` is how many samples remain after this one.
+# `row` is the current scanline newest-first; `done` is the finished rows,
+# also newest-first, each already closed by its filter byte.
+def enc.raw(
+  px: List<&2, U32>, col: Nat, +w: Nat, +op: Bool, row: List<&2, U32>, done: List<&2, U32>
+) -> List<&2, U32>:
+  match px col:
+    case Nil{} _col:
+      List.reverse(&2, U32, done)
+    case +c <> t 0n:
+      +row2 = enc.push(op, c, row)
+      +done2 = List.append(&2, U32, row2, {0 <> done : List<&2, U32>})
+      enc.raw(t, enc.pred(w), w, op, [], done2)
+    case +c <> t 1n+p:
+      enc.raw(t, p, w, op, enc.push(op, c, row), done)
+
+# the five-byte stored-block header: BFINAL, then LEN and NLEN, little-endian
+def enc.head(fin: Bool, +len: U32, +nlen: U32) -> List<&2, U32>:
+  match fin:
+    case True{}:
+      [1, enc.byte(len), enc.hi(len), enc.byte(nlen), enc.hi(nlen)]
+    case False{}:
+      [0, enc.byte(len), enc.hi(len), enc.byte(nlen), enc.hi(nlen)]
+
+# one stored DEFLATE block. `data` is chronological.
+def enc.stored(fin: Bool, +data: List<&2, U32>) -> List<&2, U32>:
+  +len = U32.from_nat(List.length(&2, U32, data))
+  List.append(&2, U32, enc.head(fin, len, (len .^. 65535 : U32)), data)
+
+# stored blocks of at most `max` bytes. `z` means this byte opens a block.
+# `acc` is the open block, newest-first.
+def enc.feed(
+  xs: List<&2, U32>, z: Bool, +room: U32, +max: U32, acc: List<&2, U32>
+) -> List<&2, U32>:
+  match xs z:
+    case Nil{} _z:
+      enc.stored(True{}, List.reverse(&2, U32, acc))
+    case +h <> t True{}:
+      +nxt = (max - 1 : U32)
+      +blk = enc.stored(False{}, List.reverse(&2, U32, acc))
+      List.append(&2, U32, blk, enc.feed(t, U32.is_zero(nxt), nxt, max, [h]))
+    case +h <> t False{}:
+      +nxt = (room - 1 : U32)
+      enc.feed(t, U32.is_zero(nxt), nxt, max, {h <> acc : List<&2, U32>})
+
+# stored DEFLATE blocks, each at most `max` bytes, the last one final
+def enc.blocks(+max: U32, xs: List<&2, U32>) -> List<&2, U32>:
+  enc.feed(xs, U32.is_zero(max), max, max, [])
+
+# a chunk: length, type, data, and CRC-32 over the type and the data
+def enc.chunk(+tag: U32, +data: List<&2, U32>) -> List<&2, U32>:
+  +body = List.append(&2, U32, enc.be(tag), data)
+  +crc = Crc.crc32(body)
+  +n = U32.from_nat(List.length(&2, U32, data))
+  List.append(&2, U32, enc.be(n), List.append(&2, U32, body, enc.be(crc)))
+
+# IHDR: width, height, depth 8, colour type, method 0, filter 0, interlace 0
+def enc.ihdr(+w: U32, +h: U32, +ct: U32) -> List<&2, U32>:
+  List.append(&2, U32, enc.be(w), List.append(&2, U32, enc.be(h), [8, ct, 0, 0, 0]))
+
+# the eight-byte signature
+def enc.sig() -> List<&2, U32>:
+  [137, 80, 78, 71, 13, 10, 26, 10]
+
+# colour type 2 when opaque, otherwise 6
+def enc.ct(op: Bool) -> U32:
+  match op:
+    case True{}:
+      2
+    case False{}:
+      6
+
+# zlib wrapper, CMF/FLG 120 1, around stored DEFLATE blocks and an Adler-32
+def enc.zlib(+raw: List<&2, U32>) -> List<&2, U32>:
+  +sum = Inf.adler.of(raw)
+  List.append(&2, U32, [120, 1], List.append(&2, U32, enc.blocks(65535, raw), enc.be(sum)))
+
+# signature, IHDR, IDAT, IEND
+def enc.seal(+w: U32, +h: U32, op: Bool, raw: List<&2, U32>) -> List<&2, U32>:
+  +ihdr = enc.chunk(tag.ihdr(), enc.ihdr(w, h, enc.ct(op)))
+  +idat = enc.chunk(tag.idat(), enc.zlib(raw))
+  List.append(&2, U32, enc.sig(), List.append(&2, U32, ihdr, List.append(&2, U32, idat, enc.chunk(tag.iend(), []))))
+
+# every sample so far is opaque, and `z` carries that fact forward
+def enc.opaque(px: List<&2, U32>, z: Bool) -> Bool:
+  match px z:
+    case _px False{}:
+      False{}
+    case Nil{} True{}:
+      True{}
+    case +c <> t True{}:
+      enc.opaque(t, U32.is_eq(enc.a(c), 255))
+
+# width times height fits in a U32
+def enc.area(+w: U32, +h: U32) -> Bool:
+  Bool.or(U32.is_zero(w), U32.is_le(h, U32.div(4294967295, w)))
+
+# a positive area whose sample list covers it
+def enc.good(+w: U32, +h: U32, px: List<&2, U32>) -> Bool:
+  +area = (w * h : U32)
+  +n = U32.from_nat(List.length(&2, U32, px))
+  Bool.and(Bool.and(U32.is_gt(w, 0), U32.is_gt(h, 0)), Bool.and(enc.area(w, h), U32.is_eq(n, area)))
+
+# the PNG bytes of a picture already known to be in range
+def enc.paint(+w: U32, +h: U32, +op: Bool, px: List<&2, U32>) -> List<&2, U32>:
+  +wn = U32.to_nat(w)
+  enc.seal(w, h, op, enc.raw(px, enc.pred(wn), wn, op, [], []))
+
+# the bytes, or none when the picture is not encodable
+def enc.open(z: Bool, +w: U32, +h: U32, +px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match z:
+    case False{}:
+      None{}
+    case True{}:
+      Some{enc.paint(w, h, enc.opaque(px, True{}), px)}
+
+# ISO/IEC 15948 / W3C PNG — an 8-bit encoding, interlace 0, filter None.
+# Colour type 2 when every sample is opaque, otherwise colour type 6.
+def enc.file(+w: U32, +h: U32, +px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  enc.open(enc.good(w, h, px), w, h, px)
