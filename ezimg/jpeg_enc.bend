@@ -2,8 +2,8 @@
 # Colour is 4:4:4 YCbCr, no subsampling: one 8 by 8 block per component per MCU.
 # Samples are packed RGB, (R << 16) | (G << 8) | B, the same layout decode returns.
 # Quantisation steps are all 1, so an integer coefficient is kept whole.
-# The forward DCT (T.81 A.3.3) contracts each axis with a frequency column of
-# the cosine matrix. Frequency u lives at indices x*8+u.
+# The forward DCT (T.81 A.3.3) pairs samples that share a cosine weight, then
+# rounds once with the same fixed-point product as a matrix column.
 # Both components share the Annex K luminance Huffman tables.
 # A neutral solid (R = G = B = 128) is an all-zero block and round-trips exactly.
 # Other colours are lossy. Progressive and arithmetic frames are not written.
@@ -24,10 +24,17 @@ type Tab is Data:
 type Ctx is Data:
   Ctx{cs: List<&2, U32>, zig: List<&2, U32>, quant: List<&2, U32>, dc: Tab, ac: Tab}
 
-# the eight frequency columns of the A.3.3 matrix, one list per frequency
-type Cols is Data:
-  Cols{c0: List<&2, U32>, c1: List<&2, U32>, c2: List<&2, U32>, c3: List<&2, U32>, c4: List<&2, U32>,
-    c5: List<&2, U32>, c6: List<&2, U32>, c7: List<&2, U32>}
+# cosine weights shared by symmetric samples: DC, two even weights, four odd weights
+type Kern is Data:
+  Kern{k0: U32, k2: U32, k6: U32, o0: U32, o1: U32, o2: U32, o3: U32}
+
+# eight values, the first at frequency 0
+type Oct is Data:
+  Oct{f0: U32, f1: U32, f2: U32, f3: U32, f4: U32, f5: U32, f6: U32, f7: U32}
+
+# the sample plane, the frequency plane, and the next column of one forward DCT
+type Planes is Type:
+  Planes{src: Array<U32>, dst: Array<U32>, at: U32}
 
 def encode.join(a: List<&2, U32>, b: List<&2, U32>) -> List<&2, U32>:
   List.append(&2, U32, a, b)
@@ -380,73 +387,247 @@ def encode.block.go(p: Put, +pred: U32, zz: List<&2, U32>, dc: Tab, ac: Tab) -> 
     case +dc0 <> rest:
       encode.block.ac(p, pred, dc0, rest, dc, ac)
 
-# frequency column u of the A.3.3 matrix, sample x at index x*8+u
-def encode.crow(+cs: List<&2, U32>, +u: U32) -> List<&2, U32>:
-  [Jpeg.decode.at(cs, u), Jpeg.decode.at(cs, (u + 8 : U32)), Jpeg.decode.at(cs, (u + 16 : U32)),
-    Jpeg.decode.at(cs, (u + 24 : U32)), Jpeg.decode.at(cs, (u + 32 : U32)),
-    Jpeg.decode.at(cs, (u + 40 : U32)), Jpeg.decode.at(cs, (u + 48 : U32)), Jpeg.decode.at(cs, (u + 56 : U32))]
+def encode.add64.acc(+ph: U32, +pl: U32, acc: U32 & U32) -> U32 & U32:
+  match acc:
+    case (+hi, +lo):
+      +sum = (lo + pl : U32)
+      ((hi + ph + Jpeg.decode.carry(lo, sum) : U32), sum)
 
-# one copy of each frequency column, reused for every row of the block
-def encode.cols(+cs: List<&2, U32>) -> Cols:
-  Cols{encode.crow(cs, 0), encode.crow(cs, 1), encode.crow(cs, 2), encode.crow(cs, 3), encode.crow(cs, 4),
-    encode.crow(cs, 5), encode.crow(cs, 6), encode.crow(cs, 7)}
+# add a signed product onto a 64-bit accumulator
+def encode.add64(prod: U32 & U32, acc: U32 & U32) -> U32 & U32:
+  match prod:
+    case (+ph, +pl):
+      encode.add64.acc(ph, pl, acc)
 
-def encode.dot(+a: List<&2, U32>, +b: List<&2, U32>) -> U32:
-  Jpeg.decode.dot(a, b, False{}, (0, 0), 0, 0)
+# one more product on the accumulator
+def encode.mac(+coef: U32, +samp: U32, acc: U32 & U32) -> U32 & U32:
+  encode.add64(Jpeg.decode.widemul(coef, samp), acc)
 
-def encode.trow(+row: List<&2, U32>, +cols: Cols) -> List<&2, U32>:
-  match cols:
-    case Cols{+c0, +c1, +c2, +c3, +c4, +c5, +c6, +c7}:
-      [encode.dot(row, c0), encode.dot(row, c1), encode.dot(row, c2), encode.dot(row, c3), encode.dot(row, c4),
-        encode.dot(row, c5), encode.dot(row, c6), encode.dot(row, c7)]
+# the same rounding the matrix product applies to a finished sum
+def encode.q17(acc: U32 & U32) -> U32:
+  match acc:
+    case (+hi, +lo):
+      Jpeg.decode.q17(hi, lo)
 
-def encode.pass1(rows: List<&2, List<&2, U32>>, +cols: Cols, acc: List<&2, List<&2, U32>>) ->
-  List<&2, List<&2, U32>>:
+def encode.scale(+coef: U32, +samp: U32) -> U32:
+  encode.q17(Jpeg.decode.widemul(coef, samp))
+
+def encode.two(+c0: U32, +x0: U32, +c1: U32, +x1: U32) -> U32:
+  encode.q17(encode.mac(c1, x1, Jpeg.decode.widemul(c0, x0)))
+
+def encode.two.n(+c0: U32, +x0: U32, +c1: U32, +x1: U32) -> U32:
+  encode.q17(encode.mac(Jpeg.decode.neg32(c1), x1, Jpeg.decode.widemul(c0, x0)))
+
+def encode.four(+c0: U32, +s0: U32, +c1: U32, +s1: U32, +c2: U32, +s2: U32, +c3: U32, +s3: U32) -> U32:
+  encode.q17(encode.mac(c3, s3, encode.mac(c2, s2, encode.mac(c1, s1, Jpeg.decode.widemul(c0, s0)))))
+
+# even frequencies: symmetric samples share one weight
+def encode.even(
+  +s0: U32, +s1: U32, +s2: U32, +s3: U32, +s4: U32, +s5: U32, +s6: U32, +s7: U32, +k0: U32, +k2: U32,
+  +k6: U32
+) -> Oct:
+  +a0 = (s0 + s7 : U32)
+  +a1 = (s1 + s6 : U32)
+  +a2 = (s2 + s5 : U32)
+  +a3 = (s3 + s4 : U32)
+  +e0 = (a0 - a3 : U32)
+  +e1 = (a1 - a2 : U32)
+  Oct{encode.scale(k0, (a0 + a1 + a2 + a3 : U32)), 0, encode.two(k2, e0, k6, e1), 0,
+    encode.scale(k0, ((a0 + a3 : U32) - (a1 + a2 : U32) : U32)), 0, encode.two.n(k6, e0, k2, e1), 0}
+
+# odd frequencies: antisymmetric samples share one weight
+def encode.odd(+d0: U32, +d1: U32, +d2: U32, +d3: U32, +o0: U32, +o1: U32, +o2: U32, +o3: U32) -> Oct:
+  +n0 = Jpeg.decode.neg32(o0)
+  +n2 = Jpeg.decode.neg32(o2)
+  +n3 = Jpeg.decode.neg32(o3)
+  Oct{0, encode.four(o0, d0, o1, d1, o2, d2, o3, d3), 0, encode.four(o1, d0, n3, d1, n0, d2, n2, d3), 0,
+    encode.four(o2, d0, n0, d1, o3, d2, o1, d3), 0, encode.four(o3, d0, n2, d1, o1, d2, n0, d3)}
+
+def encode.dct8.od(+f0: U32, +f2: U32, +f4: U32, +f6: U32, od: Oct) -> Oct:
+  match od:
+    case Oct{+z0, +f1, +z2, +f3, +z4, +f5, +z6, +f7}:
+      +_z = (z0 + z2 + z4 + z6 : U32)
+      Oct{f0, f1, f2, f3, f4, f5, f6, f7}
+
+def encode.dct8.at(ev: Oct, od: Oct) -> Oct:
+  match ev:
+    case Oct{+f0, +z1, +f2, +z3, +f4, +z5, +f6, +z7}:
+      +_z = (z1 + z3 + z5 + z7 : U32)
+      encode.dct8.od(f0, f2, f4, f6, od)
+
+def encode.dct8.k(
+  +s0: U32, +s1: U32, +s2: U32, +s3: U32, +s4: U32, +s5: U32, +s6: U32, +s7: U32, kern: Kern
+) -> Oct:
+  match kern:
+    case Kern{+k0, +k2, +k6, +o0, +o1, +o2, +o3}:
+      encode.dct8.at(encode.even(s0, s1, s2, s3, s4, s5, s6, s7, k0, k2, k6),
+        encode.odd((s0 - s7 : U32), (s1 - s6 : U32), (s2 - s5 : U32), (s3 - s4 : U32), o0, o1, o2, o3))
+
+# one 8-point transform. Pairing is the matrix product, so the rounded value matches.
+def encode.dct8(samp: Oct, kern: Kern) -> Oct:
+  match samp:
+    case Oct{+s0, +s1, +s2, +s3, +s4, +s5, +s6, +s7}:
+      encode.dct8.k(s0, s1, s2, s3, s4, s5, s6, s7, kern)
+
+def encode.take(row: List<&2, U32>) -> Oct:
+  match row:
+    case +s0 <> +s1 <> +s2 <> +s3 <> +s4 <> +s5 <> +s6 <> +s7 <> rest:
+      +_drop = encode.drop(rest)
+      Oct{s0, s1, s2, s3, s4, s5, s6, s7}
+    case _:
+      Oct{0, 0, 0, 0, 0, 0, 0, 0}
+
+def encode.put8(
+  +f0: U32, +f1: U32, +f2: U32, +f3: U32, +f4: U32, +f5: U32, +f6: U32, +f7: U32, a: Array<U32>, +at: U32,
+  +step: U32
+) -> Array<U32>:
+  +i1 = (at + step : U32)
+  +i2 = (i1 + step : U32)
+  +i3 = (i2 + step : U32)
+  +i4 = (i3 + step : U32)
+  +i5 = (i4 + step : U32)
+  +i6 = (i5 + step : U32)
+  +i7 = (i6 + step : U32)
+  Array.set(U32, Array.set(U32, Array.set(U32, Array.set(U32, Array.set(U32, Array.set(U32, Array.set(U32,
+    Array.set(U32, a, at, f0), i1, f1), i2, f2), i3, f3), i4, f4), i5, f5), i6, f6), i7, f7)
+
+def encode.lay(o: Oct, a: Array<U32>, +at: U32) -> Array<U32>:
+  match o:
+    case Oct{+f0, +f1, +f2, +f3, +f4, +f5, +f6, +f7}:
+      encode.put8(f0, f1, f2, f3, f4, f5, f6, f7, a, at, 1)
+
+def encode.scatter(o: Oct, a: Array<U32>, +at: U32) -> Array<U32>:
+  match o:
+    case Oct{+f0, +f1, +f2, +f3, +f4, +f5, +f6, +f7}:
+      encode.put8(f0, f1, f2, f3, f4, f5, f6, f7, a, at, 8)
+
+# C[0][0], C[0][2], C[0][6], and the first four weights of frequency 1
+def encode.kern(+cs: List<&2, U32>) -> Kern:
+  Kern{Jpeg.decode.at(cs, 0), Jpeg.decode.at(cs, 2), Jpeg.decode.at(cs, 6), Jpeg.decode.at(cs, 1),
+    Jpeg.decode.at(cs, 9), Jpeg.decode.at(cs, 17), Jpeg.decode.at(cs, 25)}
+
+def encode.kern.drop(kern: Kern) -> U32:
+  match kern:
+    case Kern{+k0, +k2, +k6, +o0, +o1, +o2, +o3}:
+      +z0 = (k0 - k0 : U32)
+      +z2 = (k2 - k2 : U32)
+      +z6 = (k6 - k6 : U32)
+      +a0 = (o0 - o0 : U32)
+      +a1 = (o1 - o1 : U32)
+      +a2 = (o2 - o2 : U32)
+      +a3 = (o3 - o3 : U32)
+      (z0 + z2 + z6 + a0 + a1 + a2 + a3 : U32)
+
+def encode.span.pack(got: Array<U32> & U32, +prev: U32, +at: U32, acc: List<&2, U32>) ->
+  Array<U32> & U32 & U32 & List<&2, U32>:
+  match got:
+    case (arr, samp):
+      (arr, samp, at, prev <> acc)
+
+# read the sample at `at` and keep the one already in hand
+def encode.span.step(st: Array<U32> & U32 & U32 & List<&2, U32>) -> Array<U32> & U32 & U32 & List<&2, U32>:
+  (arr, +samp, +at, acc) = st
+  encode.span.pack(Array.get(U32, arr, at), samp, (at + 8 : U32), acc)
+
+def encode.span.done(st: Array<U32> & U32 & U32 & List<&2, U32>) -> Array<U32> & List<&2, U32>:
+  (arr, samp, +at, acc) = st
+  +_at = (at - at : U32)
+  (arr, List.reverse(&2, U32, samp <> acc))
+
+# `left` further samples of this column are still unread. The state holds the latest one.
+def encode.span(left: Nat, st: Array<U32> & U32 & U32 & List<&2, U32>) -> Array<U32> & List<&2, U32>:
+  match left:
+    case 0n:
+      encode.span.done(st)
+    case 1n+rest:
+      encode.span(rest, encode.span.step(st))
+
+def encode.col.end(got: Array<U32> & List<&2, U32>, kern: Kern) -> Array<U32> & Oct:
+  match got:
+    case (arr, xs):
+      (arr, encode.dct8(encode.take(xs), kern))
+
+def encode.col.st(got: Array<U32> & U32, +at: U32) -> Array<U32> & U32 & U32 & List<&2, U32>:
+  match got:
+    case (arr, samp):
+      (arr, samp, at, [])
+
+def encode.col(arr: Array<U32>, +at: U32, kern: Kern) -> Array<U32> & Oct:
+  encode.col.end(encode.span(7n, encode.col.st(Array.get(U32, arr, at), (at + 8 : U32))), kern)
+
+def encode.pass1(rows: List<&2, List<&2, U32>>, +kern: Kern, arr: Array<U32>, +at: U32) -> Array<U32>:
   match rows:
     case Nil{}:
-      List.reverse(&2, List<&2, U32>, acc)
+      +_z = encode.kern.drop(kern)
+      arr
     case h <> t:
-      encode.pass1(t, cols, encode.trow(h, cols) <> acc)
+      encode.pass1(t, kern, encode.lay(encode.dct8(encode.take(h), kern), arr, at), (at + 8 : U32))
 
-def encode.srow(+c0: List<&2, U32>, +c1: List<&2, U32>, +c2: List<&2, U32>, +c3: List<&2, U32>,
-  +c4: List<&2, U32>, +c5: List<&2, U32>, +c6: List<&2, U32>, +c7: List<&2, U32>, +col: List<&2, U32>) ->
-  List<&2, U32>:
-  [encode.dot(c0, col), encode.dot(c1, col), encode.dot(c2, col), encode.dot(c3, col), encode.dot(c4, col),
-    encode.dot(c5, col), encode.dot(c6, col), encode.dot(c7, col)]
+def encode.pix.sink(a: Array<U32>) -> U32:
+  match a:
+    case ALeaf{_x}:
+      0
+    case ANode{xs, ys}:
+      U32.or(encode.pix.sink(xs), encode.pix.sink(ys))
 
-def encode.flat(rows: List<&2, List<&2, U32>>) -> List<&2, U32>:
-  match rows:
-    case Nil{}:
-      Nil{}
-    case h <> t:
-      encode.join(h, encode.flat(t))
+def encode.pass2.done(st: Planes, kern: Kern) -> Array<U32>:
+  match st:
+    case Planes{src, dst, +at}:
+      +_z = encode.kern.drop(kern)
+      +_s = encode.pix.sink(src)
+      +_at = (at - at : U32)
+      dst
 
-def encode.pass2.rows(+ts: List<&2, List<&2, U32>>, +k0: List<&2, U32>, +k1: List<&2, U32>, +k2: List<&2, U32>,
-  +k3: List<&2, U32>, +k4: List<&2, U32>, +k5: List<&2, U32>, +k6: List<&2, U32>, +k7: List<&2, U32>) ->
-  List<&2, U32>:
-  +s0 = Jpeg.decode.col(ts, 0, [])
-  +s1 = Jpeg.decode.col(ts, 1, [])
-  +s2 = Jpeg.decode.col(ts, 2, [])
-  +s3 = Jpeg.decode.col(ts, 3, [])
-  +s4 = Jpeg.decode.col(ts, 4, [])
-  +s5 = Jpeg.decode.col(ts, 5, [])
-  +s6 = Jpeg.decode.col(ts, 6, [])
-  +s7 = Jpeg.decode.col(ts, 7, [])
-  encode.flat([encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k0), encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k1),
-    encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k2), encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k3),
-    encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k4), encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k5),
-    encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k6), encode.srow(s0, s1, s2, s3, s4, s5, s6, s7, k7)])
+def encode.pass2.put(got: Array<U32> & Oct, dst: Array<U32>, +at: U32) -> Planes:
+  match got:
+    case (src, o):
+      Planes{src, encode.scatter(o, dst, at), (at + 1 : U32)}
 
-def encode.pass2(+ts: List<&2, List<&2, U32>>, +cols: Cols) -> List<&2, U32>:
-  match cols:
-    case Cols{+k0, +k1, +k2, +k3, +k4, +k5, +k6, +k7}:
-      encode.pass2.rows(ts, k0, k1, k2, k3, k4, k5, k6, k7)
+def encode.pass2.step(st: Planes, kern: Kern) -> Planes:
+  match st:
+    case Planes{src, dst, +at}:
+      encode.pass2.put(encode.col(src, at, kern), dst, at)
 
-def encode.fdct.cols(rows: List<&2, List<&2, U32>>, +cols: Cols) -> List<&2, U32>:
-  encode.pass2(encode.pass1(rows, cols, []), cols)
+def encode.pass2(left: Nat, st: Planes, +kern: Kern) -> Array<U32>:
+  match left:
+    case 0n:
+      encode.pass2.done(st, kern)
+    case 1n+rest:
+      encode.pass2(rest, encode.pass2.step(st, kern), kern)
+
+def encode.drain.pack(got: Array<U32> & U32, acc: List<&2, U32>) -> Array<U32> & U32 & List<&2, U32>:
+  match got:
+    case (arr, samp):
+      (arr, samp, acc)
+
+def encode.drain.step(st: Array<U32> & U32 & List<&2, U32>, +idx: Nat) -> Array<U32> & U32 & List<&2, U32>:
+  (arr, samp, acc) = st
+  encode.drain.pack(Array.get(U32, arr, U32.from_nat(idx)), samp <> acc)
+
+def encode.drain.done(st: Array<U32> & U32 & List<&2, U32>) -> List<&2, U32>:
+  (arr, samp, acc) = st
+  +_s = encode.pix.sink(arr)
+  samp <> acc
+
+# read index 63 first, so the cons list comes out in order
+def encode.drain(left: Nat, st: Array<U32> & U32 & List<&2, U32>) -> List<&2, U32>:
+  match left:
+    case 0n:
+      encode.drain.done(st)
+    case 1n+ +rest:
+      encode.drain(rest, encode.drain.step(st, rest))
+
+def encode.drain.st(got: Array<U32> & U32) -> Array<U32> & U32 & List<&2, U32>:
+  match got:
+    case (arr, samp):
+      (arr, samp, [])
+
+def encode.fdct.go(src: Array<U32>, kern: Kern) -> List<&2, U32>:
+  encode.drain(63n, encode.drain.st(Array.get(U32, encode.pass2(8n, Planes{src, Jpeg.decode.plane(64), 0}, kern), 63)))
 
 def encode.fdct(rows: List<&2, List<&2, U32>>, +cs: List<&2, U32>) -> List<&2, U32>:
-  encode.fdct.cols(rows, encode.cols(cs))
+  +kern = encode.kern(cs)
+  encode.fdct.go(encode.pass1(rows, kern, Jpeg.decode.plane(64), 0), kern)
 
 def encode.level(xs: List<&2, U32>) -> List<&2, U32>:
   match xs:
@@ -508,13 +689,6 @@ def encode.chan.w(+ch: U32, +r: U32, +g: U32, +b: U32) -> U32:
 
 def encode.chan(+pix: U32, +ch: U32) -> U32:
   encode.chan.w(ch, U32.and(U32.shrn(pix, 16n), 255), U32.and(U32.shrn(pix, 8n), 255), U32.and(pix, 255))
-
-def encode.pix.sink(a: Array<U32>) -> U32:
-  match a:
-    case ALeaf{_x}:
-      0
-    case ANode{xs, ys}:
-      U32.or(encode.pix.sink(xs), encode.pix.sink(ys))
 
 # the first `left` samples, then the rest of the list is unused
 def encode.pix.load(left: Nat, px: List<&2, U32>, a: Array<U32>, +i: U32) -> Array<U32>:
