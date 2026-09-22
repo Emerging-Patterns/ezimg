@@ -238,3 +238,12 @@ def Laws.jpeg_sof9_none():
 
 def Laws.jpeg_raster_gray():
   {==}
+
+def Laws.jpeg_enc_markers():
+  {==}
+
+def Laws.jpeg_enc_dc():
+  {==}
+
+def Laws.jpeg_enc_solid():
+  {==}

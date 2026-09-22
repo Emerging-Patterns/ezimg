@@ -6,6 +6,7 @@ import ./crc.bend as Crc
 import ./inflate.bend as Inf
 import ./png.bend as Png
 import ./jpeg.bend as Jpeg
+import ./jpeg_enc.bend as Jenc
 
 # a 2 by 3 picture, six samples
 def swatch() -> Img.Raster:
@@ -452,3 +453,19 @@ law jpeg_raster_gray:
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 196, 0, 20, 16, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 255, 218, 0, 8, 1, 1, 0, 0, 63, 0, 63, 255, 217
   ]) == Some{Img.raster(1, 1, [128])} : Maybe<&2, Img.Raster>}
+
+# LAW: a baseline 4:4:4 encode carries SOI, APP0, JFIF, DQT, SOF0, DHT, SOS, and EOI
+law jpeg_enc_markers:
+  {Jenc.spots(Img.encode_jpeg(Img.fill(1, 1, 8421504))) == (Jpeg.soi(), Jpeg.app0(), Jpeg.jfif(), Jpeg.dqt(),
+    Jpeg.sof0(), Jpeg.dht(), Jpeg.sos(), Jpeg.eoi()) : List<&2, U32> & List<&2, U32> & List<&2, U32> &
+    List<&2, U32> & List<&2, U32> & List<&2, U32> & List<&2, U32> & List<&2, U32>}
+
+# LAW: a 1 by 1 neutral solid round-trips through baseline encode
+law jpeg_enc_dc:
+  {Img.decode_jpeg(Img.encode_jpeg(Img.fill(1, 1, 8421504))) == Some{Img.fill(1, 1, 8421504)} :
+    Maybe<&2, Img.Raster>}
+
+# LAW: a 2 by 2 neutral solid round-trips, including samples copied into the rest of the block
+law jpeg_enc_solid:
+  {Img.decode_jpeg(Jenc.encode(2, 2, [8421504, 8421504, 8421504, 8421504])) == Some{Img.fill(2, 2, 8421504)} :
+    Maybe<&2, Img.Raster>}
