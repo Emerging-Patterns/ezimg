@@ -5682,3 +5682,12 @@ def Laws.jpeg_walk_count(ww, hh, ids, hs, vs, hmax, vmax, ns, sids, top, h_ns, h
   W10.walk.count(Jpeg.decode.ceil(ww, (hmax * 8 : U32)), Jpeg.decode.ceil(hh, (vmax * 8 : U32)),
     Jpeg.decode.blocks.sum(hs, vs, 0), ns, sids, ids, hs, vs, top, W10.usum.pos(ns, sids, ids, hs, vs, h_ns, h_units),
     h_sum, h_fit)
+
+def Laws.jpeg_unstuff(bs, ok):
+  +xs = Laws.jpg.bytes(bs)
+  +nn = List.length(&2, Laws.JByte, bs)
+  Equal.trans(List<&2, U32>, Laws.jpg.read8(nn, Jpeg.decode.read.n(8, Jpeg.Bits{0, ok, 0,
+    Jenc.encode.stuff.all(List.reverse(&2, U32, xs), [])})), Laws.jpg.read8(nn, Jpeg.decode.read.n(8, Jpeg.Bits{0, ok,
+    0, W10.stf(xs, [])})), xs, Equal.cong(List<&2, U32>, List<&2, U32>, zs => Laws.jpg.read8(nn, Jpeg.decode.read.n(8,
+    Jpeg.Bits{0, ok, 0, zs})), Jenc.encode.stuff.all(List.reverse(&2, U32, xs), []), W10.stf(xs, []),
+    W10.stall.rev(xs, [], [])), W10.rd.list(bs, ok, []))

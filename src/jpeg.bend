@@ -518,7 +518,7 @@ def decode.nbits(
       match eq:
         case False{}:
           decode.nbits(p, U32.is_eq((nn - 1 : U32), 0), xs, ff, h255, h0, (nn - 1 : U32), U32.and(255, U32.shl(buf)),
-            ok, U32.or(U32.shl(acc), U32.shrn(buf, 7n)))
+            ok, U32.or(U32.shrn(buf, 7n), U32.shl(acc)))
         case True{}:
           match xs:
             case Nil{}:
@@ -532,7 +532,7 @@ def decode.nbits(
                         0, 0, ok, acc)
                     case False{}:
                       decode.nbits(p, False{}, rest, False{}, decode.head.is(rest, 255), decode.head.is(rest, 0), 7,
-                        U32.and(255, U32.shl(bb)), ok, U32.or(U32.shl(acc), U32.shrn(bb, 7n)))
+                        U32.and(255, U32.shl(bb)), ok, U32.or(U32.shrn(bb, 7n), U32.shl(acc)))
                 case True{}:
                   match h255:
                     case True{}:
@@ -542,7 +542,7 @@ def decode.nbits(
                       match h0:
                         case True{}:
                           decode.nbits(p, False{}, rest, False{}, decode.head.is(rest, 255), decode.head.is(rest, 0),
-                            7, 254, ok, U32.or(U32.shl(acc), 1))
+                            7, 254, ok, U32.or(1, U32.shl(acc)))
                         case False{}:
                           decode.nbits(p, False{}, rest, False{}, decode.head.is(rest, 255), decode.head.is(rest, 0),
                             7, 0, 0, U32.shl(acc))

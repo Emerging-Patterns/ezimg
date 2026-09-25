@@ -2440,3 +2440,41 @@ law jpeg_walk_count:
   {U32.to_nat(Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)) == List.length(&2, Jpeg.Ctrl,
     jpg.o.rows(U32.to_nat(Jpeg.decode.ceil(hh, (vmax * 8 : U32))), 0, 0, Jpeg.decode.ceil(ww, (hmax * 8 : U32)), ns,
     sids, ids, hs, vs)) : Nat}
+
+# one byte as its eight bits, the lowest first
+type JByte is Data:
+  JByte{c0: Bool, c1: Bool, c2: Bool, c3: Bool, c4: Bool, c5: Bool, c6: Bool, c7: Bool}
+
+# a byte's value: its eight bits over 24 zero bits
+def jpg.byte(bb: JByte) -> U32:
+  match bb:
+    case JByte{c0, c1, c2, c3, c4, c5, c6, c7}:
+      U32{WCon{c0, WCon{c1, WCon{c2, WCon{c3, WCon{c4, WCon{c5, WCon{c6, WCon{c7, Word.zero(24n)}}}}}}}}}
+
+# the bytes' values, in order
+def jpg.bytes(bs: List<&2, JByte>) -> List<&2, U32>:
+  match bs:
+    case Nil{}:
+      []
+    case bb <> rest:
+      jpg.byte(bb) <> jpg.bytes(rest)
+
+# the values the decoder's bit reader reads, eight bits at a time, left times: got is the reader and the
+# value just read
+def jpg.read8(left: Nat, got: Jpeg.Bits & U32) -> List<&2, U32>:
+  match left:
+    case 0n:
+      []
+    case 1n+pp:
+      (bits, vv) = got
+      vv <> jpg.read8(pp, Jpeg.decode.read.n(8, bits))
+
+# LAW: stuffing and unstuffing are inverses: the decoder's bit reader, reading eight bits at a time from the
+# encoder's stuffing of any bytes (encode.stuff.all, which puts a 0 after every 255), reads the bytes back,
+# the stuffed zeros dropped, whatever the reader's ok flag
+# IMG-JPG-3
+law jpeg_unstuff:
+  for +bs: List<&2, JByte>
+  for +ok: U32
+  {jpg.read8(List.length(&2, JByte, bs), Jpeg.decode.read.n(8, Jpeg.Bits{0, ok, 0, Jenc.encode.stuff.all(
+    List.reverse(&2, U32, jpg.bytes(bs)), [])})) == jpg.bytes(bs) : List<&2, U32>}

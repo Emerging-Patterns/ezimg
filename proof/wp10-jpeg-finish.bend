@@ -2204,3 +2204,109 @@ def walk.count(
     Jpeg.Ctrl, Laws.jpg.o.rows(hn, 0, 0, mw, ns, sids, ids, hs, vs)), mul.assoc(hn, wn, uu), Equal.sym(Nat,
     List.length(&2, Jpeg.Ctrl, Laws.jpg.o.rows(hn, 0, 0, mw, ns, sids, ids, hs, vs)), Nat.mul(hn, Nat.mul(wn, uu)),
     len.rows(hn, 0, 0, mw, ns, sids, ids, hs, vs)))))
+
+# ---- stuffing and unstuffing (IMG-JPG-3) ----
+
+# bytes stuffed in order onto acc, the first byte first
+def stf(xs: List<&2, U32>, +acc: List<&2, U32>) -> List<&2, U32>:
+  match xs:
+    case Nil{}:
+      acc
+    case +bb <> rest:
+      Jenc.encode.stuff.put(U32.is_eq(bb, 255), bb, stf(rest, acc))
+
+# the encoder stuffing written bytes, newest first, is stuffing them in order
+def stall.rev(
+  xs: List<&2, U32>,
+  +rr: List<&2, U32>,
+  +acc: List<&2, U32>
+) -> {Jenc.encode.stuff.all(List.reverse.go(&2, U32, xs, rr), acc) == Jenc.encode.stuff.all(rr, stf(xs, acc)) :
+  List<&2, U32>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case +bb <> rest:
+      stall.rev(rest, bb <> rr, acc)
+
+# a byte that is not 255, read by the bit reader: its eight bits, top first, each or-ed with False
+def rd.plain(
+  h0: Bool,
+  +c0: Bool,
+  +c1: Bool,
+  +c2: Bool,
+  +c3: Bool,
+  +c4: Bool,
+  +c5: Bool,
+  +c6: Bool,
+  +c7: Bool,
+  +rest: List<&2, U32>,
+  +ok: U32
+) -> {Jpeg.decode.nbits(8n, True{}, W7.byte.w(c0, c1, c2, c3, c4, c5, c6, c7) <> rest, False{}, False{}, h0, 0, 0, ok,
+  0) == (Jpeg.Bits{0, ok, 0, rest}, W7.byte.w(Bool.or(c0, False{}), Bool.or(c1, False{}), Bool.or(c2, False{}),
+  Bool.or(c3, False{}), Bool.or(c4, False{}), Bool.or(c5, False{}), Bool.or(c6, False{}), Bool.or(c7, False{}))) :
+  Jpeg.Bits & U32}:
+  {==}
+
+# one stuffed byte, read by the bit reader: the byte back, the reader at the bytes after it
+def rd.z(
+  zz: Bool,
+  +c0: Bool,
+  +c1: Bool,
+  +c2: Bool,
+  +c3: Bool,
+  +c4: Bool,
+  +c5: Bool,
+  +c6: Bool,
+  +c7: Bool,
+  +rest: List<&2, U32>,
+  +ok: U32,
+  +ee: {U32.is_eq(W7.byte.w(c0, c1, c2, c3, c4, c5, c6, c7), 255) == zz : Bool}
+) -> {Jpeg.decode.read.n(8, Jpeg.Bits{0, ok, 0, Jenc.encode.stuff.put(zz, W7.byte.w(c0, c1, c2, c3, c4, c5, c6, c7),
+  rest)}) == (Jpeg.Bits{0, ok, 0, rest}, W7.byte.w(c0, c1, c2, c3, c4, c5, c6, c7)) : Jpeg.Bits & U32}:
+  match zz:
+    case False{}:
+      +bw = W7.byte.w(c0, c1, c2, c3, c4, c5, c6, c7)
+      +h0 = U32.is_eq(bw, 0)
+      Equal.trans(Jpeg.Bits & U32, Jpeg.decode.nbits(8n, True{}, bw <> rest, False{}, U32.is_eq(bw, 255), h0, 0, 0,
+        ok, 0),
+        Jpeg.decode.nbits(8n, True{}, bw <> rest, False{}, False{}, h0, 0, 0, ok, 0), (Jpeg.Bits{0, ok, 0, rest}, bw),
+        Equal.cong(Bool, Jpeg.Bits & U32, hb => Jpeg.decode.nbits(8n, True{}, bw <> rest, False{}, hb, h0, 0, 0, ok, 0),
+        U32.is_eq(bw, 255), False{}, ee), Equal.trans(Jpeg.Bits & U32, Jpeg.decode.nbits(8n, True{}, bw <> rest,
+          False{},
+        False{}, h0, 0, 0, ok, 0), (Jpeg.Bits{0, ok, 0, rest}, W7.byte.w(Bool.or(c0, False{}), Bool.or(c1, False{}),
+        Bool.or(c2, False{}), Bool.or(c3, False{}), Bool.or(c4, False{}), Bool.or(c5, False{}), Bool.or(c6, False{}),
+        Bool.or(c7, False{}))), (Jpeg.Bits{0, ok, 0, rest}, bw), rd.plain(h0, c0, c1, c2, c3, c4, c5, c6, c7, rest, ok),
+        Equal.cong(U32, Jpeg.Bits & U32, vv => {(Jpeg.Bits{0, ok, 0, rest}, vv) : Jpeg.Bits & U32},
+        W7.byte.w(Bool.or(c0, False{}), Bool.or(c1, False{}), Bool.or(c2, False{}), Bool.or(c3, False{}),
+        Bool.or(c4, False{}), Bool.or(c5, False{}), Bool.or(c6, False{}), Bool.or(c7, False{})), bw,
+        W7.or_byte(c0, c1, c2, c3, c4, c5, c6, c7))))
+    case True{}:
+      +bw = W7.byte.w(c0, c1, c2, c3, c4, c5, c6, c7)
+      eb = Equal.sym(U32, bw, 255, U32L.ueq(bw, 255, ee))
+      %eb : {Jpeg.decode.read.n(8, Jpeg.Bits{0, ok, 0, _ <> (0 <> rest)}) == (Jpeg.Bits{0, ok, 0, rest}, _) :
+        Jpeg.Bits & U32}
+      {==}
+
+# the bit reader reads stuffed bytes back, eight bits at a time
+def rd.list(
+  +bs: List<&2, Laws.JByte>,
+  +ok: U32,
+  +rest: List<&2, U32>
+) -> {Laws.jpg.read8(List.length(&2, Laws.JByte, bs), Jpeg.decode.read.n(8, Jpeg.Bits{0, ok, 0,
+  stf(Laws.jpg.bytes(bs), rest)})) == Laws.jpg.bytes(bs) : List<&2, U32>}:
+  match bs:
+    case Nil{}:
+      {==}
+    case +bb <> +tl:
+      match bb:
+        case Laws.JByte{+c0, +c1, +c2, +c3, +c4, +c5, +c6, +c7}:
+          +bw = W7.byte.w(c0, c1, c2, c3, c4, c5, c6, c7)
+          +st = stf(Laws.jpg.bytes(tl), rest)
+          Equal.trans(List<&2, U32>, Laws.jpg.read8(1n+List.length(&2, Laws.JByte, tl), Jpeg.decode.read.n(8,
+            Jpeg.Bits{0, ok, 0, Jenc.encode.stuff.put(U32.is_eq(bw, 255), bw, st)})), Laws.jpg.read8(1n+List.length(&2,
+            Laws.JByte, tl), (Jpeg.Bits{0, ok, 0, st}, bw)), bw <> Laws.jpg.bytes(tl), Equal.cong(Jpeg.Bits & U32,
+            List<&2, U32>, gg => Laws.jpg.read8(1n+List.length(&2, Laws.JByte, tl), gg), Jpeg.decode.read.n(8,
+            Jpeg.Bits{0, ok, 0, Jenc.encode.stuff.put(U32.is_eq(bw, 255), bw, st)}), (Jpeg.Bits{0, ok, 0, st}, bw),
+            rd.z(U32.is_eq(bw, 255), c0, c1, c2, c3, c4, c5, c6, c7, st, ok, {==})), Equal.cong(List<&2, U32>,
+            List<&2, U32>, ll => {bw <> ll : List<&2, U32>}, Laws.jpg.read8(List.length(&2, Laws.JByte, tl),
+            Jpeg.decode.read.n(8, Jpeg.Bits{0, ok, 0, st})), Laws.jpg.bytes(tl), rd.list(tl, ok, rest)))
