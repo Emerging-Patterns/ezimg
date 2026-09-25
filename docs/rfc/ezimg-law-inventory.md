@@ -13,6 +13,9 @@ Paths and line numbers below are for the `main.bend` and `src/` layout
 `ez init` lays out, which the tree moved to after this reading; the code is
 otherwise unchanged.
 
+The laws in the inventory table below were deleted in phase 2. The table
+stays as the map of what each pointed toward.
+
 The inventory is a progress tracker. When the rollout ends, what still
 matters goes into the RFC and this file is deleted.
 
@@ -310,4 +313,5 @@ requirement depends on.
 | Audit and RFC | done | this inventory and `docs/rfc/ezimg-spec.md`; every REVIEW item accepted as recommended |
 | Layout | done | `main.bend` and `src/`, `LAWS.bend` and `PROOF.bend` at the root; `bench/bolt.bend` sets the driver's law rules to warn; ez test, bolt, and the Pillow check pass on a fresh copy |
 | Phase 1, bolt v1.7.0 | done | flake.lock pins bolt `38da7d9` (v1.7.0); `bolt.bend` keeps the law rules at warn and `unsafe` at error; 810 short parameter names renamed within their defs, 177 headers reflowed, 3 long lines wrapped; bolt v1.7.0 reports 0 errors and 174 law warnings (89 L001, 85 L002); ez test and the Pillow check pass, and the bench driver's output is byte-identical to master's on all 146 probe cases |
-| Phase 2, SPEC.md and the closed laws | next | |
+| Phase 2, SPEC.md and the closed laws | done | SPEC.md with 22 Proved rows, all pending, and 4 Trusted assumptions (IMG-PNG-10 and IMG-JPG-7 in the requirement tables, IMG-TRUST-1 and 2 in the trust boundary); all 85 closed laws and their fixtures deleted, with `Jenc.spots` and the marker defs only laws named (`app0`, `sof0`, `sof2`, `sof9`, `dht`, `dqt`, `sos`, `jfif`); `LAWS.bend` still imports every module so the gate type-checks them; `closed` and `trace` at error, `coverage` at warn (80 defs); the README's Compliance section points at SPEC.md |
+| Phase 3, behavior changes BC-1 to BC-4 | next | |

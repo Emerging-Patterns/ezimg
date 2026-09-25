@@ -1676,33 +1676,6 @@ def encode.pick(bad: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U3
     case False{}:
       encode.arm(ww, hh, px)
 
-def spots.tail.go(xs: List<&2, U32>, +aa: U32, +bb: U32) -> List<&2, U32>:
-  match xs:
-    case Nil{}:
-      [aa, bb]
-    case h <> t:
-      spots.tail.go(t, bb, h)
-
-def spots.tail(xs: List<&2, U32>) -> List<&2, U32>:
-  match xs:
-    case a <> b <> t:
-      spots.tail.go(t, a, b)
-    case _:
-      []
-
-def spots.take(+xs: List<&2, U32>, +at: U32, +nn: U32) -> List<&2, U32>:
-  List.take(&2, U32, List.drop(&2, U32, xs, U32.to_nat(at)), U32.to_nat(nn))
-
-# the eight slices spots returns
-def spots.Eight() -> Type:
-  List<&2, U32> & List<&2, U32> & List<&2, U32> & List<&2, U32> & List<&2, U32> & List<&2, U32> & List<&2, U32> &
-    List<&2, U32>
-
-# fixed-header slices: SOI, APP0, JFIF, DQT, SOF0, DHT, SOS, and the trailing EOI
-def spots(+xs: List<&2, U32>) -> spots.Eight():
-  (spots.take(xs, 0, 2), spots.take(xs, 2, 2), spots.take(xs, 6, 5), spots.take(xs, 20, 2), spots.take(xs, 89, 2),
-    spots.take(xs, 108, 2), spots.take(xs, 324, 2), spots.tail(xs))
-
 # baseline sequential 4:4:4 JPEG bytes for packed RGB samples, or SOI EOI when the size is rejected
 def encode(+ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
   encode.pick(encode.bad(ww, hh), ww, hh, px)

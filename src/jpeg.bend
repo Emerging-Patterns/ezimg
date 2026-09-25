@@ -2200,38 +2200,6 @@ def soi() -> List<&2, U32>:
 def eoi() -> List<&2, U32>:
   [255, 217]
 
-# the APP0 marker, FF E0
-def app0() -> List<&2, U32>:
-  [255, 224]
-
-# baseline DCT frame marker, SOF0, FF C0
-def sof0() -> List<&2, U32>:
-  [255, 192]
-
-# progressive DCT frame marker, SOF2, FF C2
-def sof2() -> List<&2, U32>:
-  [255, 194]
-
-# extended sequential arithmetic frame marker, SOF9, FF C9
-def sof9() -> List<&2, U32>:
-  [255, 201]
-
-# the Huffman table marker, DHT, FF C4
-def dht() -> List<&2, U32>:
-  [255, 196]
-
-# the quantisation table marker, DQT, FF DB
-def dqt() -> List<&2, U32>:
-  [255, 219]
-
-# the start-of-scan marker, SOS, FF DA
-def sos() -> List<&2, U32>:
-  [255, 218]
-
-# the JFIF APP0 identifier
-def jfif() -> List<&2, U32>:
-  [74, 70, 73, 70, 0]
-
 # baseline JPEG bytes, or none when the frame is not sequential Huffman
 def decode(bytes: List<&2, U32>) -> Maybe<&2, Pic>:
   decode.finish(decode.walk(bytes, decode.st0()))
