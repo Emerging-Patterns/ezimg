@@ -2271,3 +2271,172 @@ law jpeg_walk_frame:
     (hmax * 8 : U32)), ns, sids, ids, hs, vs)), Jpeg.Ctrl{0, 0, 0, 0, 0, rst}, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
     hmax, vmax}, Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, ri) == jpg.o.rows(U32.to_nat(mh), 0, 0,
     Jpeg.decode.ceil(ww, (hmax * 8 : U32)), ns, sids, ids, hs, vs) : List<&2, Jpeg.Ctrl>}
+
+# a byte list in which every 255 is followed by a 0 (T.81 F.1.2.3), ff saying the byte before xs was a
+# 255 and ok that every 255 so far was
+def jpg.stuffed(xs: List<&2, U32>, ff: Bool, ok: Bool) -> Bool:
+  match xs:
+    case Nil{}:
+      Bool.and(ok, Bool.not(ff))
+    case +bb <> rest:
+      match ff:
+        case True{}:
+          jpg.stuffed(rest, False{}, Bool.and(ok, U32.is_eq(bb, 0)))
+        case False{}:
+          jpg.stuffed(rest, U32.is_eq(bb, 255), ok)
+
+# LAW: the entropy-coded bytes encode_jpeg writes, for every size and every samples, have every 255
+# followed by a 0
+# IMG-JPG-3
+law jpeg_enc_stuffed:
+  for +ww: U32
+  for +hh: U32
+  for px: List<&2, U32>
+  {jpg.stuffed(Jenc.encode.arm(ww, hh, px), False{}, True{}) == True{} : Bool}
+
+# the tables the decoder holds after reading encode_jpeg's DQT and two DHT segments: quantisation table 0
+# all ones, and the Annex K luminance DC and AC tables as table 0 of each class
+def jpg.enc.tabs() -> Jpeg.Tabs:
+  Jpeg.Tabs{List.replicate(U32, 64n, 1), [], [], [], Jpeg.decode.canon(272n, 0n, Jenc.encode.dccounts(),
+    Jenc.encode.dcsyms(), 0, 0, [], [], []), Jpeg.decode.huff0(), Jpeg.decode.huff0(), Jpeg.decode.huff0(),
+    Jpeg.decode.canon(272n, 0n, Jenc.encode.accounts(), Jenc.encode.acsyms(), 0, 0, [], [], []), Jpeg.decode.huff0(),
+    Jpeg.decode.huff0(), Jpeg.decode.huff0()}
+
+# the frame encode_jpeg's SOF0 carries: its width and height, three components 1, 2 and 3, each sampled
+# 1 by 1 with quantisation table 0
+def jpg.enc.frame(+ww: U32, +hh: U32) -> Jpeg.Frame:
+  Jpeg.Frame{ww, hh, 3, [1, 2, 3], [1, 1, 1], [1, 1, 1], [0, 0, 0], 1, 1}
+
+# the scan encode_jpeg's SOS opens: components 1, 2 and 3 with Huffman tables 0, all of 0 to 63
+def jpg.enc.scan() -> Jpeg.Scan:
+  Jpeg.Scan{3, [1, 2, 3], [0, 0, 0], [0, 0, 0], 0, 63, 0}
+
+# LAW: the decoder's marker walk over encode_jpeg's header (SOI, APP0, DQT, SOF0, two DHT, SOS) reaches
+# the entropy-coded data with the frame carrying the encoder's width and height, whatever they are, the
+# encoder's scan and tables, no restart interval, a baseline frame read and nothing refused
+# IMG-JPG-3
+law jpeg_enc_header_walk:
+  for +ww: U32
+  for +hh: U32
+  {Jpeg.decode.walk(Jenc.encode.header(ww, hh, Jenc.encode.dccounts(), Jenc.encode.dcsyms(), Jenc.encode.accounts(),
+    Jenc.encode.acsyms()), Jpeg.decode.st0()) == Jpeg.St{Jpeg.Ent{}, jpg.enc.frame(ww, hh), jpg.enc.scan(),
+    jpg.enc.tabs(), [], 0, 1, 0} : Jpeg.St}
+
+# LAW: inside the entropy-coded data, the decoder's walk keeps every byte of stuffed data (the stuffed
+# zeros too, which the bit reader drops) and stops at EOI, holding what it held
+# IMG-JPG-3
+law jpeg_ent_walk:
+  for xs: List<&2, U32>
+  for h_stuffed: {jpg.stuffed(xs, False{}, True{}) == True{} : Bool}
+  for +frame: Jpeg.Frame
+  for +scan: Jpeg.Scan
+  for +tabs: Jpeg.Tabs
+  for +ent: List<&2, U32>
+  for +ri: U32
+  for +kind: U32
+  for +bad: U32
+  {Jpeg.decode.walk(List.append(&2, U32, xs, [255, 217]), Jpeg.St{Jpeg.Ent{}, frame, scan, tabs, ent, ri, kind, bad}) ==
+    Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, List.reverse.go(&2, U32, xs, ent), ri, kind, bad} : Jpeg.St}
+
+# decode_jpeg of encode_jpeg's bytes, when it wrote some
+def jpg.back(mm: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Img.Raster>:
+  match mm:
+    case None{}:
+      None{}
+    case Some{bytes}:
+      Img.decode_jpeg(bytes)
+
+# LAW: for every well-formed raster with both sides from 1 to 65535, decode_jpeg of encode_jpeg's bytes is
+# the decoder's scan decode of encode_jpeg's own entropy-coded bytes, in the frame of the raster's width and
+# height, with the encoder's scan and tables: the marker walk, the unstuffing and the frame size are done
+# IMG-JPG-3
+law jpeg_round_trip_scan:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for +h_good: {Png.enc.good(ww, hh, px) == True{} : Bool}
+  for h_w: {U32.is_le(ww, 65535) == True{} : Bool}
+  for h_h: {U32.is_le(hh, 65535) == True{} : Bool}
+  {jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})) == Img.decode_jpeg.out(Jpeg.decode.run(jpg.enc.frame(ww,
+    hh), jpg.enc.scan(), jpg.enc.tabs(), Jenc.encode.arm(ww, hh, Img.colours(px)), 0)) : Maybe<&2, Img.Raster>}
+
+# a decoded raster, if any, has width ww and height hh
+def jpg.sized(mm: Maybe<&2, Img.Raster>, +ww: U32, +hh: U32) -> Bool:
+  match mm:
+    case None{}:
+      True{}
+    case Some{Img.Raster{rw, rh, _px}}:
+      Bool.and(U32.is_eq(rw, ww), U32.is_eq(rh, hh))
+
+# LAW: the scan decode, whatever the bytes, tables and scan, returns no picture or one of its frame's
+# width and height
+# IMG-JPG-3
+law jpeg_run_sized:
+  for +ww: U32
+  for +hh: U32
+  for +nf: U32
+  for +ids: List<&2, U32>
+  for +hs: List<&2, U32>
+  for +vs: List<&2, U32>
+  for +tq: List<&2, U32>
+  for +hmax: U32
+  for +vmax: U32
+  for +scan: Jpeg.Scan
+  for +tabs: Jpeg.Tabs
+  for +ent: List<&2, U32>
+  for +ri: U32
+  {jpg.sized(Img.decode_jpeg.out(Jpeg.decode.run(Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent,
+    ri)), ww, hh) == True{} : Bool}
+
+# LAW: for every well-formed raster with both sides from 1 to 65535, decode_jpeg of encode_jpeg's bytes is
+# none or a raster of the raster's width and height; every sample of one has alpha 255 (jpeg_decode_opaque)
+# IMG-JPG-3
+law jpeg_round_trip_sized:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for +h_good: {Png.enc.good(ww, hh, px) == True{} : Bool}
+  for h_w: {U32.is_le(ww, 65535) == True{} : Bool}
+  for h_h: {U32.is_le(hh, 65535) == True{} : Bool}
+  {jpg.sized(jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), ww, hh) == True{} : Bool}
+
+# the data units of the scan's components from comp on, left of them: each one's hi * vi, summed
+def jpg.usum(
+  left: Nat,
+  +comp: U32,
+  +sids: List<&2, U32>,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>
+) -> Nat:
+  match left:
+    case 0n:
+      0n
+    case 1n+pp:
+      Nat.add(U32.to_nat(jpg.units(comp, sids, ids, hs, vs)), jpg.usum(pp, (comp + 1 : U32), sids, ids, hs, vs))
+
+# LAW: the number of blocks the decoder reads, decode.nblocks (ceil(w / 8 hmax) * ceil(h / 8 vmax) MCUs times
+# the frame's data units per MCU, all in U32), is the length of jpeg_walk_frame's order over ceil(h / 8 vmax) MCU rows,
+# when the scan's components carry the frame's data units and the product fits a U32 (the witness top), so
+# the walk visits every MCU of the frame and no counter wraps
+# IMG-JPG-2
+law jpeg_walk_count:
+  for +ww: U32
+  for +hh: U32
+  for +ids: List<&2, U32>
+  for +hs: List<&2, U32>
+  for +vs: List<&2, U32>
+  for +hmax: U32
+  for +vmax: U32
+  for +ns: U32
+  for +sids: List<&2, U32>
+  for +top: U32
+  for h_ns: {U32.is_lt(0, ns) == True{} : Bool}
+  for h_units: {jpg.units.ok(U32.to_nat(ns), 0, sids, ids, hs, vs, True{}) == True{} : Bool}
+  for h_sum: {U32.to_nat(Jpeg.decode.blocks.sum(hs, vs, 0)) == jpg.usum(U32.to_nat(ns), 0, sids, ids, hs, vs) : Nat}
+  for h_fit: {Nat.is_le(Nat.mul(Nat.mul(U32.to_nat(Jpeg.decode.ceil(ww, (hmax * 8 : U32))),
+    U32.to_nat(Jpeg.decode.ceil(hh, (vmax * 8 : U32)))), jpg.usum(U32.to_nat(ns), 0, sids, ids, hs, vs)),
+    U32.to_nat(top)) == True{} : Bool}
+  {U32.to_nat(Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)) == List.length(&2, Jpeg.Ctrl,
+    jpg.o.rows(U32.to_nat(Jpeg.decode.ceil(hh, (vmax * 8 : U32))), 0, 0, Jpeg.decode.ceil(ww, (hmax * 8 : U32)), ns,
+    sids, ids, hs, vs)) : Nat}

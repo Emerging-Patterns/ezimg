@@ -1452,6 +1452,18 @@ def decode.start(
       decode.blocks(p, decode.block.of(bits, 0, decode.pred.zero(), frame, scan, tabs), Ctrl{0, 0, 0, 0, 0, 0},
         decode.pred.zero(), frame, scan, tabs, ri, yy, cb, cr, 1)
 
+# the blocks a scan of the frame holds: ceil(w / 8 hmax) * ceil(h / 8 vmax) MCUs, each with the frame's
+# components' hi * vi data units
+def decode.nblocks(
+  +ww: U32,
+  +hh: U32,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  +hmax: U32,
+  +vmax: U32
+) -> U32:
+  (decode.ceil(ww, (hmax * 8 : U32)) * decode.ceil(hh, (vmax * 8 : U32)) * decode.blocks.sum(hs, vs, 0) : U32)
+
 def decode.run.n(
   empty: Bool,
   +ww: U32,
@@ -1468,10 +1480,8 @@ def decode.run.n(
     case False{}:
       match frame:
         case Frame{_w, _h, _nf, _ids, +hs, +vs, _tq, +hmax, +vmax}:
-          +n = (decode.ceil(ww, (hmax * 8 : U32)) * decode.ceil(hh, (vmax * 8 : U32)) * decode.blocks.sum(hs, vs, 0) :
-            U32)
-          decode.start(U32.to_nat(n), Bits{0, 1, 0, ent}, frame, scan, tabs, ri, decode.plane((ww * hh : U32)),
-            decode.plane((ww * hh : U32)), decode.plane((ww * hh : U32)))
+          decode.start(U32.to_nat(decode.nblocks(ww, hh, hs, vs, hmax, vmax)), Bits{0, 1, 0, ent}, frame, scan, tabs,
+            ri, decode.plane((ww * hh : U32)), decode.plane((ww * hh : U32)), decode.plane((ww * hh : U32)))
 
 def decode.run(frame: Frame, scan: Scan, tabs: Tabs, ent: List<&2, U32>, +ri: U32) -> Maybe<&2, Pic>:
   match frame:

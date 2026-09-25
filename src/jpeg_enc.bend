@@ -162,15 +162,9 @@ def encode.bad(+ww: U32, +hh: U32) -> Bool:
 def encode.put0() -> Put:
   Put{[], 0, 0}
 
-def encode.stuff.ff(ff: Bool, out: List<&2, U32>, +bb: U32) -> Put:
-  match ff:
-    case True{}:
-      Put{0 <> (255 <> out), 0, 0}
-    case False{}:
-      Put{bb <> out, 0, 0}
-
+# a finished byte. Bytes are kept as written; encode.pad stuffs them once, at the end.
 def encode.stuff(out: List<&2, U32>, +bb: U32) -> Put:
-  encode.stuff.ff(U32.is_eq(bb, 255), out, bb)
+  Put{bb <> out, 0, 0}
 
 def encode.bit.n(full: Bool, out: List<&2, U32>, +nb: U32, +nn: U32) -> Put:
   match full:
@@ -195,27 +189,36 @@ def encode.bits.go(left: Nat, pp: Put, +code: U32) -> Put:
 def encode.bits(pp: Put, +len: U32, +code: U32) -> Put:
   encode.bits.go(U32.to_nat(len), pp, code)
 
-def encode.pad.byte(ff: Bool, out: List<&2, U32>, +byte: U32) -> List<&2, U32>:
+# one byte put in front of the stuffed bytes after it: 255 is followed by a 0
+def encode.stuff.put(ff: Bool, +bb: U32, acc: List<&2, U32>) -> List<&2, U32>:
   match ff:
     case True{}:
-      List.reverse(&2, U32, 0 <> (255 <> out))
+      bb <> (0 <> acc)
     case False{}:
-      List.reverse(&2, U32, byte <> out)
+      bb <> acc
+
+# the written bytes, newest first, stuffed and put in order onto acc: every 255 is followed by a 0
+# (T.81 F.1.2.3). U32.is_eq, not a literal pattern, so a law reaches a symbolic byte.
+def encode.stuff.all(out: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
+  match out:
+    case Nil{}:
+      acc
+    case +bb <> rest:
+      encode.stuff.all(rest, encode.stuff.put(U32.is_eq(bb, 255), bb, acc))
 
 def encode.pad.n(zz: Bool, out: List<&2, U32>, +buf: U32, +nn: U32) -> List<&2, U32>:
   match zz:
     case True{}:
-      List.reverse(&2, U32, out)
+      out
     case False{}:
       +sh = (8 - nn : U32)
-      +ones = (U32.shln(1, U32.to_nat(sh)) - 1 : U32)
-      encode.pad.byte(U32.is_eq(U32.or(U32.shln(buf, U32.to_nat(sh)), ones), 255), out,
-        U32.or(U32.shln(buf, U32.to_nat(sh)), ones))
+      U32.or(U32.shln(buf, U32.to_nat(sh)), (U32.shln(1, U32.to_nat(sh)) - 1 : U32)) <> out
 
+# the entropy-coded bytes: the open byte padded with 1 bits, then every byte stuffed, in order
 def encode.pad(pp: Put) -> List<&2, U32>:
   match pp:
     case Put{out, +buf, +n}:
-      encode.pad.n(U32.is_eq(n, 0), out, buf, n)
+      encode.stuff.all(encode.pad.n(U32.is_eq(n, 0), out, buf, n), [])
 
 def encode.drop(xs: List<&2, U32>) -> U32:
   Jpeg.decode.drop(xs)
@@ -1640,18 +1643,25 @@ def encode.go(+ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
       encode.put0()), 0, 0, mw, ww, hh, encode.ctx()))
 
 # the entropy-coded bytes, by what the watch found: neutral, one solid colour, or anything else
-def encode.dispatch(+tag: U32, +color: U32, px: List<&2, U32>, +ww: U32, +hh: U32) -> List<&2, U32>:
-  match tag:
-    case 0:
+def encode.dispatch.b(neu: Bool, sol: Bool, +color: U32, px: List<&2, U32>, +ww: U32, +hh: U32) -> List<&2, U32>:
+  match neu:
+    case True{}:
       +_c = (color - color : U32)
       +_d = encode.drop(px)
+      +_s = Bool.not(sol)
       encode.neutral(ww, hh)
-    case 1:
-      +_d = encode.drop(px)
-      encode.solid(ww, hh, color)
-    case _:
-      +_c = (color - color : U32)
-      encode.go(ww, hh, px)
+    case False{}:
+      match sol:
+        case True{}:
+          +_d = encode.drop(px)
+          encode.solid(ww, hh, color)
+        case False{}:
+          +_c = (color - color : U32)
+          encode.go(ww, hh, px)
+
+# the watch's tag, 0 neutral, 1 solid, 2 mixed, asked with U32.is_eq so a law reaches every tag
+def encode.dispatch(+tag: U32, +color: U32, px: List<&2, U32>, +ww: U32, +hh: U32) -> List<&2, U32>:
+  encode.dispatch.b(U32.is_eq(tag, 0), U32.is_eq(tag, 1), color, px, ww, hh)
 
 # the watch's answer, dispatched
 def encode.arm.use(got: U32 & U32 & List<&2, U32>, +ww: U32, +hh: U32) -> List<&2, U32>:
