@@ -4,9 +4,12 @@ import Base
 import ./LAWS.bend as Laws
 import ./proof/u32.bend as U32L
 import ./proof/wp3-filter.bend as Flt
+import ./proof/wp1-crc.bend as Wp1
 import ./main.bend as Img
 import ./src/png.bend as Png
 import ./src/jpeg.bend as Jpeg
+import ./src/crc.bend as Crc
+import ./proof/wp5-png-decode.bend as W5
 
 # U32.or with 0xFF000000 first has alpha 255, whatever the other operand:
 # the 32 bits are taken apart four at a time, and Bool.or(True, b) is True.
@@ -238,3 +241,573 @@ def Laws.unfilter_filter(ft, ww, hh, bpp, rows, h_dims, h_wrap, h_rows, h_fit):
     h_fit)
   Flt.top.go(Png.uf.ok(ww, hh, bpp), h_dims, ft, ww, hh, bpp, rows,
     Flt.rows_go(rows, U32.to_nat(hh), h_rows, ft, bpp, U32.mul(ww, bpp), en, True{}, fit, [], []))
+
+# ---- wp1-crc ----
+
+def Laws.crc32_bitwise(xs):
+  Wp1.crc32_ref(xs)
+
+def Laws.png_crc_refused(pre, bad, rest, h_pre, h_bad, h_crc):
+  Equal.cong(Maybe<&2, Png.Pic>, Maybe<&2, Img.Raster>, mm => Img.decode_png.pic(mm),
+    Png.png.go(Laws.chunks.onto(pre, Laws.chunk.onto(bad, rest)), Png.ZLen{}, False{}, 0, 0, [], [], Png.pg.empty()),
+    None{}, Wp1.walk_all(pre, bad, rest, Png.pg.empty(), h_pre, h_bad, h_crc))
+
+# ---- wp5-png-decode ----
+
+# byte 3, 2, 1 and 0 of a U32, as spec.be4 writes them
+def by3(+nn: U32) -> U32:
+  U32.and(255, U32.shrn(nn, 24n))
+
+def by2(+nn: U32) -> U32:
+  U32.and(255, U32.shrn(nn, 16n))
+
+def by1(+nn: U32) -> U32:
+  U32.and(255, U32.shrn(nn, 8n))
+
+def by0(+nn: U32) -> U32:
+  U32.and(255, nn)
+
+# the width or height the decoder reads back from spec.be4's bytes
+def be.back(+nn: U32) -> U32:
+  Png.be.u32(by3(nn), by2(nn), by1(nn), by0(nn))
+
+# the IHDR data as the walker holds it, last byte first
+def ihdr.held(+ww: U32, +hh: U32, +dd: U32, +cc: U32, +comp: U32, +ff: U32, +ii: U32) -> List<&2, U32>:
+  [ii, ff, comp, cc, dd, by0(hh), by1(hh), by2(hh), by3(hh), by0(ww), by1(ww), by2(ww), by3(ww)]
+
+# the IHDR chunk judged, CRC right or wrong: png.good refuses the fields, so the chunk is refused
+def ihdr.judged(
+  zz: Bool,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +comp: U32,
+  +ff: U32,
+  +ii: U32,
+  empty: Bool,
+  more: Maybe<&2, Png.Pic>,
+  hg: {Png.png.good(be.back(ww), be.back(hh), dd, cc, comp, ff, ii) == False{} : Bool}
+) -> {Img.decode_png.pic(Png.png.crc(Png.png.judge.at(zz, Png.tag.ihdr(), ihdr.held(ww, hh, dd, cc, comp, ff, ii),
+  Png.pg.empty()), empty, more)) == None{} : Maybe<&2, Img.Raster>}:
+  match zz:
+    case False{}:
+      {==}
+    case True{}:
+      Equal.cong(Bool, Maybe<&2, Img.Raster>,
+        gg => Img.decode_png.pic(Png.png.crc(Png.png.ihdr.ok(gg, be.back(ww), be.back(hh), dd, cc, comp, ff, ii),
+          empty, more)),
+        Png.png.good(be.back(ww), be.back(hh), dd, cc, comp, ff, ii), False{}, hg)
+
+# the walker at the CRC of that IHDR chunk, whatever the CRC bytes, the bytes after and the CRC register so far
+def ihdr.at.crc(
+  +c3: U32,
+  +c2: U32,
+  +c1: U32,
+  +c0: U32,
+  +rest: List<&2, U32>,
+  +crc: List<&2, U32>,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +comp: U32,
+  +ff: U32,
+  +ii: U32,
+  hg: {Png.png.good(be.back(ww), be.back(hh), dd, cc, comp, ff, ii) == False{} : Bool}
+) -> {Img.decode_png.pic(Png.png.go(c3 <> c2 <> c1 <> c0 <> rest, Png.ZCrc{}, False{}, 0, Png.tag.ihdr(), crc,
+  ihdr.held(ww, hh, dd, cc, comp, ff, ii), Png.pg.empty())) == None{} : Maybe<&2, Img.Raster>}:
+  ihdr.judged(U32.is_eq(Png.be.u32(c3, c2, c1, c0), Crc.crc32(List.reverse(&2, U32, crc))), ww, hh, dd, cc, comp, ff,
+    ii, List.is_empty(&2, U32, rest),
+    Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(Png.png.judge(Png.be.u32(c3, c2, c1, c0), crc,
+      Png.tag.ihdr(), ihdr.held(ww, hh, dd, cc, comp, ff, ii), Png.pg.empty()))),
+    hg)
+
+# a file whose IHDR png.good refuses decodes to none
+def ihdr.refused(
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +comp: U32,
+  +ff: U32,
+  +ii: U32,
+  +crc: U32,
+  +rest: List<&2, U32>,
+  hg: {Png.png.good(be.back(ww), be.back(hh), dd, cc, comp, ff, ii) == False{} : Bool}
+) -> {Img.decode_png(Laws.spec.ihdr.file(ww, hh, dd, cc, comp, ff, ii, crc, rest)) == None{} : Maybe<&2, Img.Raster>}:
+  ihdr.at.crc(by3(crc), by2(crc), by1(crc), by0(crc), rest,
+    List.append(&2, U32, ihdr.held(ww, hh, dd, cc, comp, ff, ii), [82, 68, 72, 73]), ww, hh, dd, cc, comp, ff, ii, hg)
+
+# png.good refuses a bit depth other than 8
+def good.depth(
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +comp: U32,
+  +ff: U32,
+  +ii: U32,
+  h_dd: {U32.is_eq(dd, 8) == False{} : Bool}
+) -> {Png.png.good(ww, hh, dd, cc, comp, ff, ii) == False{} : Bool}:
+  W5.shape_second(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), U32.is_eq(dd, 8), Png.png.col(cc), U32.is_zero(comp),
+    U32.is_zero(ff), U32.is_zero(ii), h_dd)
+
+# png.good refuses an interlace method other than 0
+def good.interlace(
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +comp: U32,
+  +ff: U32,
+  +ii: U32,
+  h_ii: {U32.is_eq(ii, 0) == False{} : Bool}
+) -> {Png.png.good(ww, hh, dd, cc, comp, ff, ii) == False{} : Bool}:
+  W5.shape_sixth(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), U32.is_eq(dd, 8), Png.png.col(cc), U32.is_zero(comp),
+    U32.is_zero(ff), U32.is_zero(ii), h_ii)
+
+# png.good refuses a colour type outside 0, 2, 3, 4 and 6
+def good.colour(
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +comp: U32,
+  +ff: U32,
+  +ii: U32,
+  h_cc: {Laws.spec.colour.ok(cc) == False{} : Bool}
+) -> {Png.png.good(ww, hh, dd, cc, comp, ff, ii) == False{} : Bool}:
+  W5.shape_third(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), U32.is_eq(dd, 8), Png.png.col(cc), U32.is_zero(comp),
+    U32.is_zero(ff), U32.is_zero(ii),
+    W5.or_regroup(U32.is_eq(cc, 0), U32.is_eq(cc, 2), Bool.or(U32.is_eq(cc, 3), Bool.or(U32.is_eq(cc, 4),
+      U32.is_eq(cc, 6))), h_cc))
+
+def Laws.png_depth_refused(ww, hh, dd, cc, comp, ff, ii, crc, rest, h_dd):
+  ihdr.refused(ww, hh, dd, cc, comp, ff, ii, crc, rest,
+    good.depth(be.back(ww), be.back(hh), dd, cc, comp, ff, ii, h_dd))
+
+def Laws.png_interlace_refused(ww, hh, dd, cc, comp, ff, ii, crc, rest, h_ii):
+  ihdr.refused(ww, hh, dd, cc, comp, ff, ii, crc, rest,
+    good.interlace(be.back(ww), be.back(hh), dd, cc, comp, ff, ii, h_ii))
+
+def Laws.png_colour_refused(ww, hh, dd, cc, comp, ff, ii, crc, rest, h_cc):
+  ihdr.refused(ww, hh, dd, cc, comp, ff, ii, crc, rest,
+    good.colour(be.back(ww), be.back(hh), dd, cc, comp, ff, ii, h_cc))
+
+# samples built onto an accumulator: the accumulator reversed, then the list, or none
+def onto(acc: List<&2, U32>, mm: Maybe<&2, List<&2, U32>>) -> Maybe<&2, List<&2, U32>>:
+  match mm:
+    case None{}:
+      None{}
+    case Some{ll}:
+      Some{List.reverse.go(&2, U32, acc, ll)}
+
+# one sample more on the accumulator is one sample more in front of the list
+def onto.cons(
+  +hd: U32,
+  +acc: List<&2, U32>,
+  mm: Maybe<&2, List<&2, U32>>
+) -> {onto(hd <> acc, mm) == onto(acc, Laws.spec.cons(hd, mm)) : Maybe<&2, List<&2, U32>>}:
+  match mm:
+    case None{}:
+      {==}
+    case Some{_ll}:
+      {==}
+
+# onto an empty accumulator is the list itself
+def onto.nil(mm: Maybe<&2, List<&2, U32>>) -> {onto([], mm) == mm : Maybe<&2, List<&2, U32>>}:
+  match mm:
+    case None{}:
+      {==}
+    case Some{_ll}:
+      {==}
+
+# px.grey without a key packs each byte as spec.grey does
+def grey.acc(
+  xs: List<&2, U32>,
+  +acc: List<&2, U32>
+) -> {Png.px.grey(xs, Png.KNone{}, acc) == Some{List.reverse.go(&2, U32, acc, Laws.spec.grey(xs))}
+  : Maybe<&2, List<&2, U32>>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case +gg <> tl:
+      grey.acc(tl, Png.px.pack(255, gg, gg, gg) <> acc)
+
+def Laws.png_px_grey(xs):
+  grey.acc(xs, [])
+
+# the code's key alpha is the specification's
+def hit.alpha(zz: Bool) -> {Png.px.hit.at(zz) == Laws.spec.key.alpha(zz) : U32}:
+  match zz:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# px.grey with a key packs each byte as spec.grey.key does
+def grey.key.acc(
+  xs: List<&2, U32>,
+  +kk: U32,
+  +acc: List<&2, U32>
+) -> {Png.px.grey(xs, Png.KGrey{kk}, acc) == Some{List.reverse.go(&2, U32, acc, Laws.spec.grey.key(xs, kk))}
+  : Maybe<&2, List<&2, U32>>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case +gg <> +tl:
+      Equal.trans(Maybe<&2, List<&2, U32>>,
+        Png.px.grey(tl, Png.KGrey{kk}, Png.px.pack(Png.px.hit(gg, kk), gg, gg, gg) <> acc),
+        Some{List.reverse.go(&2, U32, acc, Png.px.pack(Png.px.hit(gg, kk), gg, gg, gg) <> Laws.spec.grey.key(tl, kk))},
+        Some{List.reverse.go(&2, U32, acc, Laws.spec.argb(Laws.spec.key.alpha(U32.is_eq(gg, kk)), gg, gg, gg) <>
+          Laws.spec.grey.key(tl, kk))},
+        grey.key.acc(tl, kk, Png.px.pack(Png.px.hit(gg, kk), gg, gg, gg) <> acc),
+        Equal.cong(U32, Maybe<&2, List<&2, U32>>,
+          aa => Some{List.reverse.go(&2, U32, acc, Laws.spec.argb(aa, gg, gg, gg) <> Laws.spec.grey.key(tl, kk))},
+          Png.px.hit.at(U32.is_eq(gg, kk)), Laws.spec.key.alpha(U32.is_eq(gg, kk)), hit.alpha(U32.is_eq(gg, kk))))
+
+def Laws.png_px_grey_key(xs, kk):
+  grey.key.acc(xs, kk, [])
+
+# px.ga packs each pair as spec.ga does
+def ga.acc(
+  xs: List<&2, U32>,
+  +acc: List<&2, U32>
+) -> {Png.px.ga(xs, acc) == onto(acc, Laws.spec.ga(xs)) : Maybe<&2, List<&2, U32>>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case +gg <> t1:
+      match t1:
+        case Nil{}:
+          {==}
+        case +aa <> +tl:
+          Equal.trans(Maybe<&2, List<&2, U32>>,
+            Png.px.ga(tl, Png.px.pack(aa, gg, gg, gg) <> acc),
+            onto(Png.px.pack(aa, gg, gg, gg) <> acc, Laws.spec.ga(tl)),
+            onto(acc, Laws.spec.cons(Png.px.pack(aa, gg, gg, gg), Laws.spec.ga(tl))),
+            ga.acc(tl, Png.px.pack(aa, gg, gg, gg) <> acc),
+            onto.cons(Png.px.pack(aa, gg, gg, gg), acc, Laws.spec.ga(tl)))
+
+def Laws.png_px_ga(xs):
+  Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.ga(xs, []), onto([], Laws.spec.ga(xs)), Laws.spec.ga(xs),
+    ga.acc(xs, []), onto.nil(Laws.spec.ga(xs)))
+
+# px.rgb without a key packs each triple as spec.rgb does
+def rgb.acc(
+  xs: List<&2, U32>,
+  +acc: List<&2, U32>
+) -> {Png.px.rgb(xs, Png.KNone{}, acc) == onto(acc, Laws.spec.rgb(xs)) : Maybe<&2, List<&2, U32>>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case +rr <> t1:
+      match t1:
+        case Nil{}:
+          {==}
+        case +gg <> t2:
+          match t2:
+            case Nil{}:
+              {==}
+            case +bb <> +tl:
+              Equal.trans(Maybe<&2, List<&2, U32>>,
+                Png.px.rgb(tl, Png.KNone{}, Png.px.pack(255, rr, gg, bb) <> acc),
+                onto(Png.px.pack(255, rr, gg, bb) <> acc, Laws.spec.rgb(tl)),
+                onto(acc, Laws.spec.cons(Png.px.pack(255, rr, gg, bb), Laws.spec.rgb(tl))),
+                rgb.acc(tl, Png.px.pack(255, rr, gg, bb) <> acc),
+                onto.cons(Png.px.pack(255, rr, gg, bb), acc, Laws.spec.rgb(tl)))
+
+def Laws.png_px_rgb(xs, _plte):
+  Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.rgb(xs, Png.KNone{}, []), onto([], Laws.spec.rgb(xs)),
+    Laws.spec.rgb(xs), rgb.acc(xs, []), onto.nil(Laws.spec.rgb(xs)))
+
+# the key alpha of one triple
+def rgb.hit(+rr: U32, +gg: U32, +bb: U32, +kr: U32, +kg: U32, +kb: U32) -> Bool:
+  Bool.and(U32.is_eq(rr, kr), Bool.and(U32.is_eq(gg, kg), U32.is_eq(bb, kb)))
+
+# px.rgb with a key packs each triple as spec.rgb.key does
+def rgb.key.acc(
+  xs: List<&2, U32>,
+  +kr: U32,
+  +kg: U32,
+  +kb: U32,
+  +acc: List<&2, U32>
+) -> {Png.px.rgb(xs, Png.KRgb{kr, kg, kb}, acc) == onto(acc, Laws.spec.rgb.key(xs, kr, kg, kb))
+  : Maybe<&2, List<&2, U32>>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case +rr <> t1:
+      match t1:
+        case Nil{}:
+          {==}
+        case +gg <> t2:
+          match t2:
+            case Nil{}:
+              {==}
+            case +bb <> +tl:
+              Equal.trans(Maybe<&2, List<&2, U32>>,
+                Png.px.rgb(tl, Png.KRgb{kr, kg, kb}, Png.px.pack(Png.px.rgb.hit(rr, gg, bb, kr, kg, kb), rr, gg, bb) <>
+                  acc),
+                onto(Png.px.pack(Png.px.rgb.hit(rr, gg, bb, kr, kg, kb), rr, gg, bb) <> acc,
+                  Laws.spec.rgb.key(tl, kr, kg, kb)),
+                onto(acc, Laws.spec.cons(Laws.spec.argb(Laws.spec.key.alpha(rgb.hit(rr, gg, bb, kr, kg, kb)), rr, gg,
+                  bb), Laws.spec.rgb.key(tl, kr, kg, kb))),
+                rgb.key.acc(tl, kr, kg, kb, Png.px.pack(Png.px.rgb.hit(rr, gg, bb, kr, kg, kb), rr, gg, bb) <> acc),
+                Equal.trans(Maybe<&2, List<&2, U32>>,
+                  onto(Png.px.pack(Png.px.rgb.hit(rr, gg, bb, kr, kg, kb), rr, gg, bb) <> acc,
+                    Laws.spec.rgb.key(tl, kr, kg, kb)),
+                  onto(Laws.spec.argb(Laws.spec.key.alpha(rgb.hit(rr, gg, bb, kr, kg, kb)), rr, gg, bb) <> acc,
+                    Laws.spec.rgb.key(tl, kr, kg, kb)),
+                  onto(acc, Laws.spec.cons(Laws.spec.argb(Laws.spec.key.alpha(rgb.hit(rr, gg, bb, kr, kg, kb)), rr,
+                    gg, bb), Laws.spec.rgb.key(tl, kr, kg, kb))),
+                  Equal.cong(U32, Maybe<&2, List<&2, U32>>,
+                    aa => onto(Laws.spec.argb(aa, rr, gg, bb) <> acc, Laws.spec.rgb.key(tl, kr, kg, kb)),
+                    Png.px.hit.at(rgb.hit(rr, gg, bb, kr, kg, kb)),
+                    Laws.spec.key.alpha(rgb.hit(rr, gg, bb, kr, kg, kb)),
+                    hit.alpha(rgb.hit(rr, gg, bb, kr, kg, kb))),
+                  onto.cons(Laws.spec.argb(Laws.spec.key.alpha(rgb.hit(rr, gg, bb, kr, kg, kb)), rr, gg, bb), acc,
+                    Laws.spec.rgb.key(tl, kr, kg, kb))))
+
+def Laws.png_px_rgb_key(xs, _plte, kr, kg, kb):
+  Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.rgb(xs, Png.KRgb{kr, kg, kb}, []),
+    onto([], Laws.spec.rgb.key(xs, kr, kg, kb)), Laws.spec.rgb.key(xs, kr, kg, kb), rgb.key.acc(xs, kr, kg, kb, []),
+    onto.nil(Laws.spec.rgb.key(xs, kr, kg, kb)))
+
+# px.rgba packs each quadruple as spec.rgba does
+def rgba.acc(
+  xs: List<&2, U32>,
+  +acc: List<&2, U32>
+) -> {Png.px.rgba(xs, acc) == onto(acc, Laws.spec.rgba(xs)) : Maybe<&2, List<&2, U32>>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case +rr <> t1:
+      match t1:
+        case Nil{}:
+          {==}
+        case +gg <> t2:
+          match t2:
+            case Nil{}:
+              {==}
+            case +bb <> t3:
+              match t3:
+                case Nil{}:
+                  {==}
+                case +aa <> +tl:
+                  Equal.trans(Maybe<&2, List<&2, U32>>,
+                    Png.px.rgba(tl, Png.px.pack(aa, rr, gg, bb) <> acc),
+                    onto(Png.px.pack(aa, rr, gg, bb) <> acc, Laws.spec.rgba(tl)),
+                    onto(acc, Laws.spec.cons(Png.px.pack(aa, rr, gg, bb), Laws.spec.rgba(tl))),
+                    rgba.acc(tl, Png.px.pack(aa, rr, gg, bb) <> acc),
+                    onto.cons(Png.px.pack(aa, rr, gg, bb), acc, Laws.spec.rgba(tl)))
+
+def Laws.png_px_rgba(xs, _plte):
+  Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.rgba(xs, []), onto([], Laws.spec.rgba(xs)), Laws.spec.rgba(xs),
+    rgba.acc(xs, []), onto.nil(Laws.spec.rgba(xs)))
+
+# PLTE holds whole entries
+def triples(xs: List<&2, U32>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case _rr <> _gg <> _bb <> tl:
+      triples(tl)
+    case _xs:
+      False{}
+
+# a list when the answer is true, none otherwise
+def gate(zz: Bool, ll: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match zz:
+    case False{}:
+      None{}
+    case True{}:
+      Some{ll}
+
+# pal.make builds spec.pal's entries, when PLTE holds whole entries
+def pal.acc(
+  xs: List<&2, U32>,
+  +als: List<&2, U32>,
+  +acc: List<&2, U32>
+) -> {Png.pal.make(xs, als, acc) == gate(triples(xs), List.reverse.go(&2, U32, acc, Laws.spec.pal(xs, als)))
+  : Maybe<&2, List<&2, U32>>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case +rr <> t1:
+      match t1:
+        case Nil{}:
+          {==}
+        case +gg <> t2:
+          match t2:
+            case Nil{}:
+              {==}
+            case +bb <> tl:
+              match als:
+                case Nil{}:
+                  pal.acc(tl, [], Png.px.pack(255, rr, gg, bb) <> acc)
+                case +aa <> at:
+                  pal.acc(tl, at, Png.px.pack(aa, rr, gg, bb) <> acc)
+
+# px.at one entry further on, at the index less one
+def at.prev(tl: List<&2, U32>, +ix: U32) -> Maybe<&2, U32>:
+  Png.px.at(tl, U32.is_zero(U32.sub(ix, 1)), U32.sub(ix, 1))
+
+# one step of px.at, once whether the index is zero is known
+def at.step(
+  +hd: U32,
+  +tl: List<&2, U32>,
+  +ix: U32,
+  bz: Bool,
+  ez: {U32.is_zero(ix) == bz : Bool},
+  ih: {at.prev(tl, ix) == List.get(&2, U32, tl, U32.to_nat(U32.sub(ix, 1))) : Maybe<&2, U32>}
+) -> {Png.px.at(hd <> tl, bz, ix) == List.get(&2, U32, hd <> tl, U32.to_nat(ix)) : Maybe<&2, U32>}:
+  match bz:
+    case True{}:
+      e0 = Equal.sym(U32, ix, 0, U32L.ueq(ix, 0, ez))
+      %e0 : {Some{hd} == List.get(&2, U32, hd <> tl, U32.to_nat(_)) : Maybe<&2, U32>}
+      {==}
+    case False{}:
+      en = Equal.sym(Nat, U32.to_nat(ix), 1n+U32.to_nat(U32.sub(ix, 1)), W5.u32_dec(ix, ez))
+      %en : {Png.px.at(tl, U32.is_zero(U32.sub(ix, 1)), U32.sub(ix, 1)) == List.get(&2, U32, hd <> tl, _)
+        : Maybe<&2, U32>}
+      ih
+
+# px.at is the palette's entry at the index, as a Nat
+def at.get(
+  pal: List<&2, U32>,
+  +ix: U32
+) -> {Png.px.at(pal, U32.is_zero(ix), ix) == List.get(&2, U32, pal, U32.to_nat(ix)) : Maybe<&2, U32>}:
+  match pal:
+    case Nil{}:
+      {==}
+    case +hd <> +tl:
+      at.step(hd, tl, ix, U32.is_zero(ix), {==}, at.get(tl, U32.sub(ix, 1)))
+
+# what idx.acc says of the rest, with one entry more on the accumulator
+def idx.ih(+tl: List<&2, U32>, +pal: List<&2, U32>, +acc: List<&2, U32>, +cc: U32) -> Type:
+  {Png.px.idx(tl, pal, cc <> acc) == onto(cc <> acc, Laws.spec.idx(tl, pal)) : Maybe<&2, List<&2, U32>>}
+
+# one index of px.idx, once its entry is known
+def idx.step(
+  mm: Maybe<&2, U32>,
+  +tl: List<&2, U32>,
+  +pal: List<&2, U32>,
+  +acc: List<&2, U32>,
+  ih: @cc: U32 -> idx.ih(tl, pal, acc, cc)
+) -> {Png.px.use(mm, cc => Png.px.idx(tl, pal, {cc <> acc : List<&2, U32>})) ==
+  onto(acc, Laws.spec.idx.at(mm, Laws.spec.idx(tl, pal))) : Maybe<&2, List<&2, U32>>}:
+  match mm:
+    case None{}:
+      {==}
+    case Some{+cc}:
+      Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.idx(tl, pal, cc <> acc), onto(cc <> acc, Laws.spec.idx(tl, pal)),
+        onto(acc, Laws.spec.cons(cc, Laws.spec.idx(tl, pal))), ih(cc), onto.cons(cc, acc, Laws.spec.idx(tl, pal)))
+
+# px.idx looks each index up as spec.idx does
+def idx.acc(
+  xs: List<&2, U32>,
+  +pal: List<&2, U32>,
+  +acc: List<&2, U32>
+) -> {Png.px.idx(xs, pal, acc) == onto(acc, Laws.spec.idx(xs, pal)) : Maybe<&2, List<&2, U32>>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case +ix <> +tl:
+      Equal.trans(Maybe<&2, List<&2, U32>>,
+        Png.px.use(Png.px.at(pal, U32.is_zero(ix), ix), cc => Png.px.idx(tl, pal, {cc <> acc : List<&2, U32>})),
+        Png.px.use(List.get(&2, U32, pal, U32.to_nat(ix)), cc => Png.px.idx(tl, pal, {cc <> acc : List<&2, U32>})),
+        onto(acc, Laws.spec.idx.at(List.get(&2, U32, pal, U32.to_nat(ix)), Laws.spec.idx(tl, pal))),
+        Equal.cong(Maybe<&2, U32>, Maybe<&2, List<&2, U32>>,
+          mm => Png.px.use(mm, cc => Png.px.idx(tl, pal, {cc <> acc : List<&2, U32>})),
+          Png.px.at(pal, U32.is_zero(ix), ix), List.get(&2, U32, pal, U32.to_nat(ix)), at.get(pal, ix)),
+        idx.step(List.get(&2, U32, pal, U32.to_nat(ix)), tl, pal, acc, cc => idx.acc(tl, pal, cc <> acc)))
+
+# the palette passed the length check: the indices look up spec.idx
+def indexed.le(
+  zz: Bool,
+  +xs: List<&2, U32>,
+  +pal: List<&2, U32>,
+  h_some: {Maybe.is_some(&2, List<&2, U32>, Png.px.indexed.at(Png.pal.gate(zz, pal), xs)) == True{} : Bool}
+) -> {Png.px.indexed.at(Png.pal.gate(zz, pal), xs) == Laws.spec.idx(xs, pal) : Maybe<&2, List<&2, U32>>}:
+  match zz:
+    case False{}:
+      Empty.absurd({None{} == Laws.spec.idx(xs, pal) : Maybe<&2, List<&2, U32>>}, U32L.false_true(h_some))
+    case True{}:
+      Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.idx(xs, pal, []), onto([], Laws.spec.idx(xs, pal)),
+        Laws.spec.idx(xs, pal), idx.acc(xs, pal, []), onto.nil(Laws.spec.idx(xs, pal)))
+
+# the indexed samples of a palette that is some or none
+def ixd(tr: Bool, xs: List<&2, U32>, trns: List<&2, U32>, pal: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  Png.px.indexed.at(Png.pal.ready(gate(tr, pal), trns), xs)
+
+# PLTE held whole entries or not: none is ruled out, and the rest is indexed.le
+def indexed.tr(
+  tr: Bool,
+  +xs: List<&2, U32>,
+  +trns: List<&2, U32>,
+  +pal: List<&2, U32>,
+  h_some: {Maybe.is_some(&2, List<&2, U32>, ixd(tr, xs, trns, pal)) == True{} : Bool}
+) -> {ixd(tr, xs, trns, pal) == Laws.spec.idx(xs, pal) : Maybe<&2, List<&2, U32>>}:
+  match tr:
+    case False{}:
+      Empty.absurd({None{} == Laws.spec.idx(xs, pal) : Maybe<&2, List<&2, U32>>}, U32L.false_true(h_some))
+    case True{}:
+      indexed.le(Png.png.le(trns, pal), xs, pal, h_some)
+
+def Laws.png_px_indexed(xs, plte, trns, h_some):
+  +ep = {pal.acc(plte, trns, []) : {Png.pal.make(plte, trns, []) == gate(triples(plte), Laws.spec.pal(plte, trns))
+    : Maybe<&2, List<&2, U32>>}}
+  +hs = Equal.trans(Bool,
+    Maybe.is_some(&2, List<&2, U32>, Png.px.indexed.at(Png.pal.ready(gate(triples(plte), Laws.spec.pal(plte, trns)),
+      trns), xs)),
+    Maybe.is_some(&2, List<&2, U32>, Png.px.indexed.at(Png.pal.ready(Png.pal.make(plte, trns, []), trns), xs)),
+    True{},
+    Equal.sym(Bool,
+      Maybe.is_some(&2, List<&2, U32>, Png.px.indexed.at(Png.pal.ready(Png.pal.make(plte, trns, []), trns), xs)),
+      Maybe.is_some(&2, List<&2, U32>, Png.px.indexed.at(Png.pal.ready(gate(triples(plte), Laws.spec.pal(plte,
+        trns)), trns), xs)),
+      Equal.cong(Maybe<&2, List<&2, U32>>, Bool,
+        mm => Maybe.is_some(&2, List<&2, U32>, Png.px.indexed.at(Png.pal.ready(mm, trns), xs)),
+        Png.pal.make(plte, trns, []), gate(triples(plte), Laws.spec.pal(plte, trns)), ep)),
+    h_some)
+  Equal.trans(Maybe<&2, List<&2, U32>>,
+    Png.px.indexed.at(Png.pal.ready(Png.pal.make(plte, trns, []), trns), xs),
+    Png.px.indexed.at(Png.pal.ready(gate(triples(plte), Laws.spec.pal(plte, trns)), trns), xs),
+    Laws.spec.idx(xs, Laws.spec.pal(plte, trns)),
+    Equal.cong(Maybe<&2, List<&2, U32>>, Maybe<&2, List<&2, U32>>,
+      mm => Png.px.indexed.at(Png.pal.ready(mm, trns), xs),
+      Png.pal.make(plte, trns, []), gate(triples(plte), Laws.spec.pal(plte, trns)), ep),
+    indexed.tr(triples(plte), xs, trns, Laws.spec.pal(plte, trns), hs))
+
+# png.pic is spec.pic
+def pic.frame(
+  mm: Maybe<&2, List<&2, U32>>,
+  +ww: U32,
+  +hh: U32
+) -> {Png.png.pic(mm, ww, hh) == Laws.spec.pic(mm, ww, hh) : Maybe<&2, Png.Pic>}:
+  match mm:
+    case None{}:
+      {==}
+    case Some{_px}:
+      {==}
+
+# png.pack is px.of of the unfiltered bytes, whatever unfilter answered
+def pack.frame(
+  mm: Maybe<&2, List<&2, U32>>,
+  +ww: U32,
+  +hh: U32,
+  +colour: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> {Png.png.pack(mm, ww, hh, colour, plte, trns) == Laws.spec.pic(Laws.spec.px.then(mm, colour, plte, trns), ww, hh)
+  : Maybe<&2, Png.Pic>}:
+  match mm:
+    case None{}:
+      {==}
+    case Some{raw}:
+      pic.frame(Png.px.of(colour, raw, plte, trns), ww, hh)
+
+def Laws.png_samples_frame(raw, ww, hh, colour, plte, trns):
+  pack.frame(Png.unfilter(raw, ww, hh, Png.png.bpp(colour)), ww, hh, colour, plte, trns)
