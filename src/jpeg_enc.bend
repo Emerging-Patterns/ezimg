@@ -1,6 +1,6 @@
 # src/jpeg_enc: baseline JPEG encode. Sequential 8-bit Huffman (SOF0) and JFIF APP0.
 # Colour is 4:4:4 YCbCr, no subsampling: one 8 by 8 block per component per MCU.
-# Samples are packed RGB, (R << 16) | (G << 8) | B, the same layout decode returns.
+# Samples are packed 0xAARRGGBB, the layout decode returns; the alpha byte is ignored.
 # Quantisation steps are all 1, so an integer coefficient is kept whole.
 # The forward DCT (T.81 A.3.3) pairs samples that share a cosine weight, then
 # rounds once with the same fixed-point product as a matrix column.

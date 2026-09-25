@@ -2,7 +2,8 @@
 
 import Base
 
-# a decoded picture: width, height, and row-major samples
+# a decoded picture: width, height, and row-major samples, each packed
+# 0xAARRGGBB with alpha 255
 type Pic is Data:
   Pic{w: U32, h: U32, pixels: List<&2, U32>}
 
@@ -1204,14 +1205,41 @@ def decode.round.s(ss: U32, +prod: U32) -> U32:
 def decode.round(+prod: U32) -> U32:
   decode.round.s(decode.sign(prod), prod)
 
-# YCbCr to a packed sample, (R << 16) | (G << 8) | B, per JFIF T.871
-def rgb(+yy: U32, +cb: U32, +cr: U32) -> U32:
+# a sample's colour bits made opaque: alpha 255 over the low 24 bits. The
+# constant is the first operand, so a law over any sample sees its alpha
+# without a case split on the sample's bits.
+def opaque(+xx: U32) -> U32:
+  U32.or(4278190080, xx)
+
+# YCbCr to colour bits, (R << 16) | (G << 8) | B, per JFIF T.871
+def rgb.bits(+yy: U32, +cb: U32, +cr: U32) -> U32:
   +cbd = (cb - 128 : U32)
   +crd = (cr - 128 : U32)
   +r = decode.clamp8((yy + decode.round((crd * 91881 : U32)) : U32))
   +g = decode.clamp8((yy - decode.round((cbd * 22553 : U32)) - decode.round((crd * 46802 : U32)) : U32))
   +b = decode.clamp8((yy + decode.round((cbd * 116130 : U32)) : U32))
   U32.or(U32.or(U32.shln(r, 16n), U32.shln(g, 8n)), b)
+
+# YCbCr to a packed opaque sample, 0xFFRRGGBB
+def rgb(+yy: U32, +cb: U32, +cr: U32) -> U32:
+  opaque(rgb.bits(yy, cb, cr))
+
+# a gray level's low byte in R, G and B
+def gray.bits(+yy: U32) -> U32:
+  +vv = U32.and(255, yy)
+  U32.or(U32.shln(vv, 16n), U32.or(U32.shln(vv, 8n), vv))
+
+# a gray level as a packed opaque sample, 0xFFvvvvvv
+def gray(+yy: U32) -> U32:
+  opaque(gray.bits(yy))
+
+# every gray level of a picture as a packed opaque sample
+def decode.grays(ys: List<&2, U32>) -> List<&2, U32>:
+  match ys:
+    case Nil{}:
+      Nil{}
+    case yv <> rest:
+      gray(yv) <> decode.grays(rest)
 
 def decode.rgbpass.end(got: Array<U32> & U32, out: Array<U32>) -> Array<U32>:
   +_u = decode.sink.pair(got)
@@ -1261,7 +1289,7 @@ def decode.done.drop(yy: Array<U32>, cb: Array<U32>, cr: Array<U32>) -> Maybe<&2
 def decode.done.gray(+ww: U32, +hh: U32, yy: Array<U32>, cb: Array<U32>, cr: Array<U32>) -> Maybe<&2, Pic>:
   +_b = decode.sink(cb)
   +_c = decode.sink(cr)
-  Some{Pic{ww, hh, decode.emit(U32.to_nat((ww * hh : U32)), (yy, 0), 0, [], False{})}}
+  Some{Pic{ww, hh, decode.grays(decode.emit(U32.to_nat((ww * hh : U32)), (yy, 0), 0, [], False{}))}}
 
 def decode.done.color(+ww: U32, +hh: U32, yy: Array<U32>, cb: Array<U32>, cr: Array<U32>) -> Maybe<&2, Pic>:
   +n = (ww * hh : U32)
