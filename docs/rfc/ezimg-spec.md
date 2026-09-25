@@ -287,7 +287,7 @@ bug.
 | :---- | :---- | :---- | :---- |
 | BC-1 (landed): JPEG decode returns `0xFFrrggbb`, gray repeated in R, G, B | IMG-PIX-1 | 1 | code reading JPEG samples as `0x00rrggbb` or as a lone Y |
 | BC-2 (landed): every luma block placed where T.81 A.2.3 puts it, which fixes 4:2:2 and every other non-square MCU; the wording of the refusal is REVIEW-13 | IMG-JPG-2 | 2 | nothing that worked |
-| BC-3: `encode_jpeg` returns `Maybe` | IMG-JPG-4 | 3 | every caller of `encode_jpeg` |
+| BC-3 (landed): `encode_jpeg` returns `Maybe` | IMG-JPG-4 | 3 | every caller of `encode_jpeg` |
 | BC-4: `premultiply` and `straight` removed | none | 4 | callers of two identity functions |
 
 BC-1, BC-3 and BC-4 are API breaks and ship together as 0.3.0.

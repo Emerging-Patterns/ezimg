@@ -368,8 +368,17 @@ def decode_jpeg.out(got: Maybe<&2, Jpeg.Pic>) -> Maybe<&2, Raster>:
 def decode_jpeg(bytes: List<&2, U32>) -> Maybe<&2, Raster>:
   decode_jpeg.out(Jpeg.decode(bytes))
 
-# a baseline sequential 4:4:4 JPEG of the samples' colour; alpha is dropped
-def encode_jpeg(img: Raster) -> List<&2, U32>:
+def encode_jpeg.pick(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match ok:
+    case False{}:
+      None{}
+    case True{}:
+      Some{Jenc.encode(ww, hh, px)}
+
+# a baseline sequential 4:4:4 JPEG of the samples' colour, alpha dropped. None
+# exactly when encode_png is none: a side is zero, the area passes 2^32, or the
+# sample count is not the area. Both ask the same guard, Png.enc.good.
+def encode_jpeg(img: Raster) -> Maybe<&2, List<&2, U32>>:
   match img:
-    case Raster{+w, +h, px}:
-      Jenc.encode(w, h, px)
+    case Raster{+w, +h, +px}:
+      encode_jpeg.pick(Png.enc.good(w, h, px), w, h, px)
