@@ -1018,8 +1018,8 @@ def colour_type(opq: Bool) -> U32:
 
 # a word's four bytes, most significant first
 def be32(+nn: U32) -> List<&2, U32>:
-  [((nn >> 24n : U32) .&. 255 : U32), ((nn >> 16n : U32) .&. 255 : U32), ((nn >> 8n : U32) .&. 255 : U32),
-    (nn .&. 255 : U32)]
+  [(255 .&. (nn >> 24n : U32) : U32), (255 .&. (nn >> 16n : U32) : U32), (255 .&. (nn >> 8n : U32) : U32),
+    (255 .&. nn : U32)]
 
 # the signature, then IHDR's length (13), its type, and its data: width,
 # height, bit depth 8, the colour type, compression 0, filter 0, interlace 0
