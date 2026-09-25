@@ -244,6 +244,11 @@ with the constant second. Code that sets or masks bits a law will reach puts
 the constant first, and names the step (`Jpeg.opaque`, `Jpeg.rgb.bits`) so
 the proof can apply a lemma to it.
 
+A numeric literal in a pattern (`case 137 <> rest`) compiles to a match on
+the literal's 32 constant bits, so a law over a symbolic byte cannot get past
+it. Code a law reaches compares a byte with `U32.is_eq` instead, for which
+`proof/u32.bend` proves `ueq`: `U32.is_eq(a, b) == True` gives `a == b`.
+
 ### Retiring closed laws
 
 All 85 go in one PR (REVIEW-10), together with `Jenc.spots` and marker defs
