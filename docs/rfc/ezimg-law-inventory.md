@@ -302,3 +302,11 @@ requirement depends on.
 - "Full codec conformance is not claimed yet" (README) is accurate; the
   Compliance section above it reads as a list of conformance results but
   each line is one fixture.
+
+## Progress
+
+| Step | State | What landed |
+| :---- | :---- | :---- |
+| Audit and RFC | done | this inventory and `docs/rfc/ezimg-spec.md`; every REVIEW item accepted as recommended |
+| Layout | done | `main.bend` and `src/`, `LAWS.bend` and `PROOF.bend` at the root; `bench/bolt.bend` sets the driver's law rules to warn; ez test, bolt, and the Pillow check pass on a fresh copy |
+| Phase 1, bolt v1.7.0 | next | |

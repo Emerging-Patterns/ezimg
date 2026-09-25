@@ -2,27 +2,29 @@
 
 ## Draft Status
 
-Draft. Written from `cbc4358` (release 0.2.1) and the evidence in
+Accepted. Written from `cbc4358` (release 0.2.1) and the evidence in
 `docs/rfc/ezimg-law-inventory.md`, which this RFC cites by finding number
-(F-1 to F-9). Nothing in this change alters behavior. Every requirement
-below is `pending` until its rollout phase.
+(F-1 to F-9). The maintainer accepted every recommendation below, and asked
+that the package first move to the layout `ez init` lays out (`main.bend`
+at the top, the modules under `src/`), which it has. Every requirement is
+`pending` until its rollout phase.
 
 The items are numbered because some depend on others. REVIEW-1 comes first
 because the rows in the IMG-PIX, IMG-PNG and IMG-JPG groups are worded
 against its answer.
 
-- [ ] <!-- REVIEW-1: One sample format. PNG decode returns 0xAARRGGBB, JPEG colour decode 0x00RRGGBB, JPEG gray decode the Y value alone (F-1), so a JPEG saved as PNG is fully transparent. Options: (a) every decoder returns 0xAARRGGBB, JPEG samples with alpha 255 and gray repeated in R, G, B; (b) keep per-format layouts and document them; (c) a tagged sample type. Recommend (a): it is what the bench and Pillow already compare against, encode_png already reads it, and it makes IMG-PIX-1 one row instead of three. Behavior change for JPEG users (BC-1). -->
-- [ ] <!-- REVIEW-2: 4:2:2 JPEG returns a wrong picture (F-2). Options: (a) fix the MCU layout for H=2, V=1 and keep 4:2:0 and 4:2:2; (b) refuse every sampling other than 1x1 and 2x2 luma. Recommend (a), since the decoder already carries sampling factors in Geom and 4:2:0 luma is right; the fix lands with IMG-JPG-2's law. Either way a sampling the decoder cannot place must be none, never a raster. -->
-- [ ] <!-- REVIEW-3: encode_jpeg cannot refuse (F-4). Options: (a) return Maybe, none exactly when encode_png is none; (b) keep List and make a 0 by 0 or malformed raster encode something fixed. Recommend (a), matching encode_png. API break, so it ships in the same minor release as BC-1 (0.3.0). -->
-- [ ] <!-- REVIEW-4: premultiply and straight are the identity (F-5). Options: (a) implement them on 0xAARRGGBB: each colour channel c becomes (c * a + 127) / 255, and straight divides back where a > 0; (b) delete them. Recommend (b): nothing in ezimg calls them, their only laws hold because they are the identity, and a correct pair is a feature to add later through spec-first-feature with its own row. Deleting is an API break, so it rides 0.3.0. -->
-- [ ] <!-- REVIEW-5: No well-formedness invariant (F-3). Options: (a) state every raster row over well-formed rasters (sample count = w * h as a Nat) and add a Proved row that every helper maps well-formed inputs to well-formed outputs; (b) make raster return Maybe and hide the constructor. Recommend (a): no API change, and the law-side predicate is the invariant. -->
-- [ ] <!-- REVIEW-6: Headline guarantee. Recommend IMG-PNG-2, "a well-formed raster with nonzero sides round-trips through encode_png and decode_png exactly". It is the one lossless promise the library makes, it is what users rely on when they save, and it forces IMG-PIX-1 and IMG-PNG-9 to be stated precisely. -->
-- [ ] <!-- REVIEW-7: PNG strictness (F-6). decode_png rejects a bad CRC on any chunk, trailing IDAT bytes, a missing PLTE and an index past the palette; Pillow reads all four. Recommend keeping strict: the PNG spec allows it, it is easier to state exactly (IMG-PNG-5, IMG-PNG-8), and a lenient mode can be a later feature. No behavior change. -->
-- [ ] <!-- REVIEW-8: PNG bit depths 1, 2, 4 and interlace (F-7). A 16-colour Pillow PNG is depth 4 and does not load. Recommend: out of scope for this rollout, stated as a refusal in IMG-PNG-8 now, and added later through spec-first-feature, which rewords IMG-PNG-8. -->
-- [ ] <!-- REVIEW-9: The JPEG round-trip bound (IMG-JPG-3). The encoder uses quantisation step 1, so decode(encode(r)) is close but not exact: 3 levels per channel on the Pillow check, and (220, 40, 40) comes back as (220, 40, 41). Recommend stating the bound as 3 per channel, Proved and pending, proved last; the law needs error bounds on the fixed-point DCT, the most expensive proof here. The alternative, making it Trusted, would leave the JPEG group with no content guarantee. -->
-- [ ] <!-- REVIEW-10: Retiring the 85 closed laws. Recommend deleting all 85 in one PR once SPEC.md lands (bolt's route), with the inventory's Points toward column as the map. None of them is a guarantee, 20 point toward nothing, and 5 pin the sample format REVIEW-1 changes. With them go Jenc.spots and any marker def only a closed law names (F-9). -->
-- [ ] <!-- REVIEW-11: bolt pin. The flake pins bolt 995adc9 (v0.4.0), whose only law rules are coverage and a weak closed rule; trace needs v1.2.0 or newer. Recommend moving to v1.7.0 first, with laws at warn, and fixing its 987 style findings in that PR, so later PRs are not buried. closed and trace go to error in the PR that deletes the closed laws and lands SPEC.md. -->
-- [ ] <!-- REVIEW-12: fill and count wrap at w * h >= 2^32 (F-8). Recommend no change: state IMG-RAS-1 for w * h < 2^32, since fill cannot refuse without a Maybe and nobody allocates four billion samples in a List. -->
+- [x] <!-- REVIEW-1 (resolved): One sample format. PNG decode returns 0xAARRGGBB, JPEG colour decode 0x00RRGGBB, JPEG gray decode the Y value alone (F-1), so a JPEG saved as PNG is fully transparent. Options: (a) every decoder returns 0xAARRGGBB, JPEG samples with alpha 255 and gray repeated in R, G, B; (b) keep per-format layouts and document them; (c) a tagged sample type. Recommend (a): it is what the bench and Pillow already compare against, encode_png already reads it, and it makes IMG-PIX-1 one row instead of three. Behavior change for JPEG users (BC-1). Decided: accepted as recommended. -->
+- [x] <!-- REVIEW-2 (resolved): 4:2:2 JPEG returns a wrong picture (F-2). Options: (a) fix the MCU layout for H=2, V=1 and keep 4:2:0 and 4:2:2; (b) refuse every sampling other than 1x1 and 2x2 luma. Recommend (a), since the decoder already carries sampling factors in Geom and 4:2:0 luma is right; the fix lands with IMG-JPG-2's law. Either way a sampling the decoder cannot place must be none, never a raster. Decided: accepted as recommended. -->
+- [x] <!-- REVIEW-3 (resolved): encode_jpeg cannot refuse (F-4). Options: (a) return Maybe, none exactly when encode_png is none; (b) keep List and make a 0 by 0 or malformed raster encode something fixed. Recommend (a), matching encode_png. API break, so it ships in the same minor release as BC-1 (0.3.0). Decided: accepted as recommended. -->
+- [x] <!-- REVIEW-4 (resolved): premultiply and straight are the identity (F-5). Options: (a) implement them on 0xAARRGGBB: each colour channel c becomes (c * a + 127) / 255, and straight divides back where a > 0; (b) delete them. Recommend (b): nothing in ezimg calls them, their only laws hold because they are the identity, and a correct pair is a feature to add later through spec-first-feature with its own row. Deleting is an API break, so it rides 0.3.0. Decided: accepted as recommended. -->
+- [x] <!-- REVIEW-5 (resolved): No well-formedness invariant (F-3). Options: (a) state every raster row over well-formed rasters (sample count = w * h as a Nat) and add a Proved row that every helper maps well-formed inputs to well-formed outputs; (b) make raster return Maybe and hide the constructor. Recommend (a): no API change, and the law-side predicate is the invariant. Decided: accepted as recommended. -->
+- [x] <!-- REVIEW-6 (resolved): Headline guarantee. Recommend IMG-PNG-2, "a well-formed raster with nonzero sides round-trips through encode_png and decode_png exactly". It is the one lossless promise the library makes, it is what users rely on when they save, and it forces IMG-PIX-1 and IMG-PNG-9 to be stated precisely. Decided: accepted as recommended. -->
+- [x] <!-- REVIEW-7 (resolved): PNG strictness (F-6). decode_png rejects a bad CRC on any chunk, trailing IDAT bytes, a missing PLTE and an index past the palette; Pillow reads all four. Recommend keeping strict: the PNG spec allows it, it is easier to state exactly (IMG-PNG-5, IMG-PNG-8), and a lenient mode can be a later feature. No behavior change. Decided: accepted as recommended. -->
+- [x] <!-- REVIEW-8 (resolved): PNG bit depths 1, 2, 4 and interlace (F-7). A 16-colour Pillow PNG is depth 4 and does not load. Recommend: out of scope for this rollout, stated as a refusal in IMG-PNG-8 now, and added later through spec-first-feature, which rewords IMG-PNG-8. Decided: accepted as recommended. -->
+- [x] <!-- REVIEW-9 (resolved): The JPEG round-trip bound (IMG-JPG-3). The encoder uses quantisation step 1, so decode(encode(r)) is close but not exact: 3 levels per channel on the Pillow check, and (220, 40, 40) comes back as (220, 40, 41). Recommend stating the bound as 3 per channel, Proved and pending, proved last; the law needs error bounds on the fixed-point DCT, the most expensive proof here. The alternative, making it Trusted, would leave the JPEG group with no content guarantee. Decided: accepted as recommended. -->
+- [x] <!-- REVIEW-10 (resolved): Retiring the 85 closed laws. Recommend deleting all 85 in one PR once SPEC.md lands (bolt's route), with the inventory's Points toward column as the map. None of them is a guarantee, 20 point toward nothing, and 5 pin the sample format REVIEW-1 changes. With them go Jenc.spots and any marker def only a closed law names (F-9). Decided: accepted as recommended. -->
+- [x] <!-- REVIEW-11 (resolved): bolt pin. The flake pins bolt 995adc9 (v0.4.0), whose only law rules are coverage and a weak closed rule; trace needs v1.2.0 or newer. Recommend moving to v1.7.0 first, with laws at warn, and fixing its 987 style findings in that PR, so later PRs are not buried. closed and trace go to error in the PR that deletes the closed laws and lands SPEC.md. Decided: accepted as recommended. The move to the `main.bend` and `src/` layout came first, at the maintainer's request, and brought bench/ under the law rule; `bench/bolt.bend` sets the laws group to warn for the driver alone until the bolt move. -->
+- [x] <!-- REVIEW-12 (resolved): fill and count wrap at w * h >= 2^32 (F-8). Recommend no change: state IMG-RAS-1 for w * h < 2^32, since fill cannot refuse without a Maybe and nobody allocates four billion samples in a List. Decided: accepted as recommended. -->
 
 ## Abstract
 
@@ -264,7 +266,7 @@ IMG-PNG-2 and IMG-JPG-3.
 
 ### Decided behavior changes
 
-Proposed, pending the REVIEW items. Each lands as its own PR, with master's
+Decided (REVIEW-1 to REVIEW-4). Each lands as its own PR, with master's
 bench driver and the branch's run side by side on the cases that found the
 bug.
 
@@ -322,6 +324,7 @@ bolt: it is a test under another name.
 | Phase | What lands | Leaves true |
 | :---- | :---- | :---- |
 | 0 | This RFC and the inventory | nothing changes; the evidence is reviewable |
+| layout | `main.bend` at the top and the modules under `src/`, as `ez init` lays them out; `bench/bolt.bend` keeps the driver's law rules at warn | the package has the shape its siblings have; no def changed |
 | 1 | bolt v1.7.0 with laws at warn; its 987 style findings fixed | the tree lints clean on a bolt that has `trace` |
 | 2 | SPEC.md with every row pending; all 85 closed laws, `spots` and law-only markers deleted; `closed` and `trace` at error; the README's Compliance section points at SPEC.md | the gate says exactly what is proved (nothing yet) |
 | 3 | BC-1 to BC-4, one PR each | no confirmed bug remains |
