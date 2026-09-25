@@ -3,6 +3,7 @@
 import Base
 import ./LAWS.bend as Laws
 import ./proof/u32.bend as U32L
+import ./proof/wp1-crc.bend as Wp1
 import ./main.bend as Img
 import ./src/png.bend as Png
 import ./src/jpeg.bend as Jpeg
@@ -217,3 +218,13 @@ def sig.only.go(
 
 def Laws.sig_only(xs, h_some):
   sig.only.go(Img.sig.match(Img.png_sig(), xs, True{}), xs, {==}, h_some)
+
+# ---- wp1-crc ----
+
+def Laws.crc32_bitwise(xs):
+  Wp1.crc32_ref(xs)
+
+def Laws.png_crc_refused(pre, bad, rest, h_pre, h_bad, h_crc):
+  Equal.cong(Maybe<&2, Png.Pic>, Maybe<&2, Img.Raster>, mm => Img.decode_png.pic(mm),
+    Png.png.go(Laws.chunks.onto(pre, Laws.chunk.onto(bad, rest)), Png.ZLen{}, False{}, 0, 0, [], [], Png.pg.empty()),
+    None{}, Wp1.walk_all(pre, bad, rest, Png.pg.empty(), h_pre, h_bad, h_crc))
