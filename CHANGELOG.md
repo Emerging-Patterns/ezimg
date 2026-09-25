@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.0.0](https://github.com/Emerging-Patterns/ezimg/compare/v1.0.0...v2.0.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* premultiply and straight are removed from main.bend.
+* encode_jpeg returns Maybe<&2, List<&2, U32>>.
+
+### Features
+
+* prove IMG-PIX-2 (JPEG encode ignores alpha) and IMG-RAS-5 (map) ([#44](https://github.com/Emerging-Patterns/ezimg/issues/44)) ([037b1ee](https://github.com/Emerging-Patterns/ezimg/commit/037b1eedbfc957d06cf35ea5a1a8ad0cc35b75a2))
+
+
+### Bug Fixes
+
+* encode_jpeg returns Maybe and refuses what encode_png refuses ([#42](https://github.com/Emerging-Patterns/ezimg/issues/42)) ([33a2ef4](https://github.com/Emerging-Patterns/ezimg/commit/33a2ef429506f4abccd46fceef051644d769706b))
+* remove premultiply and straight ([#43](https://github.com/Emerging-Patterns/ezimg/issues/43)) ([8573fb1](https://github.com/Emerging-Patterns/ezimg/commit/8573fb16f221e1bee6806614e8ec7bfd3c6fc7b5))
+
 ## [1.0.0](https://github.com/Emerging-Patterns/ezimg/compare/v0.2.1...v1.0.0) (2026-09-25)
 
 
