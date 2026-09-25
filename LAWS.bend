@@ -74,3 +74,9 @@ law map_at:
   for +kk: Nat
   {List.get(&2, U32, Img.pixels(Img.map(~ff, img)), kk) ==
     opt.map(~ff, List.get(&2, U32, Img.pixels(img), kk)) : Maybe<&2, U32>}
+
+# LAW: bytes that open with the eight signature bytes parse as the signature, whatever follows
+# IMG-PNG-1
+law sig_opens:
+  for +rest: List<&2, U32>
+  {Img.parse_signature(List.append(&2, U32, Img.png_sig(), rest)) == Some{Img.png_sig()} : Maybe<&2, List<&2, U32>>}

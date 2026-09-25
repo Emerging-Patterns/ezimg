@@ -129,3 +129,6 @@ def Laws.map_at(ff, img, kk):
   match img:
     case Img.Raster{_ww, _hh, px}:
       map.go.at(~ff, px, kk)
+
+def Laws.sig_opens(_rest):
+  {==}
