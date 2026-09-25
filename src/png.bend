@@ -166,16 +166,10 @@ def uf.nth(xs: List<&2, U32>, zz: Bool, +ii: U32) -> U32:
     case _h <> t False{}:
       uf.nth(t, U32.is_zero((ii - 1 : U32)), (ii - 1 : U32))
 
-def uf.back.at(zz: Bool, xs: List<&2, U32>, +ii: U32) -> U32:
-  match zz:
-    case True{}:
-      0
-    case False{}:
-      uf.nth(xs, U32.is_zero(ii), ii)
-
-# the byte `bpp` back, or zero before the first pixel
-def uf.back(xs: List<&2, U32>, +bpp: U32, +xx: U32) -> U32:
-  uf.back.at(U32.is_lt(xx, bpp), xs, (bpp - 1 : U32))
+# the byte `bpp` back, or zero before the first pixel: `xs` holds the bytes
+# before this one in the row, newest first, so it is too short there
+def uf.back(xs: List<&2, U32>, +bpp: U32) -> U32:
+  uf.nth(xs, U32.is_zero((bpp - 1 : U32)), (bpp - 1 : U32))
 
 def uf.bb(prest: List<&2, U32>) -> U32:
   match prest:
@@ -228,8 +222,9 @@ def uf.paeth(+aa: U32, +bb: U32, +cc: U32) -> U32:
 def uf.avg(+aa: U32, +bb: U32) -> U32:
   ((aa + bb : U32) >> 1n : U32)
 
+# a reconstructed byte: filtered byte plus predictor, mod 256 (mask first)
 def uf.add(+ff: U32, +pp: U32) -> U32:
-  ((ff + pp : U32) .&. 255 : U32)
+  U32.and(255, (ff + pp : U32))
 
 def uf.p4(z4: Bool, +aa: U32, +bb: U32, +cc: U32) -> U32:
   match z4:
@@ -266,12 +261,11 @@ def uf.recon(
   +ff: U32,
   +ft: U32,
   +bpp: U32,
-  +xx: U32,
   prest: List<&2, U32>,
   phist: List<&2, U32>,
   cur: List<&2, U32>
 ) -> U32:
-  uf.add(ff, uf.pred(ft, uf.back(cur, bpp, xx), uf.bb(prest), uf.back(phist, bpp, xx)))
+  uf.add(ff, uf.pred(ft, uf.back(cur, bpp), uf.bb(prest), uf.back(phist, bpp)))
 
 def uf.phase(zz: Bool) -> Uf:
   match zz:
@@ -290,6 +284,9 @@ def uf.done(rows: Nat, all: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
     case 1n+_p:
       None{}
 
+# walk the filtered stream: a filter byte opens each row (UFilt), then its
+# bytes (UBody). `left` counts the row's bytes after the current one, and
+# `zlast`, whether it is zero, marks the row's last byte.
 def uf.go(
   xs: List<&2, U32>,
   ph: Uf,
@@ -301,7 +298,7 @@ def uf.go(
   +phist: List<&2, U32>,
   +cur: List<&2, U32>,
   all: List<&2, U32>,
-  +xx: U32,
+  +left: U32,
   +ft: U32
 ) -> Maybe<&2, List<&2, U32>>:
   match xs ph zlast:
@@ -315,22 +312,23 @@ def uf.go(
           None{}
         case 1n++r:
           uf.go(
-            rest, uf.phase(U32.is_le(b, 4)), U32.is_eq(stride, 1), bpp, stride, r,
-            prest, [], [], all, 0, b
+            rest, uf.phase(U32.is_le(b, 4)), U32.is_zero((stride - 1 : U32)), bpp, stride, r,
+            prest, [], [], all, (stride - 1 : U32), b
           )
     case +b <> rest UBody{} True{}:
-      +y = uf.recon(b, ft, bpp, xx, prest, phist, cur)
+      +y = uf.recon(b, ft, bpp, prest, phist, cur)
       +cur2 = {y <> cur : List<&2, U32>}
       uf.go(
         rest, UFilt{}, False{}, bpp, stride, rows, List.reverse(&2, U32, cur2),
         [], [], {y <> all : List<&2, U32>}, 0, 0
       )
     case +b <> rest UBody{} False{}:
-      +y = uf.recon(b, ft, bpp, xx, prest, phist, cur)
+      +y = uf.recon(b, ft, bpp, prest, phist, cur)
+      +nl = (left - 1 : U32)
       uf.go(
-        rest, UBody{}, U32.is_eq((xx + 2 : U32), stride), bpp, stride, rows,
+        rest, UBody{}, U32.is_zero(nl), bpp, stride, rows,
         uf.drop(prest), uf.push(prest, phist), {y <> cur : List<&2, U32>},
-        {y <> all : List<&2, U32>}, (xx + 1 : U32), ft
+        {y <> all : List<&2, U32>}, nl, ft
       )
     case Nil{} UBody{} _z:
       None{}
