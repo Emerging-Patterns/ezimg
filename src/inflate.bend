@@ -40,10 +40,33 @@ type St is Data:
       +cmf: U32, +hacc: U32, +hlen: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32}
 
 # build a reader
-def st.make(ph: Ph, md: Md, wh: Wh, +acc: U32, +got: U32, +need: U32, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32,
-    +prev: U32, +cmf: U32, +hacc: U32, +hlen: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +sym: U32,
-    +rep: U32) -> St:
+def st.make(
+  ph: Ph,
+  md: Md,
+  wh: Wh,
+  +acc: U32,
+  +got: U32,
+  +need: U32,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +hacc: U32,
+  +hlen: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   St{ph, md, wh, acc, got, need, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, hacc, hlen, skew, hlit,
     hdist, run, sym, rep}
 
@@ -56,53 +79,53 @@ def st.empty() -> St:
   st.make(PByte{}, MCmf{}, WLit{}, 0, 0, 8, False{}, 0, 0, [], [], [], [], [], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
 # pick a reader
-def st.gate(z: Bool, a: St, b: St) -> St:
-  match z:
+def st.gate(zz: Bool, aa: St, bb: St) -> St:
+  match zz:
     case True{}:
-      a
+      aa
     case False{}:
-      b
+      bb
 
 # Huffman tables
 # --------------
 
 # sixteen zeros, or nineteen: a code-length histogram
-def huff.zeros(n: Nat) -> List<&2, U32>:
-  match n:
+def huff.zeros(nn: Nat) -> List<&2, U32>:
+  match nn:
     case 0n:
       Nil{}
     case 1n+p:
       0 <> huff.zeros(p)
 
 # the value at an index, or zero past the end
-def huff.at.put(+h: U32, +rest: U32, z: Bool) -> U32:
-  match z:
+def huff.at.put(+hh: U32, +rest: U32, zz: Bool) -> U32:
+  match zz:
     case True{}:
-      h
+      hh
     case False{}:
       rest
 
 # the value at an index
-def huff.at(xs: List<&2, U32>, +i: U32) -> U32:
+def huff.at(xs: List<&2, U32>, +ii: U32) -> U32:
   match xs:
     case Nil{}:
       0
     case Con{+h, t}:
-      huff.at.put(h, huff.at(t, (i - 1 : U32)), U32.is_zero(i))
+      huff.at.put(h, huff.at(t, (ii - 1 : U32)), U32.is_zero(ii))
 
 # write an index. The Bool is "this is the slot".
-def huff.set(xs: List<&2, U32>, z: Bool, +i: U32, +v: U32) -> List<&2, U32>:
-  match xs z:
+def huff.set(xs: List<&2, U32>, zz: Bool, +ii: U32, +vv: U32) -> List<&2, U32>:
+  match xs zz:
     case Nil{} _z:
       Nil{}
     case Con{_h, t} True{}:
-      v <> t
+      vv <> t
     case Con{+h, t} False{}:
-      h <> huff.set(t, U32.is_zero((i - 1 : U32)), (i - 1 : U32), v)
+      h <> huff.set(t, U32.is_zero((ii - 1 : U32)), (ii - 1 : U32), vv)
 
 # count a nonzero length
-def huff.bump(+acc: List<&2, U32>, +L: U32, z: Bool) -> List<&2, U32>:
-  match z:
+def huff.bump(+acc: List<&2, U32>, +L: U32, zz: Bool) -> List<&2, U32>:
+  match zz:
     case True{}:
       acc
     case False{}:
@@ -138,20 +161,20 @@ def huff.pack(+len: U32, +code: U32, +sym: U32) -> U32:
   ((((len << 16n : U32) .|. code : U32) << 9n : U32) .|. sym : U32)
 
 # the symbol in a packed entry
-def huff.sym(+e: U32) -> U32:
-  (e .&. 511 : U32)
+def huff.sym(+ee: U32) -> U32:
+  (ee .&. 511 : U32)
 
 # the code in a packed entry
-def huff.code(+e: U32) -> U32:
-  ((e >> 9n : U32) .&. 65535 : U32)
+def huff.code(+ee: U32) -> U32:
+  ((ee >> 9n : U32) .&. 65535 : U32)
 
 # the length in a packed entry
-def huff.len(+e: U32) -> U32:
-  ((e >> 25n : U32) .&. 15 : U32)
+def huff.len(+ee: U32) -> U32:
+  ((ee >> 25n : U32) .&. 15 : U32)
 
 # does this entry match the bits read so far?
-def huff.hit(+e: U32, +code: U32, +len: U32) -> Bool:
-  Bool.and(U32.is_eq(huff.len(e), len), U32.is_eq(huff.code(e), code))
+def huff.hit(+ee: U32, +code: U32, +len: U32) -> Bool:
+  Bool.and(U32.is_eq(huff.len(ee), len), U32.is_eq(huff.code(ee), code))
 
 # keep the symbol when the entry matches
 def huff.find.put(+sym: U32, rest: Maybe<&2, U32>, hit: Bool) -> Maybe<&2, U32>:
@@ -170,16 +193,16 @@ def huff.find(tab: List<&2, U32>, +code: U32, +len: U32) -> Maybe<&2, U32>:
       huff.find.put(huff.sym(e), huff.find(t, code, len), huff.hit(e, code, len))
 
 # cons a packed entry when the length is not zero
-def huff.keep(acc: List<&2, U32>, +sym: U32, +len: U32, +code: U32, z: Bool) -> List<&2, U32>:
-  match z:
+def huff.keep(acc: List<&2, U32>, +sym: U32, +len: U32, +code: U32, zz: Bool) -> List<&2, U32>:
+  match zz:
     case True{}:
       acc
     case False{}:
       huff.pack(len, code, sym) <> acc
 
 # advance next_code at this length when it was used
-def huff.step(+nexts: List<&2, U32>, +len: U32, z: Bool) -> List<&2, U32>:
-  match z:
+def huff.step(+nexts: List<&2, U32>, +len: U32, zz: Bool) -> List<&2, U32>:
+  match zz:
     case True{}:
       nexts
     case False{}:
@@ -199,32 +222,32 @@ def huff.canon(+ls: List<&2, U32>) -> List<&2, U32>:
   huff.assign(ls, 0, huff.nexts(huff.count(ls, huff.zeros(16n))), [])
 
 # fixed literal/length code length at a symbol
-def lit.len2(c: Bool) -> U32:
-  match c:
+def lit.len2(cc: Bool) -> U32:
+  match cc:
     case True{}:
       7
     case False{}:
       8
 
 # fixed literal/length code length, past 143
-def lit.len1(b: Bool, c: Bool) -> U32:
-  match b:
+def lit.len1(bb: Bool, cc: Bool) -> U32:
+  match bb:
     case True{}:
       9
     case False{}:
-      lit.len2(c)
+      lit.len2(cc)
 
 # fixed literal/length code length
-def lit.len(+_s: U32, a: Bool, b: Bool, c: Bool) -> U32:
-  match a:
+def lit.len(+_s: U32, aa: Bool, bb: Bool, cc: Bool) -> U32:
+  match aa:
     case True{}:
       8
     case False{}:
-      lit.len1(b, c)
+      lit.len1(bb, cc)
 
 # lengths 0..i, oldest first once i runs down to zero
-def lit.lens(i: Nat, acc: List<&2, U32>) -> List<&2, U32>:
-  match i:
+def lit.lens(ii: Nat, acc: List<&2, U32>) -> List<&2, U32>:
+  match ii:
     case 0n:
       lit.len(0, True{}, True{}, True{}) <> acc
     case 1n++p:
@@ -236,8 +259,8 @@ def lit.fixed() -> List<&2, U32>:
   huff.canon(lit.lens(287n, []))
 
 # thirty-two distance lengths of 5
-def dist.lens(n: Nat) -> List<&2, U32>:
-  match n:
+def dist.lens(nn: Nat) -> List<&2, U32>:
+  match nn:
     case 0n:
       Nil{}
     case 1n+p:
@@ -279,37 +302,37 @@ def clen.place(order: List<&2, U32>, lens: List<&2, U32>, acc: List<&2, U32>) ->
       clen.place(ot, lt, huff.set(acc, U32.is_zero(i), i, L))
 
 # repeat a length n times onto the front of the list
-def lens.rep(k: Nat, +v: U32, lens: List<&2, U32>) -> List<&2, U32>:
-  match k:
+def lens.rep(kk: Nat, +vv: U32, lens: List<&2, U32>) -> List<&2, U32>:
+  match kk:
     case 0n:
       lens
     case 1n+p:
-      lens.rep(p, v, v <> lens)
+      lens.rep(p, vv, vv <> lens)
 
 # the two halves of a code-length list
 type lens.Split is Data:
   lens.Split{lo: List<&2, U32>, hi: List<&2, U32>}
 
 # split a list after n elements. The Bool is "n is zero".
-def lens.split(xs: List<&2, U32>, z: Bool, +n: U32, acc: List<&2, U32>) -> Maybe<&2, lens.Split>:
-  match xs z:
+def lens.split(xs: List<&2, U32>, zz: Bool, +nn: U32, acc: List<&2, U32>) -> Maybe<&2, lens.Split>:
+  match xs zz:
     case rest True{}:
       Some{lens.Split{List.reverse(&2, U32, acc), rest}}
     case Nil{} False{}:
       None{}
     case Con{+h, t} False{}:
-      lens.split(t, U32.is_zero((n - 1 : U32)), (n - 1 : U32), h <> acc)
+      lens.split(t, U32.is_zero((nn - 1 : U32)), (nn - 1 : U32), h <> acc)
 
 # bits, Adler, and back-references
 # --------------------------------
 
 # eight bits of a byte, low bit at the head
-def bits.push(i: Nat, +b: U32, acc: List<&2, U32>) -> List<&2, U32>:
-  match i:
+def bits.push(ii: Nat, +bb: U32, acc: List<&2, U32>) -> List<&2, U32>:
+  match ii:
     case 0n:
-      (b .&. 1 : U32) <> acc
+      (bb .&. 1 : U32) <> acc
     case 1n++p:
-      bits.push(p, b, (((b >> (1n+p) : U32) .&. 1 : U32) <> acc))
+      bits.push(p, bb, (((bb >> (1n+p) : U32) .&. 1 : U32) <> acc))
 
 # one bit list per byte
 def bits.rows(xs: List<&2, U32>) -> List<&2, List<&2, U32>>:
@@ -324,18 +347,18 @@ def bits.of(xs: List<&2, U32>) -> List<&2, U32>:
   List.concat(&2, U32, bits.rows(xs))
 
 # Adler-32, one byte at a time
-def adler.go(xs: List<&2, U32>, +a: U32, +b: U32) -> U32 & U32:
+def adler.go(xs: List<&2, U32>, +aa: U32, +bb: U32) -> U32 & U32:
   match xs:
     case Nil{}:
-      (b, a)
+      (bb, aa)
     case Con{+x, t}:
-      +a2 = ((a + x : U32) % 65521 : U32)
-      +b2 = ((b + a2 : U32) % 65521 : U32)
+      +a2 = ((aa + x : U32) % 65521 : U32)
+      +b2 = ((bb + a2 : U32) % 65521 : U32)
       adler.go(t, a2, b2)
 
 # pack the two Adler sums
-def adler.fin(p: U32 & U32) -> U32:
-  match p:
+def adler.fin(pp: U32 & U32) -> U32:
+  match pp:
     case (+b, +a):
       ((b << 16n : U32) .|. a : U32)
 
@@ -344,24 +367,24 @@ def adler.of(xs: List<&2, U32>) -> U32:
   adler.fin(adler.go(xs, 1, 0))
 
 # the byte `i` from the head
-def copy.nth.put(+h: U32, rest: Maybe<&2, U32>, z: Bool) -> Maybe<&2, U32>:
-  match z:
+def copy.nth.put(+hh: U32, rest: Maybe<&2, U32>, zz: Bool) -> Maybe<&2, U32>:
+  match zz:
     case True{}:
-      Some{h}
+      Some{hh}
     case False{}:
       rest
 
 # the byte `i` from the head, or none
-def copy.nth(xs: List<&2, U32>, +i: U32) -> Maybe<&2, U32>:
+def copy.nth(xs: List<&2, U32>, +ii: U32) -> Maybe<&2, U32>:
   match xs:
     case Nil{}:
       None{}
     case Con{+h, t}:
-      copy.nth.put(h, copy.nth(t, (i - 1 : U32)), U32.is_zero(i))
+      copy.nth.put(h, copy.nth(t, (ii - 1 : U32)), U32.is_zero(ii))
 
 # copy `n` bytes from `dist` back. `m` is the next byte, already read.
-def copy.run(n: Nat, m: Maybe<&2, U32>, +dist: U32, +out: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  match n m:
+def copy.run(nn: Nat, mm: Maybe<&2, U32>, +dist: U32, +out: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match nn mm:
     case 0n _m:
       Some{out}
     case _n None{}:
@@ -378,9 +401,27 @@ def copy.start(+len: U32, +dist: U32, +out: List<&2, U32>) -> Maybe<&2, List<&2,
 # ------------------------------
 
 # start the field `md` asks for, now that the stream is aligned
-def rd.begin(md: Md, wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-    +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.begin(
+  md: Md,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   match md:
     case MLen{}:
       st.make(PByte{}, MLen{}, wh, 0, 0, 16, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, 0, 0, skew,
@@ -392,10 +433,29 @@ def rd.begin(md: Md, wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, 
       st.fail()
 
 # a byte-aligned field starts, or a padding bit is still waiting
-def rd.align(z: Bool, md: Md, wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-    +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32) -> St:
-  match z:
+def rd.align(
+  zz: Bool,
+  md: Md,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
+  match zz:
     case False{}:
       st.make(PAlign{}, md, wh, 0, 0, 0, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, 0, 0, skew,
         hlit, hdist, run, sym, rep)
@@ -403,23 +463,77 @@ def rd.align(z: Bool, md: Md, wh: Wh, final: Bool, +left: U32, +dist: U32, out: 
       rd.begin(md, wh, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, skew, hlit, hdist, run, sym, rep)
 
 # skip bits up to the next byte, then read `md`
-def rd.to_align(md: Md, wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-    +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.to_align(
+  md: Md,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   rd.align(U32.is_zero(skew), md, wh, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, skew, hlit, hdist,
     run, sym, rep)
 
 # a fresh integer field of `need` bits
-def rd.byte(md: Md, wh: Wh, +need: U32, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-    +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.byte(
+  md: Md,
+  wh: Wh,
+  +need: U32,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   st.make(PByte{}, md, wh, 0, 0, need, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, 0, 0, skew, hlit,
     hdist, run, sym, rep)
 
 # the next block, or the Adler checksum when this was the last block
-def rd.after(final: Bool, wh: Wh, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32,
-    +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.after(
+  final: Bool,
+  wh: Wh,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   match final:
     case True{}:
       rd.to_align(MAdler{}, wh, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, skew, hlit, hdist, run,
@@ -429,9 +543,26 @@ def rd.after(final: Bool, wh: Wh, +left: U32, +dist: U32, out: List<&2, U32>, li
         sym, rep)
 
 # literal/length or distance symbols
-def rd.sym(wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32,
-    +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.sym(
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   st.make(PSym{}, MBlk{}, wh, 0, 0, 0, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, 0, 0, skew, hlit,
     hdist, run, sym, rep)
 
@@ -446,26 +577,76 @@ def rd.tree(wh: Wh, +lit: List<&2, U32>, +dts: List<&2, U32>, +clen: List<&2, U3
       clen
 
 # CMF: method 8, window at most 32K
-def rd.cmf(+val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +skew: U32, +hlit: U32,
-    +hdist: U32, +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.cmf(
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   +ok = Bool.and(U32.is_eq((val .&. 15 : U32), 8), U32.is_le((val >> 4n : U32), 7))
   st.gate(ok, rd.byte(MFlg{}, wh, 8, final, left, dist, out, lit, dts, clen, lens, nleft, prev, val, skew, hlit, hdist,
     run, sym, rep), st.fail())
 
 # FLG: the header check, and no preset dictionary
-def rd.flg(+val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-    +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.flg(
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   +sum = (((cmf << 8n : U32) + val : U32) % 31 : U32)
   +ok = Bool.and(U32.is_zero(sum), U32.is_zero((val .&. 32 : U32)))
   st.gate(ok, rd.byte(MBlk{}, wh, 3, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, skew, hlit, hdist,
     run, sym, rep), st.fail())
 
 # dynamic header, or a reserved block type
-def rd.blk.dyn(final: Bool, z2: Bool, +left: U32, +dist: U32, out: List<&2, U32>, clen: List<&2, U32>,
-  lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +sym: U32,
-    +rep: U32) -> St:
+def rd.blk.dyn(
+  final: Bool,
+  z2: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   match z2:
     case True{}:
       rd.byte(MHlit{}, WLit{}, 5, final, left, dist, out, [], [], clen, lens, nleft, prev, cmf, skew, hlit, hdist, run,
@@ -474,9 +655,25 @@ def rd.blk.dyn(final: Bool, z2: Bool, +left: U32, +dist: U32, out: List<&2, U32>
       st.fail()
 
 # fixed or dynamic Huffman
-def rd.blk.huff(final: Bool, z1: Bool, z2: Bool, +left: U32, +dist: U32, out: List<&2, U32>, clen: List<&2, U32>,
-  lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +sym: U32,
-    +rep: U32) -> St:
+def rd.blk.huff(
+  final: Bool,
+  z1: Bool,
+  z2: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   match z1:
     case True{}:
       rd.sym(WLit{}, final, left, dist, out, lit.fixed(), dist.fixed(), clen, lens, nleft, prev, cmf, skew, hlit, hdist,
@@ -485,9 +682,29 @@ def rd.blk.huff(final: Bool, z1: Bool, z2: Bool, +left: U32, +dist: U32, out: Li
       rd.blk.dyn(final, z2, left, dist, out, clen, lens, nleft, prev, cmf, skew, hlit, hdist, run, sym, rep)
 
 # dispatch on the block type
-def rd.blk.go(final: Bool, z0: Bool, z1: Bool, z2: Bool, wh: Wh, +left: U32, +dist: U32, out: List<&2, U32>,
-  lit: List<&2, U32>, dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32,
-    +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.blk.go(
+  final: Bool,
+  z0: Bool,
+  z1: Bool,
+  z2: Bool,
+  wh: Wh,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   match z0:
     case True{}:
       rd.to_align(MLen{}, wh, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, skew, hlit, hdist, run,
@@ -496,31 +713,101 @@ def rd.blk.go(final: Bool, z0: Bool, z1: Bool, z2: Bool, wh: Wh, +left: U32, +di
       rd.blk.huff(final, z1, z2, left, dist, out, clen, lens, nleft, prev, cmf, skew, hlit, hdist, run, sym, rep)
 
 # BFINAL is the low bit. BTYPE is the next two.
-def rd.blk.at(+finb: U32, +bt: U32, wh: Wh, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-    +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.blk.at(
+  +finb: U32,
+  +bt: U32,
+  wh: Wh,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   rd.blk.go(U32.is_eq(finb, 1), U32.is_eq(bt, 0), U32.is_eq(bt, 1), U32.is_eq(bt, 2), wh, left, dist, out, lit, dts,
     clen, lens, nleft, prev, cmf, skew, hlit, hdist, run, sym, rep)
 
 # a stored block, a fixed block, or a dynamic block
-def rd.blk(+val: U32, wh: Wh, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32,
-    +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.blk(
+  +val: U32,
+  wh: Wh,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   rd.blk.at((val .&. 1 : U32),
     (val >> 1n : U32), wh, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, skew, hlit, hdist, run, sym, rep)
 
 # stored LEN, then NLEN
-def rd.len(+val: U32, wh: Wh, final: Bool, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32,
-    +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.len(
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   rd.byte(MNlen{}, wh, 16, final, val, dist, out, lit, dts, clen, lens, nleft, prev, cmf, skew, hlit, hdist, run, sym,
     rep)
 
 # an empty stored block ends the block; otherwise the bytes follow
-def rd.nlen.ok(z: Bool, wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-    +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32) -> St:
-  match z:
+def rd.nlen.ok(
+  zz: Bool,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
+  match zz:
     case True{}:
       rd.after(final, wh, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, skew, hlit, hdist, run, sym, rep)
     case False{}:
@@ -528,21 +815,53 @@ def rd.nlen.ok(z: Bool, wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&
         sym, rep)
 
 # NLEN is the one's complement of LEN
-def rd.nlen(+val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-    +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.nlen(
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   st.gate(U32.is_eq(val, (left .^. 65535 : U32)), rd.nlen.ok(U32.is_zero(left), wh, final, left, dist, out, lit, dts,
     clen, lens, nleft, prev, cmf, skew, hlit, hdist, run, sym, rep), st.fail())
 
 # one stored byte, newest-first
 def rd.data.z(
-  z: Bool, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  zz: Bool,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case True{}:
       rd.after(
         final, wh, left, dist, out, lit, dts, clen, lens,
@@ -556,11 +875,25 @@ def rd.data.z(
 
 # consume one stored byte
 def rd.data(
-  +val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   +left2 = (left - 1 : U32)
   +out2 = {val <> out : List<&2, U32>}
@@ -571,10 +904,24 @@ def rd.data(
 
 # HLIT, then HDIST
 def rd.hlit(
-  +val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   rd.byte(
     MHdist{}, wh, 5, final, left, dist, out, lit, dts, clen, lens,
@@ -583,10 +930,24 @@ def rd.hlit(
 
 # HDIST, then HCLEN
 def rd.hdist(
-  +val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +run: U32, +sym: U32, +rep: U32
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   rd.byte(
     MHclen{}, wh, 4, final, left, dist, out, lit, dts, clen, lens,
@@ -595,10 +956,23 @@ def rd.hdist(
 
 # HCLEN, then that many 3-bit code lengths
 def rd.hclen(
-  +val: U32, wh: Wh, final: Bool, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-  +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   rd.byte(
     MClen{}, wh, 3, final, (val + 4 : U32), dist, out, lit, dts, clen, [],
@@ -607,12 +981,25 @@ def rd.hclen(
 
 # code lengths are in. Build the code-length table and read the rest.
 def rd.clen.z(
-  z: Bool, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  +lens: List<&2, U32>, +prev: U32, +cmf: U32, +skew: U32,
-  +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  zz: Bool,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  +lens: List<&2, U32>,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case False{}:
       rd.byte(
         MClen{}, wh, 3, final, left, dist, out, lit, dts, [], lens,
@@ -628,10 +1015,23 @@ def rd.clen.z(
 
 # one 3-bit code length
 def rd.clen(
-  +val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  lens: List<&2, U32>, +prev: U32, +cmf: U32, +skew: U32,
-  +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  lens: List<&2, U32>,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   +left2 = (left - 1 : U32)
   +lens2 = {val <> lens : List<&2, U32>}
@@ -641,19 +1041,50 @@ def rd.clen(
   )
 
 # literal/length symbols again, after a distance
-def rd.back(_wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32,
-    +run: U32, +sym: U32, +rep: U32) -> St:
+def rd.back(
+  _wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
+) -> St:
   rd.sym(WLit{}, final, left, dist, out, lit, dts, clen, lens, nleft, prev, cmf, skew, hlit, hdist, run, sym, rep)
 
 # install the copied bytes, or fail
 def rd.copied(
-  m: Maybe<&2, List<&2, U32>>, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  lit: List<&2, U32>, dts: List<&2, U32>, clen: List<&2, U32>,
-  lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-  +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  mm: Maybe<&2, List<&2, U32>>,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match m:
+  match mm:
     case None{}:
       st.fail()
     case Some{out2}:
@@ -664,10 +1095,24 @@ def rd.copied(
 
 # copy `left` bytes from `dist` back
 def rd.docopy(
-  wh: Wh, final: Bool, +left: U32, +dist: U32, +out: List<&2, U32>,
-  lit: List<&2, U32>, dts: List<&2, U32>, clen: List<&2, U32>,
-  lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-  +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  +out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   rd.copied(
     copy.start(left, dist, out), wh, final, left, dist, lit, dts, clen, lens,
@@ -676,11 +1121,25 @@ def rd.docopy(
 
 # extra distance bits are in `dist` as the base
 def rd.xdist(
-  +val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   rd.docopy(
     wh, final, left, (dist + val : U32), out, lit, dts, clen, lens,
@@ -689,13 +1148,28 @@ def rd.xdist(
 
 # no extra distance bits: the base is the distance
 def rd.xdist0(
-  z: Bool, +extra: U32, +base: U32, wh: Wh, final: Bool, +left: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  zz: Bool,
+  +extra: U32,
+  +base: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case True{}:
       rd.docopy(
         wh, final, left, base, out, lit, dts, clen, lens,
@@ -709,12 +1183,26 @@ def rd.xdist0(
 
 # a distance symbol
 def rd.distsym(
-  +sy: U32, z: Bool, wh: Wh, final: Bool, +left: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +rep: U32
+  +sy: U32,
+  zz: Bool,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case False{}:
       st.fail()
     case True{}:
@@ -726,11 +1214,25 @@ def rd.distsym(
 
 # extra length bits added to the base kept in `left`
 def rd.xlen(
-  +val: U32, _wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  +val: U32,
+  _wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   rd.sym(
     WDist{}, final, (left + val : U32), dist, out, lit, dts, clen, lens,
@@ -739,13 +1241,28 @@ def rd.xlen(
 
 # no extra length bits
 def rd.xlen0(
-  z: Bool, +extra: U32, +base: U32, wh: Wh, final: Bool, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  zz: Bool,
+  +extra: U32,
+  +base: U32,
+  wh: Wh,
+  final: Bool,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case True{}:
       rd.sym(
         WDist{}, final, base, dist, out, lit, dts, clen, lens,
@@ -759,12 +1276,26 @@ def rd.xlen0(
 
 # a length symbol, or the end of the block
 def rd.lit.n(
-  z: Bool, +sy: U32, wh: Wh, final: Bool, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +rep: U32
+  zz: Bool,
+  +sy: U32,
+  wh: Wh,
+  final: Bool,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case False{}:
       st.fail()
     case True{}:
@@ -777,10 +1308,26 @@ def rd.lit.n(
 
 # end of block, or a length code
 def rd.lit.e(
-  zend: Bool, zlen: Bool, +sy: U32, wh: Wh, final: Bool, +left: U32,
-  +dist: U32, out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +rep: U32
+  zend: Bool,
+  zlen: Bool,
+  +sy: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +rep: U32
 ) -> St:
   match zend:
     case True{}:
@@ -796,11 +1343,27 @@ def rd.lit.e(
 
 # a literal byte
 def rd.lit(
-  zlit: Bool, zend: Bool, zlen: Bool, +sy: U32, wh: Wh, final: Bool,
-  +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>,
-  +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32,
-  +hdist: U32, +run: U32, +rep: U32
+  zlit: Bool,
+  zend: Bool,
+  zlen: Bool,
+  +sy: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +rep: U32
 ) -> St:
   match zlit:
     case True{}:
@@ -817,12 +1380,24 @@ def rd.lit(
 
 # both Huffman tables are built
 def rd.finish.at(
-  m: Maybe<&2, lens.Split>, _wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, clen: List<&2, U32>, +_nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  mm: Maybe<&2, lens.Split>,
+  _wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  clen: List<&2, U32>,
+  +_nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match m:
+  match mm:
     case None{}:
       st.fail()
     case Some{lens.Split{lits, dists}}:
@@ -833,9 +1408,21 @@ def rd.finish.at(
 
 # split the length list into literal and distance tables
 def rd.finish(
-  +lens: List<&2, U32>, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, clen: List<&2, U32>, +prev: U32, +cmf: U32,
-  +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  +lens: List<&2, U32>,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  clen: List<&2, U32>,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   +chron = List.reverse(&2, U32, lens)
   +nlit = (hlit + 257 : U32)
@@ -846,12 +1433,26 @@ def rd.finish(
 
 # a code length was stored. `dist` is 1 once any length exists.
 def rd.push(
-  z: Bool, +prev: U32, +nleft: U32, lens: List<&2, U32>, wh: Wh,
-  final: Bool, +left: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, +cmf: U32, +skew: U32,
-  +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  zz: Bool,
+  +prev: U32,
+  +nleft: U32,
+  lens: List<&2, U32>,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case True{}:
       rd.finish(
         lens, wh, final, left, 1, out, clen, prev, cmf, skew,
@@ -865,13 +1466,27 @@ def rd.push(
 
 # code 16 needs a previous length
 def rd.rep16(
-  z: Bool, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +_rep: U32
+  zz: Bool,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +_rep: U32
 ) -> St:
-  match z:
+  match zz:
     case True{}:
       st.fail()
     case False{}:
@@ -882,10 +1497,23 @@ def rd.rep16(
 
 # code 18, or an illegal code-length symbol
 def rd.clen.t(
-  z18: Bool, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +sym: U32
+  z18: Bool,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32
 ) -> St:
   match z18:
     case True{}:
@@ -898,10 +1526,25 @@ def rd.clen.t(
 
 # codes 17 and 18 repeat zero
 def rd.clen.s(
-  z17: Bool, z18: Bool, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +_prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +sym: U32
+  z17: Bool,
+  z18: Bool,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +_prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32
 ) -> St:
   match z17:
     case True{}:
@@ -917,10 +1560,26 @@ def rd.clen.s(
 
 # repeat codes 16, 17, and 18
 def rd.clen.r(
-  z16: Bool, z17: Bool, z18: Bool, wh: Wh, final: Bool, +left: U32,
-  +dist: U32, out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +sym: U32
+  z16: Bool,
+  z17: Bool,
+  z18: Bool,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32
 ) -> St:
   match z16:
     case True{}:
@@ -936,11 +1595,28 @@ def rd.clen.r(
 
 # one code-length symbol
 def rd.clens(
-  +sy: U32, z15: Bool, z16: Bool, z17: Bool, z18: Bool, wh: Wh,
-  final: Bool, +left: U32, +dist: U32, out: List<&2, U32>,
-  lit: List<&2, U32>, dts: List<&2, U32>, clen: List<&2, U32>,
-  lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-  +hlit: U32, +hdist: U32, +run: U32, +rep: U32
+  +sy: U32,
+  z15: Bool,
+  z16: Bool,
+  z17: Bool,
+  z18: Bool,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +rep: U32
 ) -> St:
   match z15:
     case True{}:
@@ -957,13 +1633,27 @@ def rd.clens(
 
 # the repeat is done, or it ran past the list
 def rd.mrep.d(
-  z: Bool, +lens: List<&2, U32>, +nleft: U32, +prev: U32, wh: Wh,
-  final: Bool, +left: U32, +dist: U32, out: List<&2, U32>,
-  lit: List<&2, U32>, dts: List<&2, U32>, clen: List<&2, U32>,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  zz: Bool,
+  +lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case True{}:
       rd.finish(
         lens, wh, final, left, dist, out, clen, prev, cmf, skew,
@@ -977,30 +1667,59 @@ def rd.mrep.d(
 
 # reject a repeat that does not fit
 def rd.mrep.z(
-  zbad: Bool, +n: U32, +prev: U32, +nleft: U32, lens: List<&2, U32>,
-  wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>,
-  lit: List<&2, U32>, dts: List<&2, U32>, clen: List<&2, U32>,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  zbad: Bool,
+  +nn: U32,
+  +prev: U32,
+  +nleft: U32,
+  lens: List<&2, U32>,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   match zbad:
     case True{}:
       st.fail()
     case False{}:
-      +n2 = (nleft - n : U32)
+      +n2 = (nleft - nn : U32)
       rd.mrep.d(
-        U32.is_zero(n2), lens.rep(U32.to_nat(n), prev, lens), n2, prev,
+        U32.is_zero(n2), lens.rep(U32.to_nat(nn), prev, lens), n2, prev,
         wh, final, left, dist, out, lit, dts, clen, cmf, skew,
         hlit, hdist, run, sym, rep
       )
 
 # extra bits of a repeat code
 def rd.mrep(
-  +val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   +n = (rep + val : U32)
   rd.mrep.z(
@@ -1010,12 +1729,27 @@ def rd.mrep(
 
 # Adler matches the bytes
 def rd.adler.eq(
-  z: Bool, +raw: List<&2, U32>, wh: Wh, final: Bool, +left: U32,
-  +dist: U32, lit: List<&2, U32>, dts: List<&2, U32>, clen: List<&2, U32>,
-  lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-  +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  zz: Bool,
+  +raw: List<&2, U32>,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case True{}:
       st.make(
         PDone{}, MAdler{}, wh, 0, 0, 0, final, left, dist, raw, lit, dts,
@@ -1026,12 +1760,27 @@ def rd.adler.eq(
 
 # one more Adler byte, or the check
 def rd.adler.z(
-  z: Bool, +run: U32, +left: U32, +out: List<&2, U32>, wh: Wh, final: Bool,
-  +dist: U32, lit: List<&2, U32>, dts: List<&2, U32>, clen: List<&2, U32>,
-  lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +skew: U32,
-  +hlit: U32, +hdist: U32, +sym: U32, +rep: U32
+  zz: Bool,
+  +run: U32,
+  +left: U32,
+  +out: List<&2, U32>,
+  wh: Wh,
+  final: Bool,
+  +dist: U32,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case False{}:
       st.make(
         PByte{}, MAdler{}, wh, 0, 0, 8, final, left, dist, out, lit, dts,
@@ -1046,11 +1795,25 @@ def rd.adler.z(
 
 # one big-endian Adler byte
 def rd.adler(
-  +val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  +out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  +out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   +run2 = ((run << 8n : U32) .|. (val .&. 255 : U32) : U32)
   +left2 = (left - 1 : U32)
@@ -1061,11 +1824,26 @@ def rd.adler(
 
 # a finished integer field
 def rd.field(
-  md: Md, +val: U32, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  md: Md,
+  +val: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   match md:
     case MCmf{}:
@@ -1141,13 +1919,31 @@ def rd.field(
 
 # keep a partial integer, or dispatch it
 def rd.raw.at(
-  z: Bool, md: Md, wh: Wh, +acc: U32, +got: U32, +need: U32, final: Bool,
-  +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>,
-  +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32,
-  +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  zz: Bool,
+  md: Md,
+  wh: Wh,
+  +acc: U32,
+  +got: U32,
+  +need: U32,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case False{}:
       st.make(
         PByte{}, md, wh, acc, got, need, final, left, dist, out, lit, dts,
@@ -1161,11 +1957,29 @@ def rd.raw.at(
 
 # fold one bit into the integer being read
 def rd.raw(
-  md: Md, wh: Wh, +acc: U32, +got: U32, +need: U32, final: Bool,
-  +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>,
-  +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32,
-  +hdist: U32, +run: U32, +sym: U32, +rep: U32, +bit: U32
+  md: Md,
+  wh: Wh,
+  +acc: U32,
+  +got: U32,
+  +need: U32,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32,
+  +bit: U32
 ) -> St:
   +acc2 = (acc .|. (bit << U32.to_nat(got)) : U32)
   +got2 = (got + 1 : U32)
@@ -1176,13 +1990,29 @@ def rd.raw(
 
 # fifteen bits and no symbol is an error
 def rd.miss(
-  z: Bool, +code: U32, +len: U32, wh: Wh, final: Bool, +left: U32,
-  +dist: U32, out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32
+  zz: Bool,
+  +code: U32,
+  +len: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
-  match z:
+  match zz:
     case True{}:
       st.fail()
     case False{}:
@@ -1193,10 +2023,24 @@ def rd.miss(
 
 # dispatch a decoded symbol
 def rd.symbol(
-  +sy: U32, wh: Wh, final: Bool, +left: U32, +dist: U32,
-  out: List<&2, U32>, lit: List<&2, U32>, dts: List<&2, U32>,
-  clen: List<&2, U32>, lens: List<&2, U32>, +nleft: U32, +prev: U32,
-  +cmf: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32, +rep: U32
+  +sy: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +rep: U32
 ) -> St:
   match wh:
     case WLit{}:
@@ -1219,11 +2063,27 @@ def rd.symbol(
 
 # a symbol, or more bits
 def rd.hbit.at(
-  found: Maybe<&2, U32>, +code: U32, +len: U32, wh: Wh, final: Bool,
-  +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>,
-  +nleft: U32, +prev: U32, +cmf: U32, +skew: U32, +hlit: U32,
-  +hdist: U32, +run: U32, +sym: U32, +rep: U32
+  found: Maybe<&2, U32>,
+  +code: U32,
+  +len: U32,
+  wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32
 ) -> St:
   match found:
     case None{}:
@@ -1239,11 +2099,27 @@ def rd.hbit.at(
 
 # shift one Huffman bit in. The first bit is the high bit of the code.
 def rd.hbit(
-  +wh: Wh, final: Bool, +left: U32, +dist: U32, out: List<&2, U32>,
-  +lit: List<&2, U32>, +dts: List<&2, U32>, +clen: List<&2, U32>,
-  lens: List<&2, U32>, +nleft: U32, +prev: U32, +cmf: U32, +hacc: U32,
-  +hlen: U32, +skew: U32, +hlit: U32, +hdist: U32, +run: U32,
-  +sym: U32, +rep: U32, +bit: U32
+  +wh: Wh,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  +lit: List<&2, U32>,
+  +dts: List<&2, U32>,
+  +clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +hacc: U32,
+  +hlen: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32,
+  +bit: U32
 ) -> St:
   +code = ((hacc << 1n : U32) .|. bit : U32)
   +len = (hlen + 1 : U32)
@@ -1255,11 +2131,32 @@ def rd.hbit(
 
 # one bit of the phase the reader is in
 def rd.on(
-  ph: Ph, md: Md, wh: Wh, +acc: U32, +got: U32, +need: U32, final: Bool,
-  +left: U32, +dist: U32, out: List<&2, U32>, lit: List<&2, U32>,
-  dts: List<&2, U32>, clen: List<&2, U32>, lens: List<&2, U32>,
-  +nleft: U32, +prev: U32, +cmf: U32, +hacc: U32, +hlen: U32, +skew: U32,
-  +hlit: U32, +hdist: U32, +run: U32, +sym: U32, +rep: U32, +bit: U32
+  ph: Ph,
+  md: Md,
+  wh: Wh,
+  +acc: U32,
+  +got: U32,
+  +need: U32,
+  final: Bool,
+  +left: U32,
+  +dist: U32,
+  out: List<&2, U32>,
+  lit: List<&2, U32>,
+  dts: List<&2, U32>,
+  clen: List<&2, U32>,
+  lens: List<&2, U32>,
+  +nleft: U32,
+  +prev: U32,
+  +cmf: U32,
+  +hacc: U32,
+  +hlen: U32,
+  +skew: U32,
+  +hlit: U32,
+  +hdist: U32,
+  +run: U32,
+  +sym: U32,
+  +rep: U32,
+  +bit: U32
 ) -> St:
   match ph:
     case PFail{}:

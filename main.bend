@@ -25,8 +25,8 @@ def nbytes(bytes: List<&2, U32>) -> U32:
   U32.from_nat(List.length(&2, U32, bytes))
 
 # a picture from its width, height, and samples
-def raster(w: U32, h: U32, pixels: List<&2, U32>) -> Raster:
-  Raster{w, h, pixels}
+def raster(ww: U32, hh: U32, pixels: List<&2, U32>) -> Raster:
+  Raster{ww, hh, pixels}
 
 # the width
 def width(img: Raster) -> U32:
@@ -59,65 +59,77 @@ def count(img: Raster) -> U32:
       (w * h : U32)
 
 # a solid picture of one sample
-def fill(+w: U32, +h: U32, +color: U32) -> Raster:
-  Raster{w, h, List.replicate(U32, U32.to_nat((w * h : U32)), color)}
+def fill(+ww: U32, +hh: U32, +color: U32) -> Raster:
+  Raster{ww, hh, List.replicate(U32, U32.to_nat((ww * hh : U32)), color)}
 
-def u.min.pick(le: Bool, +a: U32, +b: U32) -> U32:
+def u.min.pick(le: Bool, +aa: U32, +bb: U32) -> U32:
   match le:
     case True{}:
-      a
+      aa
     case False{}:
-      b
+      bb
 
-def u.min(+a: U32, +b: U32) -> U32:
-  u.min.pick(U32.is_le(a, b), a, b)
+def u.min(+aa: U32, +bb: U32) -> U32:
+  u.min.pick(U32.is_le(aa, bb), aa, bb)
 
-def get.y(yin: Bool, px: List<&2, U32>, +w: U32, +x: U32, +y: U32) -> Maybe<&2, U32>:
+def get.y(yin: Bool, px: List<&2, U32>, +ww: U32, +xx: U32, +yy: U32) -> Maybe<&2, U32>:
   match yin:
     case False{}:
       None{}
     case True{}:
-      List.get(&2, U32, px, U32.to_nat((y * w + x : U32)))
+      List.get(&2, U32, px, U32.to_nat((yy * ww + xx : U32)))
 
-def get.x(xin: Bool, px: List<&2, U32>, +w: U32, +h: U32, +x: U32, +y: U32) -> Maybe<&2, U32>:
+def get.x(xin: Bool, px: List<&2, U32>, +ww: U32, +hh: U32, +xx: U32, +yy: U32) -> Maybe<&2, U32>:
   match xin:
     case False{}:
       None{}
     case True{}:
-      get.y(U32.is_lt(y, h), px, w, x, y)
+      get.y(U32.is_lt(yy, hh), px, ww, xx, yy)
 
 # the sample at (x, y), or none when that point is outside the picture
-def get(img: Raster, +x: U32, +y: U32) -> Maybe<&2, U32>:
+def get(img: Raster, +xx: U32, +yy: U32) -> Maybe<&2, U32>:
   match img:
     case Raster{+w, +h, +px}:
-      get.x(U32.is_lt(x, w), px, w, h, x, y)
+      get.x(U32.is_lt(xx, w), px, w, h, xx, yy)
 
 def set.y(
-  yin: Bool, +w: U32, +h: U32, px: List<&2, U32>, +x: U32, +y: U32, +color: U32
+  yin: Bool,
+  +ww: U32,
+  +hh: U32,
+  px: List<&2, U32>,
+  +xx: U32,
+  +yy: U32,
+  +color: U32
 ) -> Raster:
   match yin:
     case False{}:
-      Raster{w, h, px}
+      Raster{ww, hh, px}
     case True{}:
-      Raster{w, h, List.set(&2, U32, px, U32.to_nat((y * w + x : U32)), color)}
+      Raster{ww, hh, List.set(&2, U32, px, U32.to_nat((yy * ww + xx : U32)), color)}
 
 def set.x(
-  xin: Bool, +w: U32, +h: U32, px: List<&2, U32>, +x: U32, +y: U32, +color: U32
+  xin: Bool,
+  +ww: U32,
+  +hh: U32,
+  px: List<&2, U32>,
+  +xx: U32,
+  +yy: U32,
+  +color: U32
 ) -> Raster:
   match xin:
     case False{}:
-      Raster{w, h, px}
+      Raster{ww, hh, px}
     case True{}:
-      set.y(U32.is_lt(y, h), w, h, px, x, y, color)
+      set.y(U32.is_lt(yy, hh), ww, hh, px, xx, yy, color)
 
 # the picture with (x, y) replaced by color; outside, the picture is unchanged
-def set(img: Raster, +x: U32, +y: U32, +color: U32) -> Raster:
+def set(img: Raster, +xx: U32, +yy: U32, +color: U32) -> Raster:
   match img:
     case Raster{+w, +h, +px}:
-      set.x(U32.is_lt(x, w), w, h, px, x, y, color)
+      set.x(U32.is_lt(xx, w), w, h, px, xx, yy, color)
 
-def crop.rows(+n: Nat, +px: List<&2, U32>, +rw: Nat, +gap: Nat) -> List<&2, U32>:
-  match n:
+def crop.rows(+nn: Nat, +px: List<&2, U32>, +rw: Nat, +gap: Nat) -> List<&2, U32>:
+  match nn:
     case 0n:
       Nil{}
     case 1n+p:
@@ -125,69 +137,112 @@ def crop.rows(+n: Nat, +px: List<&2, U32>, +rw: Nat, +gap: Nat) -> List<&2, U32>
         crop.rows(p, List.drop(&2, U32, px, Nat.add(rw, gap)), rw, gap))
 
 def crop.use(
-  zh: Bool, +px: List<&2, U32>, +w: U32, +x: U32, +y: U32, +rw: U32, +rh: U32
+  zh: Bool,
+  +px: List<&2, U32>,
+  +ww: U32,
+  +xx: U32,
+  +yy: U32,
+  +rw: U32,
+  +rh: U32
 ) -> Raster:
   match zh:
     case True{}:
       Raster{0, 0, []}
     case False{}:
       Raster{rw, rh,
-        crop.rows(U32.to_nat(rh), List.drop(&2, U32, px, U32.to_nat((y * w + x : U32))),
-          U32.to_nat(rw), U32.to_nat((w - rw : U32)))}
+        crop.rows(U32.to_nat(rh), List.drop(&2, U32, px, U32.to_nat((yy * ww + xx : U32))),
+          U32.to_nat(rw), U32.to_nat((ww - rw : U32)))}
 
 def crop.open(
-  zw: Bool, zh: Bool, +px: List<&2, U32>, +w: U32, +x: U32, +y: U32, +rw: U32, +rh: U32
+  zw: Bool,
+  zh: Bool,
+  +px: List<&2, U32>,
+  +ww: U32,
+  +xx: U32,
+  +yy: U32,
+  +rw: U32,
+  +rh: U32
 ) -> Raster:
   match zw:
     case True{}:
       Raster{0, 0, []}
     case False{}:
-      crop.use(zh, px, w, x, y, rw, rh)
+      crop.use(zh, px, ww, xx, yy, rw, rh)
 
 def crop.box(
-  +px: List<&2, U32>, +w: U32, +h: U32, +x: U32, +y: U32, +cw: U32, +ch: U32
+  +px: List<&2, U32>,
+  +ww: U32,
+  +hh: U32,
+  +xx: U32,
+  +yy: U32,
+  +cw: U32,
+  +ch: U32
 ) -> Raster:
-  +rw = u.min(cw, (w - x : U32))
-  +rh = u.min(ch, (h - y : U32))
-  crop.open(U32.is_zero(rw), U32.is_zero(rh), px, w, x, y, rw, rh)
+  +rw = u.min(cw, (ww - xx : U32))
+  +rh = u.min(ch, (hh - yy : U32))
+  crop.open(U32.is_zero(rw), U32.is_zero(rh), px, ww, xx, yy, rw, rh)
 
 def crop.y(
-  yin: Bool, +px: List<&2, U32>, +w: U32, +h: U32, +x: U32, +y: U32, +cw: U32, +ch: U32
+  yin: Bool,
+  +px: List<&2, U32>,
+  +ww: U32,
+  +hh: U32,
+  +xx: U32,
+  +yy: U32,
+  +cw: U32,
+  +ch: U32
 ) -> Raster:
   match yin:
     case False{}:
       Raster{0, 0, []}
     case True{}:
-      crop.box(px, w, h, x, y, cw, ch)
+      crop.box(px, ww, hh, xx, yy, cw, ch)
 
 def crop.x(
-  xin: Bool, +px: List<&2, U32>, +w: U32, +h: U32, +x: U32, +y: U32, +cw: U32, +ch: U32
+  xin: Bool,
+  +px: List<&2, U32>,
+  +ww: U32,
+  +hh: U32,
+  +xx: U32,
+  +yy: U32,
+  +cw: U32,
+  +ch: U32
 ) -> Raster:
   match xin:
     case False{}:
       Raster{0, 0, []}
     case True{}:
-      crop.y(U32.is_lt(y, h), px, w, h, x, y, cw, ch)
+      crop.y(U32.is_lt(yy, hh), px, ww, hh, xx, yy, cw, ch)
 
 # the intersection of rectangle (x, y, cw, ch) with the picture.
 # A miss, or a zero side, is an empty picture.
-def crop(img: Raster, +x: U32, +y: U32, +cw: U32, +ch: U32) -> Raster:
+def crop(img: Raster, +xx: U32, +yy: U32, +cw: U32, +ch: U32) -> Raster:
   match img:
     case Raster{+w, +h, +px}:
-      crop.x(U32.is_lt(x, w), px, w, h, x, y, cw, ch)
+      crop.x(U32.is_lt(xx, w), px, w, h, xx, yy, cw, ch)
 
 def blit.row(
-  +dp: List<&2, U32>, +sp: List<&2, U32>, +left: Nat, +cover: Nat, +tail: Nat
+  +dp: List<&2, U32>,
+  +sp: List<&2, U32>,
+  +left: Nat,
+  +cover: Nat,
+  +tail: Nat
 ) -> List<&2, U32>:
   List.append(&2, U32, List.take(&2, U32, dp, left), List.append(&2, U32,
     List.take(&2, U32, sp, cover),
     List.take(&2, U32, List.drop(&2, U32, dp, Nat.add(left, cover)), tail)))
 
 def blit.rows(
-  +n: Nat, +dp: List<&2, U32>, +sp: List<&2, U32>, +left: Nat, +cover: Nat, +tail: Nat,
-  +dw: Nat, +sw: Nat
+  +nn: Nat,
+  +dp: List<&2, U32>,
+  +sp: List<&2, U32>,
+  +left: Nat,
+  +cover: Nat,
+  +tail: Nat,
+  +dw: Nat,
+  +sw: Nat
 ) -> List<&2, U32>:
-  match n:
+  match nn:
     case 0n:
       Nil{}
     case 1n+p:
@@ -195,8 +250,14 @@ def blit.rows(
         List.drop(&2, U32, dp, dw), List.drop(&2, U32, sp, sw), left, cover, tail, dw, sw))
 
 def blit.join(
-  +dp: List<&2, U32>, +sp: List<&2, U32>, +dw: U32, +dh: U32, +sw: U32, +sh: U32,
-  +ox: U32, +oy: U32
+  +dp: List<&2, U32>,
+  +sp: List<&2, U32>,
+  +dw: U32,
+  +dh: U32,
+  +sw: U32,
+  +sh: U32,
+  +ox: U32,
+  +oy: U32
 ) -> List<&2, U32>:
   +left = u.min(ox, dw)
   +room = (dw - left : U32)
@@ -211,8 +272,15 @@ def blit.join(
     List.drop(&2, U32, dp, span)))
 
 def blit.y(
-  inside: Bool, +dp: List<&2, U32>, +sp: List<&2, U32>, +dw: U32, +dh: U32, +sw: U32,
-  +sh: U32, +ox: U32, +oy: U32
+  inside: Bool,
+  +dp: List<&2, U32>,
+  +sp: List<&2, U32>,
+  +dw: U32,
+  +dh: U32,
+  +sw: U32,
+  +sh: U32,
+  +ox: U32,
+  +oy: U32
 ) -> List<&2, U32>:
   match inside:
     case False{}:
@@ -220,30 +288,30 @@ def blit.y(
     case True{}:
       blit.join(dp, sp, dw, dh, sw, sh, ox, oy)
 
-def blit.src(src: Raster, +dw: U32, +dh: U32, dp: List<&2, U32>, +x: U32, +y: U32) -> Raster:
+def blit.src(src: Raster, +dw: U32, +dh: U32, dp: List<&2, U32>, +xx: U32, +yy: U32) -> Raster:
   match src:
     case Raster{+sw, +sh, +sp}:
-      Raster{dw, dh, blit.y(U32.is_lt(y, dh), dp, sp, dw, dh, sw, sh, x, y)}
+      Raster{dw, dh, blit.y(U32.is_lt(yy, dh), dp, sp, dw, dh, sw, sh, xx, yy)}
 
 # src pasted onto dst at (x, y). dst keeps its size; samples past its edge are
 # dropped, and an overlapping sample takes the source.
-def blit(dst: Raster, src: Raster, +x: U32, +y: U32) -> Raster:
+def blit(dst: Raster, src: Raster, +xx: U32, +yy: U32) -> Raster:
   match dst:
     case Raster{+dw, +dh, +dp}:
-      blit.src(src, dw, dh, dp, x, y)
+      blit.src(src, dw, dh, dp, xx, yy)
 
-def map.go(~f: U32 -> U32, px: List<&2, U32>) -> List<&2, U32>:
+def map.go(~ff: U32 -> U32, px: List<&2, U32>) -> List<&2, U32>:
   match px:
     case Nil{}:
       Nil{}
     case h <> t:
-      f(h) <> map.go(~f, t)
+      ff(h) <> map.go(~ff, t)
 
 # every sample passed through f; the width and the height stay
-def map(~f: U32 -> U32, img: Raster) -> Raster:
+def map(~ff: U32 -> U32, img: Raster) -> Raster:
   match img:
     case Raster{+w, +h, +px}:
-      Raster{w, h, map.go(~f, px)}
+      Raster{w, h, map.go(~ff, px)}
 
 # an opaque U32 sample has no alpha to scale, so this is the picture
 def premultiply(img: Raster) -> Raster:
@@ -261,15 +329,15 @@ def parse_signature(bytes: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
     case _other:
       None{}
 
-def decode_png.pic(m: Maybe<&2, Png.Pic>) -> Maybe<&2, Raster>:
-  match m:
+def decode_png.pic(mm: Maybe<&2, Png.Pic>) -> Maybe<&2, Raster>:
+  match mm:
     case None{}:
       None{}
     case Some{Png.Pic{+w, +h, px}}:
       Some{Raster{w, h, px}}
 
-def decode_png.of(m: Maybe<&2, List<&2, U32>>, +bytes: List<&2, U32>) -> Maybe<&2, Raster>:
-  match m bytes:
+def decode_png.of(mm: Maybe<&2, List<&2, U32>>, +bytes: List<&2, U32>) -> Maybe<&2, Raster>:
+  match mm bytes:
     case None{} _bytes:
       None{}
     case Some{_sig} 137 <> 80 <> 78 <> 71 <> 13 <> 10 <> 26 <> 10 <> rest:
