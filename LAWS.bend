@@ -88,6 +88,649 @@ law sig_only:
   for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.parse_signature(xs)) == True{} : Bool}
   {xs == List.append(&2, U32, Img.png_sig(), List.drop(&2, U32, xs, 8n)) : List<&2, U32>}
 
+# ---- wp7-jpeg-struct ----
+
+# a JPEG marker segment: FF, the marker, the length (the body's plus two) high byte first, then the body
+def jfif.seg(+mark: U32, +body: List<&2, U32>) -> List<&2, U32>:
+  +nn = (U32.from_nat(List.length(&2, U32, body)) + 2 : U32)
+  255 <> (mark <> (U32.shrn(nn, 8n) <> (U32.and(nn, 255) <> body)))
+
+# a baseline JFIF file: SOI; APP0 opening with the JFIF identifier; DQT; SOF0 opening with precision 8,
+# the height and the width, each high byte first; two DHT; SOS; the entropy-coded bytes; EOI
+def jfif.file(
+  +ww: U32,
+  +hh: U32,
+  app: List<&2, U32>,
+  dq: List<&2, U32>,
+  sof: List<&2, U32>,
+  dc: List<&2, U32>,
+  ac: List<&2, U32>,
+  sos: List<&2, U32>,
+  ent: List<&2, U32>
+) -> List<&2, U32>:
+  +frame = List.append(&2, U32, [8, U32.shrn(hh, 8n), U32.and(hh, 255), U32.shrn(ww, 8n), U32.and(ww, 255)], sof)
+  List.append(&2, U32, List.append(&2, U32, [255, 216], List.append(&2, U32,
+    jfif.seg(224, List.append(&2, U32, [74, 70, 73, 70, 0], app)), List.append(&2, U32, jfif.seg(219, dq),
+    List.append(&2, U32, jfif.seg(192, frame), List.append(&2, U32, jfif.seg(196, dc),
+    List.append(&2, U32, jfif.seg(196, ac), jfif.seg(218, sos))))))), List.append(&2, U32, ent, [255, 217]))
+
+# LAW: when encode_jpeg(r) is some and both sides are at most 65535, it is SOI, APP0 with the JFIF
+# identifier, DQT, SOF0 carrying r's width and height, DHT, SOS, the entropy-coded bytes and EOI
+# IMG-JPG-5
+law jpeg_enc_layout:
+  for +img: Img.Raster
+  for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg(img)) == True{} : Bool}
+  for h_w: {U32.is_le(Img.width(img), 65535) == True{} : Bool}
+  for h_h: {U32.is_le(Img.height(img), 65535) == True{} : Bool}
+  exs app: List<&2, U32>
+  exs dq: List<&2, U32>
+  exs sof: List<&2, U32>
+  exs dc: List<&2, U32>
+  exs ac: List<&2, U32>
+  exs sos: List<&2, U32>
+  exs ent: List<&2, U32>
+  {Img.encode_jpeg(img) == Some{jfif.file(Img.width(img), Img.height(img), app, dq, sof, dc, ac, sos, ent)}
+    : Maybe<&2, List<&2, U32>>}
+
+# LAW: when encode_jpeg(r) is some, it begins with SOI and ends with EOI, whatever r's size
+# IMG-JPG-5
+law jpeg_enc_ends:
+  for +img: Img.Raster
+  for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg(img)) == True{} : Bool}
+  exs mid: List<&2, U32>
+  {Img.encode_jpeg(img) == Some{List.append(&2, U32, [255, 216], List.append(&2, U32, mid, [255, 217]))}
+    : Maybe<&2, List<&2, U32>>}
+
+# the red byte of a packed sample
+def chan.r(+pp: U32) -> U32:
+  U32.and(255, U32.shrn(pp, 16n))
+
+# the green byte of a packed sample
+def chan.g(+pp: U32) -> U32:
+  U32.and(255, U32.shrn(pp, 8n))
+
+# the blue byte of a packed sample
+def chan.b(+pp: U32) -> U32:
+  U32.and(255, pp)
+
+# LAW: a gray sample carries its level's byte in red, green and blue
+# IMG-PIX-1
+law jpeg_gray_level:
+  for +yy: U32
+  {chan.r(Jpeg.gray(yy)) == U32.and(255, yy) : U32} & {chan.g(Jpeg.gray(yy)) == U32.and(255, yy) : U32}
+    & {chan.b(Jpeg.gray(yy)) == U32.and(255, yy) : U32}
+
+# every level as a gray sample
+def jpeg.grays(ys: List<&2, U32>) -> List<&2, U32>:
+  match ys:
+    case Nil{}:
+      Nil{}
+    case yv <> rest:
+      Jpeg.gray(yv) <> jpeg.grays(rest)
+
+# every Y, Cb, Cr triple as a colour sample, as many as the shortest list holds
+def jpeg.rgbs(ys: List<&2, U32>, bs: List<&2, U32>, rs: List<&2, U32>) -> List<&2, U32>:
+  match ys bs rs:
+    case yv <> yt bv <> bt rv <> rt:
+      Jpeg.rgb(yv, bv, rv) <> jpeg.rgbs(yt, bt, rt)
+    case _ _ _:
+      Nil{}
+
+# gray samples of the levels ys, or colour samples of ys, bs and rs
+def jpeg.pack(gray: Bool, ys: List<&2, U32>, bs: List<&2, U32>, rs: List<&2, U32>) -> List<&2, U32>:
+  match gray:
+    case True{}:
+      jpeg.grays(ys)
+    case False{}:
+      jpeg.rgbs(ys, bs, rs)
+
+# LAW: decode_jpeg packs every sample it returns with Jpeg.gray, or every one with Jpeg.rgb
+# IMG-PIX-1
+law jpeg_decode_packed:
+  for +bytes: List<&2, U32>
+  for +img: Img.Raster
+  for h_dec: {Img.decode_jpeg(bytes) == Some{img} : Maybe<&2, Img.Raster>}
+  exs gray: Bool
+  exs ys: List<&2, U32>
+  exs bs: List<&2, U32>
+  exs rs: List<&2, U32>
+  {Img.pixels(img) == jpeg.pack(gray, ys, bs, rs) : List<&2, U32>}
+
+# ok, and every sample of px has alpha 255
+def all.opaque(px: List<&2, U32>, ok: Bool) -> Bool:
+  match px:
+    case Nil{}:
+      ok
+    case pp <> rest:
+      all.opaque(rest, Bool.and(U32.is_eq(U32.shrn(pp, 24n), 255), ok))
+
+# LAW: every sample decode_jpeg returns has alpha 255
+# IMG-PIX-1
+law jpeg_decode_opaque:
+  for +bytes: List<&2, U32>
+  for +img: Img.Raster
+  for h_dec: {Img.decode_jpeg(bytes) == Some{img} : Maybe<&2, Img.Raster>}
+  {all.opaque(Img.pixels(img), True{}) == True{} : Bool}
+
+# the markers of segments that are not frame headers (T.81 Table B.1): DHT, DQT, SOS, DRI, COM, APP0 to APP15
+type Mk is Data:
+  MDht{}
+  MDqt{}
+  MSos{}
+  MDri{}
+  MCom{}
+  MApp0{}
+  MApp1{}
+  MApp2{}
+  MApp3{}
+  MApp4{}
+  MApp5{}
+  MApp6{}
+  MApp7{}
+  MApp8{}
+  MApp9{}
+  MApp10{}
+  MApp11{}
+  MApp12{}
+  MApp13{}
+  MApp14{}
+  MApp15{}
+
+# a marker's second byte
+def mk.byte(mk: Mk) -> U32:
+  match mk:
+    case MDht{}:
+      196
+    case MDqt{}:
+      219
+    case MSos{}:
+      218
+    case MDri{}:
+      221
+    case MCom{}:
+      254
+    case MApp0{}:
+      224
+    case MApp1{}:
+      225
+    case MApp2{}:
+      226
+    case MApp3{}:
+      227
+    case MApp4{}:
+      228
+    case MApp5{}:
+      229
+    case MApp6{}:
+      230
+    case MApp7{}:
+      231
+    case MApp8{}:
+      232
+    case MApp9{}:
+      233
+    case MApp10{}:
+      234
+    case MApp11{}:
+      235
+    case MApp12{}:
+      236
+    case MApp13{}:
+      237
+    case MApp14{}:
+      238
+    case MApp15{}:
+      239
+
+# a segment that is not a frame header: its marker, the two bytes of its length field, and its body
+type Seg is Data:
+  Seg{mk: Mk, hi: U32, lo: U32, body: List<&2, U32>}
+
+# a segment's bytes: FF, the marker, the length field, the body
+def seg.bytes(sg: Seg) -> List<&2, U32>:
+  match sg:
+    case Seg{mk, hi, lo, body}:
+      255 <> (mk.byte(mk) <> (hi <> (lo <> body)))
+
+# the length a length field gives, high byte first
+def seg.len(+hi: U32, +lo: U32) -> U32:
+  U32.or(U32.shln(hi, 8n), lo)
+
+# a length field fits its body: it is at least 2, and 2 more than the body's length
+def seg.Fits(+hi: U32, +lo: U32, +body: List<&2, U32>) -> Type:
+  {U32.is_lt(seg.len(hi, lo), 2) == False{} : Bool}
+    & {U32.to_nat((seg.len(hi, lo) - 2 : U32)) == List.length(&2, U32, body) : Nat}
+
+# every segment's length field fits its body
+def segs.Fit(ss: List<&2, Seg>) -> Type:
+  match ss:
+    case Nil{}:
+      Unit
+    case Seg{_mk, +hi, +lo, +body} <> rest:
+      seg.Fits(hi, lo, body) & segs.Fit(rest)
+
+# the bytes of the segments, in order
+def segs.bytes(ss: List<&2, Seg>) -> List<&2, U32>:
+  match ss:
+    case Nil{}:
+      Nil{}
+    case sg <> rest:
+      List.append(&2, U32, seg.bytes(sg), segs.bytes(rest))
+
+# SOI, then the segments, then the rest
+def jpeg.lead(ss: List<&2, Seg>, rest: List<&2, U32>) -> List<&2, U32>:
+  List.append(&2, U32, [255, 216], List.append(&2, U32, segs.bytes(ss), rest))
+
+# the frame headers other than SOF0 (T.81 Table B.1): SOF1 to SOF3, SOF5 to SOF7, SOF9 to SOF11, SOF13 to SOF15
+type Sofn is Data:
+  Sof1{}
+  Sof2{}
+  Sof3{}
+  Sof5{}
+  Sof6{}
+  Sof7{}
+  Sof9{}
+  Sof10{}
+  Sof11{}
+  Sof13{}
+  Sof14{}
+  Sof15{}
+
+# a frame header's second byte
+def sofn.byte(sn: Sofn) -> U32:
+  match sn:
+    case Sof1{}:
+      193
+    case Sof2{}:
+      194
+    case Sof3{}:
+      195
+    case Sof5{}:
+      197
+    case Sof6{}:
+      198
+    case Sof7{}:
+      199
+    case Sof9{}:
+      201
+    case Sof10{}:
+      202
+    case Sof11{}:
+      203
+    case Sof13{}:
+      205
+    case Sof14{}:
+      206
+    case Sof15{}:
+      207
+
+# LAW: bytes that open with SOI and segments that are not frame headers, then a frame header other than SOF0,
+# decode to none, whatever follows
+# IMG-JPG-1
+law jpeg_refuse_sofn:
+  for +segs: List<&2, Seg>
+  for h_fit: segs.Fit(segs)
+  for +sn: Sofn
+  for +rest: List<&2, U32>
+  {Img.decode_jpeg(jpeg.lead(segs, 255 <> (sofn.byte(sn) <> rest))) == None{} : Maybe<&2, Img.Raster>}
+
+# LAW: bytes that open with SOI and segments that are not frame headers, then an SOF0 segment whose sample
+# precision is not 8, decode to none, whatever follows
+# IMG-JPG-1
+law jpeg_refuse_precision:
+  for +segs: List<&2, Seg>
+  for h_fit: segs.Fit(segs)
+  for +hi: U32
+  for +lo: U32
+  for +pp: U32
+  for +body: List<&2, U32>
+  for h_len: seg.Fits(hi, lo, pp <> body)
+  for h_pp: {U32.is_eq(pp, 8) == False{} : Bool}
+  for +rest: List<&2, U32>
+  {Img.decode_jpeg(jpeg.lead(segs, List.append(&2, U32, 255 <> (192 <> (hi <> (lo <> (pp <> body)))), rest)))
+    == None{} : Maybe<&2, Img.Raster>}
+
+# ---- wp2-inflate ----
+
+# every value is at most 255, and `ok` carries that forward
+def bytes.go(xs: List<&2, U32>, ok: Bool) -> Bool:
+  match xs ok:
+    case _xs False{}:
+      False{}
+    case Nil{} True{}:
+      True{}
+    case +xx <> tl True{}:
+      bytes.go(tl, U32.is_le(xx, 255))
+
+# every value of xs is a byte, 0 to 255
+def bytes(xs: List<&2, U32>) -> Bool:
+  bytes.go(xs, True{})
+
+# the zlib stream ezimg writes for xs in stored blocks of at most sz bytes:
+# CMF and FLG 120 1, the encoder's stored blocks, and the Adler-32 of xs
+def zlib.stored(+sz: U32, +xs: List<&2, U32>) -> List<&2, U32>:
+  Png.enc.cat([120, 1], Png.enc.cat(Png.enc.blocks(sz, xs), Png.enc.be(Inf.adler.of(xs))))
+
+# LAW: every byte list with fewer than 2^32 bytes, in the zlib stream ezimg writes with stored blocks of any size from 1
+# to 65535, inflates to itself
+# IMG-PNG-7
+law inflate_stored:
+  for +sz: U32
+  for +xs: List<&2, U32>
+  for h_sz: {Bool.and(U32.is_le(1, sz), U32.is_le(sz, 65535)) == True{} : Bool}
+  for h_by: {bytes(xs) == True{} : Bool}
+  for h_n: {U32.to_nat(Png.enc.len(xs, 0)) == List.length(&2, U32, xs) : Nat}
+  {Inf.inflate(zlib.stored(sz, xs)) == Some{xs} : Maybe<&2, List<&2, U32>>}
+
+# LAW: the zlib stream enc.zlib writes for a PNG's IDAT inflates to the bytes it was given
+# IMG-PNG-7
+law inflate_enc_zlib:
+  for +xs: List<&2, U32>
+  for h_by: {bytes(xs) == True{} : Bool}
+  for h_n: {U32.to_nat(Png.enc.len(xs, 0)) == List.length(&2, U32, xs) : Nat}
+  {Inf.inflate(Png.enc.zlib(xs, Png.enc.len(xs, 0))) == Some{xs} : Maybe<&2, List<&2, U32>>}
+
+# ---- wp3-filter ----
+
+# the five filter types of PNG section 9.2 (W3C PNG, 9.2 "Filter types for
+# filter method 0"): None, Sub, Up, Average and Paeth
+type Ft is Data:
+  FNone{}
+  FSub{}
+  FUp{}
+  FAvg{}
+  FPaeth{}
+
+# the byte PNG writes before a row filtered with each type: 0 to 4
+def ft.code(ft: Ft) -> U32:
+  match ft:
+    case FNone{}:
+      0
+    case FSub{}:
+      1
+    case FUp{}:
+      2
+    case FAvg{}:
+      3
+    case FPaeth{}:
+      4
+
+# entry nn of a newest-first history of bytes, or 0 past its end (outside the image)
+def flt.at(hist: List<&2, U32>, nn: Nat) -> U32:
+  match hist nn:
+    case Nil{} _nn:
+      0
+    case +hd <> _tl 0n:
+      hd
+    case _hd <> tl 1n+pp:
+      flt.at(tl, pp)
+
+# b, the byte above: the next byte of the previous row, or 0 on the first row
+def flt.up(prev: List<&2, U32>) -> U32:
+  match prev:
+    case Nil{}:
+      0
+    case +hd <> _tl:
+      hd
+
+# the previous row past the byte above
+def flt.next(prev: List<&2, U32>) -> List<&2, U32>:
+  match prev:
+    case Nil{}:
+      Nil{}
+    case _hd <> tl:
+      tl
+
+# |x - y| of two U32s: the smaller taken from the larger
+def flt.dist.at(ge: Bool, +xx: U32, +yy: U32) -> U32:
+  match ge:
+    case True{}:
+      (xx - yy : U32)
+    case False{}:
+      (yy - xx : U32)
+
+# |x - y| of two U32s
+def flt.dist(+xx: U32, +yy: U32) -> U32:
+  flt.dist.at(U32.is_ge(xx, yy), xx, yy)
+
+# PaethPredictor's choice, in the specification's order: a when pa <= pb and
+# pa <= pc, otherwise b when pb <= pc, otherwise c
+def flt.paeth.near(
+  ab: Bool,
+  ac: Bool,
+  bc: Bool,
+  +aa: U32,
+  +bb: U32,
+  +cc: U32
+) -> U32:
+  match ab ac bc:
+    case True{} True{} _bc:
+      aa
+    case True{} False{} True{}:
+      bb
+    case True{} False{} False{}:
+      cc
+    case False{} _ac True{}:
+      bb
+    case False{} _ac False{}:
+      cc
+
+# PaethPredictor(a, b, c) of PNG section 9.4, with p = a + b - c expanded so
+# no distance goes below zero: |p - a| = |b - c|, |p - b| = |a - c| and
+# |p - c| = |a + b - 2c|, 2c being c shifted left one bit
+def flt.paeth(+aa: U32, +bb: U32, +cc: U32) -> U32:
+  +pa = flt.dist(bb, cc)
+  +pb = flt.dist(aa, cc)
+  +pc = flt.dist((aa + bb : U32), (cc << 1n : U32))
+  flt.paeth.near(U32.is_le(pa, pb), U32.is_le(pa, pc), U32.is_le(pb, pc), aa, bb, cc)
+
+# the predictor each filter type subtracts: None 0, Sub a, Up b, Average
+# floor((a + b) / 2), Paeth PaethPredictor(a, b, c)
+def flt.pred(ft: Ft, +aa: U32, +bb: U32, +cc: U32) -> U32:
+  match ft:
+    case FNone{}:
+      0
+    case FSub{}:
+      aa
+    case FUp{}:
+      bb
+    case FAvg{}:
+      ((aa + bb : U32) >> 1n : U32)
+    case FPaeth{}:
+      flt.paeth(aa, bb, cc)
+
+# Filt(x) = Orig(x) - predictor, mod 256, for each byte of one row. `prev`
+# is the rest of the previous row, `hist` and `phist` the bytes of this row
+# and of the previous row already passed, newest first; a is `bpp` bytes back
+# in `hist`, b the byte above, c `bpp` bytes back in `phist`, each 0 outside
+# the image
+def flt.row(
+  row: List<&2, U32>,
+  +ft: Ft,
+  +bpp: U32,
+  +prev: List<&2, U32>,
+  +hist: List<&2, U32>,
+  +phist: List<&2, U32>
+) -> List<&2, U32>:
+  match row:
+    case Nil{}:
+      Nil{}
+    case +xx <> rest:
+      +aa = flt.at(hist, U32.to_nat((bpp - 1 : U32)))
+      +bb = flt.up(prev)
+      +cc = flt.at(phist, U32.to_nat((bpp - 1 : U32)))
+      U32.and(255, (xx - flt.pred(ft, aa, bb, cc) : U32)) <>
+        flt.row(rest, ft, bpp, flt.next(prev), {xx <> hist : List<&2, U32>}, {bb <> phist : List<&2, U32>})
+
+# the filtered image data: each row filtered with `ft` against the row
+# before it (none above the first), after its filter type byte
+def flt.rows(rows: List<&2, List<&2, U32>>, +ft: Ft, +bpp: U32, prev: List<&2, U32>) -> List<&2, U32>:
+  match rows:
+    case Nil{}:
+      Nil{}
+    case +row <> rest:
+      ft.code(ft) <> List.append(&2, U32, flt.row(row, ft, bpp, prev, [], []), flt.rows(rest, ft, bpp, row))
+
+# a row of exactly nn bytes, each below 256, with `ok` the answer so far
+def flt.bytes(row: List<&2, U32>, nn: Nat, ok: Bool) -> Bool:
+  match row nn:
+    case Nil{} 0n:
+      ok
+    case Nil{} 1n+_pp:
+      False{}
+    case _xx <> _rest 0n:
+      False{}
+    case +xx <> rest 1n+pp:
+      flt.bytes(rest, pp, Bool.and(ok, U32.is_lt(xx, 256)))
+
+# every row nn bytes, each below 256, with `ok` the answer so far
+def flt.fit(rows: List<&2, List<&2, U32>>, +nn: Nat, ok: Bool) -> Bool:
+  match rows:
+    case Nil{}:
+      ok
+    case +row <> rest:
+      flt.fit(rest, nn, Bool.and(ok, flt.bytes(row, nn, True{})))
+
+# the sizes unfilter reads: a nonzero width and height, 1 to 4 bytes per pixel
+def flt.dims(+ww: U32, +hh: U32, +bpp: U32) -> Bool:
+  Bool.and(U32.is_gt(ww, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4))))
+
+# LAW: unfilter undoes the PNG filter of every type: rows of width times bpp bytes, filtered by the specification's
+# filter function, unfilter to the rows
+# IMG-PNG-6
+law unfilter_filter:
+  for +ft: Ft
+  for +ww: U32
+  for +hh: U32
+  for +bpp: U32
+  for +rows: List<&2, List<&2, U32>>
+  for +h_dims: {flt.dims(ww, hh, bpp) == True{} : Bool}
+  for +h_wrap: {U32.to_nat((ww * bpp : U32)) == Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)) : Nat}
+  for h_rows: {List.length(&2, List<&2, U32>, rows) == U32.to_nat(hh) : Nat}
+  for h_fit: {flt.fit(rows, Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)), True{}) == True{} : Bool}
+  {Png.unfilter(flt.rows(rows, ft, bpp, []), ww, hh, bpp) == Some{List.concat(&2, U32, rows)}
+    : Maybe<&2, List<&2, U32>>}
+
+# ---- wp1-crc ----
+
+# the ISO 3309 / ITU-T V.42 CRC-32 polynomial, reflected (PNG section 5.5
+# and Annex D): 0xEDB88320
+def crc.ref.poly() -> U32:
+  3988292384
+
+# one bit, as the specification's sample code does it: when the low bit of
+# the register is set, shift right and xor in the polynomial; else shift right
+def crc.ref.shift(odd: Bool, +cc: U32) -> U32:
+  match odd:
+    case True{}:
+      ((cc >> 1n : U32) .^. crc.ref.poly() : U32)
+    case False{}:
+      (cc >> 1n : U32)
+
+# one bit step of the register, low bit first. The register is taken apart
+# first, so a register the checker cannot compute stays one stuck match
+# instead of being copied into both the test and the shift at every step
+def crc.ref.step(cc: U32) -> U32:
+  match cc:
+    case U32{+ww}:
+      crc.ref.shift(U32.is_eq((U32{ww} .&. 1 : U32), 1), U32{ww})
+
+# nn bit steps
+def crc.ref.bits(nn: Nat, +cc: U32) -> U32:
+  match nn:
+    case 0n:
+      cc
+    case 1n+pp:
+      crc.ref.bits(pp, crc.ref.step(cc))
+
+# one byte: xor it into the register, then eight bit steps. Bytes are U32 in
+# ezimg and the byte is xored in whole, so for 0 to 255 this is ISO 3309
+def crc.ref.byte(+cc: U32, +bb: U32) -> U32:
+  crc.ref.bits(8n, (cc .^. bb : U32))
+
+# every byte in order, the register still inverted
+def crc.ref.fold(xs: List<&2, U32>, +cc: U32) -> U32:
+  match xs:
+    case Nil{}:
+      cc
+    case +bb <> tl:
+      crc.ref.fold(tl, crc.ref.byte(cc, bb))
+
+# the bitwise CRC-32: register preset to all ones, all ones xored at the end
+def crc.ref(xs: List<&2, U32>) -> U32:
+  (crc.ref.fold(xs, 4294967295) .^. 4294967295 : U32)
+
+# LAW: Crc.crc32 is the bitwise ISO 3309 CRC-32, for every byte list
+# IMG-PNG-5
+law crc32_bitwise:
+  for xs: List<&2, U32>
+  {Crc.crc32(xs) == crc.ref(xs) : U32}
+
+# a PNG chunk as bytes (PNG section 5.3): the four length bytes, the four
+# chunk type bytes, the data, and the four CRC bytes
+type Chunk is Data:
+  Chunk{
+    +l0: U32, +l1: U32, +l2: U32, +l3: U32, +t0: U32, +t1: U32, +t2: U32, +t3: U32, +data: List<&2, U32>,
+    +s0: U32, +s1: U32, +s2: U32, +s3: U32
+  }
+
+# four bytes read as one number, most significant byte first (PNG section 7.1)
+def be.word(+aa: U32, +bb: U32, +cc: U32, +dd: U32) -> U32:
+  ((((aa << 24n : U32) .|. (bb << 16n : U32) : U32) .|. (cc << 8n : U32) : U32) .|. dd : U32)
+
+# a chunk's bytes, then rest
+def chunk.onto(ck: Chunk, rest: List<&2, U32>) -> List<&2, U32>:
+  match ck:
+    case Chunk{l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3}:
+      l0 <> l1 <> l2 <> l3 <> t0 <> t1 <> t2 <> t3 <> List.append(&2, U32, data, s0 <> s1 <> s2 <> s3 <> rest)
+
+# chunks' bytes one after another, then rest
+def chunks.onto(cs: List<&2, Chunk>, rest: List<&2, U32>) -> List<&2, U32>:
+  match cs:
+    case Nil{}:
+      rest
+    case ck <> tl:
+      chunk.onto(ck, chunks.onto(tl, rest))
+
+# the chunk's length field counts its data bytes
+def chunk.framed(ck: Chunk) -> Type:
+  match ck:
+    case Chunk{l0, l1, l2, l3, _t0, _t1, _t2, _t3, data, _s0, _s1, _s2, _s3}:
+      {U32.to_nat(be.word(l0, l1, l2, l3)) == List.length(&2, U32, data) : Nat}
+
+# every chunk's length field counts its data bytes
+def chunks.framed(cs: List<&2, Chunk>) -> Type:
+  match cs:
+    case Nil{}:
+      Unit
+    case ck <> tl:
+      chunk.framed(ck) & chunks.framed(tl)
+
+# the CRC a chunk stores
+def chunk.stored(ck: Chunk) -> U32:
+  match ck:
+    case Chunk{_l0, _l1, _l2, _l3, _t0, _t1, _t2, _t3, _data, s0, s1, s2, s3}:
+      be.word(s0, s1, s2, s3)
+
+# the CRC-32 of a chunk's type and data
+def chunk.sum(ck: Chunk) -> U32:
+  match ck:
+    case Chunk{_l0, _l1, _l2, _l3, t0, t1, t2, t3, data, _s0, _s1, _s2, _s3}:
+      crc.ref(t0 <> t1 <> t2 <> t3 <> data)
+
+# LAW: after the signature and any framed chunks, a framed chunk whose stored CRC differs from the CRC-32 of its type
+# and data makes decode_png none, whatever follows
+# IMG-PNG-5
+law png_crc_refused:
+  for +pre: List<&2, Chunk>
+  for +bad: Chunk
+  for +rest: List<&2, U32>
+  for h_pre: chunks.framed(pre)
+  for h_bad: chunk.framed(bad)
+  for h_crc: {chunk.stored(bad) == chunk.sum(bad) : U32} -> Empty
+  {Img.decode_png(List.append(&2, U32, Img.png_sig(), chunks.onto(pre, chunk.onto(bad, rest))))
+    == None{} : Maybe<&2, Img.Raster>}
+
 # ---- wp5-png-decode ----
 
 # the four bytes of a U32, most significant first

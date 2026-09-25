@@ -3,12 +3,17 @@
 import Base
 import ./LAWS.bend as Laws
 import ./proof/u32.bend as U32L
+import ./proof/wp2-inflate.bend as Wp2
+import ./proof/wp3-filter.bend as Flt
+import ./proof/wp1-crc.bend as Wp1
 import ./proof/wp4-png-encode.bend as Wp4
 import ./main.bend as Img
 import ./src/png.bend as Png
 import ./src/jpeg.bend as Jpeg
 import ./src/crc.bend as Crc
 import ./proof/wp5-png-decode.bend as W5
+import ./proof/wp7-jpeg-struct.bend as W7
+import ./src/jpeg_enc.bend as Jenc
 
 # U32.or with 0xFF000000 first has alpha 255, whatever the other operand:
 # the 32 bits are taken apart four at a time, and Bool.or(True, b) is True.
@@ -256,6 +261,1035 @@ def sig.only.go(
 
 def Laws.sig_only(xs, h_some):
   sig.only.go(Img.sig.match(Img.png_sig(), xs, True{}), xs, {==}, h_some)
+
+# ---- wp7-jpeg-struct ----
+
+# what jpeg_enc_layout says of an encoding mm of a raster of width ww and height hh
+def lay.Ty(mm: Maybe<&2, List<&2, U32>>, ww: U32, hh: U32) -> Type:
+  &app: List<&2, U32> -> &dq: List<&2, U32> -> &sof: List<&2, U32> -> &dc: List<&2, U32>
+    -> &ac: List<&2, U32> -> &sos: List<&2, U32> -> &ent: List<&2, U32>
+    -> {mm == Some{Laws.jfif.file(ww, hh, app, dq, sof, dc, ac, sos, ent)} : Maybe<&2, List<&2, U32>>}
+
+# an accepted raster's encoding is the header, the entropy-coded bytes and EOI
+def lay.pick(
+  ok: Bool,
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>,
+  e_ok: {Png.enc.good(ww, hh, px) == ok : Bool},
+  h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg.pick(ok, ww, hh, Img.colours(px))) == True{} : Bool},
+  h_w: {U32.is_le(ww, 65535) == True{} : Bool},
+  h_h: {U32.is_le(hh, 65535) == True{} : Bool}
+) -> lay.Ty(Img.encode_jpeg.pick(ok, ww, hh, Img.colours(px)), ww, hh):
+  match ok:
+    case False{}:
+      Empty.absurd(lay.Ty(None{}, ww, hh), U32L.false_true(h_some))
+    case True{}:
+      +cp = Img.colours(px)
+      ([1, 1, 0, 0, 1, 0, 1, 0, 0], (0 <> Jenc.encode.quant(), ([3, 1, 17, 0, 2, 17, 0, 3, 17, 0],
+        (0 <> Jenc.encode.join(Jenc.encode.dccounts(), Jenc.encode.dcsyms()),
+        (16 <> Jenc.encode.join(Jenc.encode.accounts(), Jenc.encode.acsyms()), ([3, 1, 0, 2, 0, 3, 0, 0, 63, 0],
+        (Jenc.encode.arm(ww, hh, cp),
+        Equal.cong(Bool, Maybe<&2, List<&2, U32>>, bb => Some{Jenc.encode.pick(bb, ww, hh, cp)},
+          Jenc.encode.bad(ww, hh), False{}, W7.bad_of_good(ww, hh, px, e_ok, h_w, h_h)))))))))
+
+def Laws.jpeg_enc_layout(img, h_some, h_w, h_h):
+  match img:
+    case Img.Raster{+ww, +hh, +px}:
+      lay.pick(Png.enc.good(ww, hh, px), ww, hh, px, {==}, h_some, h_w, h_h)
+
+# what jpeg_enc_ends says of an encoding mm
+def ends.Ty(mm: Maybe<&2, List<&2, U32>>) -> Type:
+  &mid: List<&2, U32>
+    -> {mm == Some{List.append(&2, U32, [255, 216], List.append(&2, U32, mid, [255, 217]))} : Maybe<&2, List<&2, U32>>}
+
+# the encoder's output opens with SOI and closes with EOI, whichever way its size test goes
+def ends.bad(bad: Bool, +ww: U32, +hh: U32, +cp: List<&2, U32>) -> ends.Ty(Some{Jenc.encode.pick(bad, ww, hh, cp)}):
+  match bad:
+    case True{}:
+      ([], {==})
+    case False{}:
+      (List.append(&2, U32, Jenc.encode.join(Jenc.encode.app0(), Jenc.encode.join(Jenc.encode.dqt(),
+        Jenc.encode.join(Jenc.encode.sof(ww, hh), Jenc.encode.join(Jenc.encode.dht(0, Jenc.encode.dccounts(),
+        Jenc.encode.dcsyms()), Jenc.encode.join(Jenc.encode.dht(16, Jenc.encode.accounts(), Jenc.encode.acsyms()),
+        Jenc.encode.sos()))))), Jenc.encode.arm(ww, hh, cp)), {==})
+
+# an accepted raster's encoding opens with SOI and closes with EOI
+def ends.pick(
+  ok: Bool,
+  +ww: U32,
+  +hh: U32,
+  +cp: List<&2, U32>,
+  h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg.pick(ok, ww, hh, cp)) == True{} : Bool}
+) -> ends.Ty(Img.encode_jpeg.pick(ok, ww, hh, cp)):
+  match ok:
+    case False{}:
+      Empty.absurd(ends.Ty(None{}), U32L.false_true(h_some))
+    case True{}:
+      ends.bad(Jenc.encode.bad(ww, hh), ww, hh, cp)
+
+def Laws.jpeg_enc_ends(img, h_some):
+  match img:
+    case Img.Raster{+ww, +hh, +px}:
+      ends.pick(Png.enc.good(ww, hh, px), ww, hh, Img.colours(px), h_some)
+
+def Laws.jpeg_gray_level(yy):
+  match yy:
+    case U32{w0}:
+      match w0:
+        case WCon{b0, WCon{b1, WCon{b2, WCon{b3, w4}}}}:
+          match w4:
+            case WCon{b4, WCon{b5, WCon{b6, WCon{b7, w8}}}}:
+              match w8:
+                case WCon{_b8, WCon{_b9, WCon{_b10, WCon{_b11, w12}}}}:
+                  match w12:
+                    case WCon{_b12, WCon{_b13, WCon{_b14, WCon{_b15, w16}}}}:
+                      match w16:
+                        case WCon{_b16, WCon{_b17, WCon{_b18, WCon{_b19, w20}}}}:
+                          match w20:
+                            case WCon{_b20, WCon{_b21, WCon{_b22, WCon{_b23, w24}}}}:
+                              match w24:
+                                case WCon{_b24, WCon{_b25, WCon{_b26, WCon{_b27, w28}}}}:
+                                  match w28:
+                                    case WCon{_b28, WCon{_b29, WCon{_b30, WCon{_b31, w32}}}}:
+                                      match w32:
+                                        case WNil{}:
+                                          (W7.or_byte(b0, b1, b2, b3, b4, b5, b6, b7),
+                                            (W7.or_byte(b0, b1, b2, b3, b4, b5, b6, b7), {==}))
+
+# the samples of a decoded picture, or none
+def pic.px(mm: Maybe<&2, Jpeg.Pic>) -> List<&2, U32>:
+  match mm:
+    case None{}:
+      []
+    case Some{Jpeg.Pic{_ww, _hh, px}}:
+      px
+
+# what jpeg_decode_packed says of samples px
+def pk.Ty(px: List<&2, U32>) -> Type:
+  &gray: Bool -> &ys: List<&2, U32> -> &bs: List<&2, U32> -> &rs: List<&2, U32>
+    -> {px == Laws.jpeg.pack(gray, ys, bs, rs) : List<&2, U32>}
+
+# the code's gray packing is the law's
+def grays.eq(+ys: List<&2, U32>) -> {Jpeg.decode.grays(ys) == Laws.jpeg.grays(ys) : List<&2, U32>}:
+  match ys:
+    case Nil{}:
+      {==}
+    case +yv <> rest:
+      Equal.cong(List<&2, U32>, List<&2, U32>, tl => {Jpeg.gray(yv) <> tl : List<&2, U32>}, Jpeg.decode.grays(rest),
+        Laws.jpeg.grays(rest), grays.eq(rest))
+
+# the code's colour packing is the law's
+def rgbs.eq(
+  +ys: List<&2, U32>,
+  +bs: List<&2, U32>,
+  +rs: List<&2, U32>
+) -> {Jpeg.decode.rgbs(ys, bs, rs) == Laws.jpeg.rgbs(ys, bs, rs) : List<&2, U32>}:
+  match ys bs rs:
+    case Nil{} _bs _rs:
+      {==}
+    case _yv <> _yt Nil{} _rs:
+      {==}
+    case _yv <> _yt _bv <> _bt Nil{}:
+      {==}
+    case +yv <> yt +bv <> bt +rv <> rt:
+      Equal.cong(List<&2, U32>, List<&2, U32>, tl => {Jpeg.rgb(yv, bv, rv) <> tl : List<&2, U32>},
+        Jpeg.decode.rgbs(yt, bt, rt), Laws.jpeg.rgbs(yt, bt, rt), rgbs.eq(yt, bt, rt))
+
+# no picture has no samples
+def none.pk() -> pk.Ty([]):
+  (True{}, ([], ([], ([], {==}))))
+
+# gray or colour, by the component count
+def nf3.pk(
+  three: Bool,
+  +ww: U32,
+  +hh: U32,
+  yy: Array<U32>,
+  cb: Array<U32>,
+  cr: Array<U32>
+) -> pk.Ty(pic.px(Jpeg.decode.done.nf3(three, ww, hh, yy, cb, cr))):
+  match three:
+    case True{}:
+      +nn = U32.to_nat((ww * hh : U32))
+      +ey = Jpeg.decode.emit(nn, (yy, 0), 0, [], False{})
+      +eb = Jpeg.decode.emit(nn, (cb, 0), 0, [], False{})
+      +er = Jpeg.decode.emit(nn, (cr, 0), 0, [], False{})
+      (False{}, (ey, (eb, (er, rgbs.eq(ey, eb, er)))))
+    case False{}:
+      none.pk()
+
+# one component is gray
+def nf1.pk(
+  one: Bool,
+  +nf: U32,
+  +ww: U32,
+  +hh: U32,
+  yy: Array<U32>,
+  cb: Array<U32>,
+  cr: Array<U32>
+) -> pk.Ty(pic.px(Jpeg.decode.done.nf1(one, nf, ww, hh, yy, cb, cr))):
+  match one:
+    case True{}:
+      +ey = Jpeg.decode.emit(U32.to_nat((ww * hh : U32)), (yy, 0), 0, [], False{})
+      (True{}, (ey, ([], ([], grays.eq(ey)))))
+    case False{}:
+      nf3.pk(U32.is_eq(nf, 3), ww, hh, yy, cb, cr)
+
+# a failed scan has no samples, and a finished one is packed by its component count
+def dok.pk(
+  bad: Bool,
+  frame: Jpeg.Frame,
+  yy: Array<U32>,
+  cb: Array<U32>,
+  cr: Array<U32>
+) -> pk.Ty(pic.px(Jpeg.decode.done.ok(bad, frame, yy, cb, cr))):
+  match bad:
+    case True{}:
+      none.pk()
+    case False{}:
+      match frame:
+        case Jpeg.Frame{+ww, +hh, +nf, _ids, _hs, _vs, _tq, _hmax, _vmax}:
+          nf1.pk(U32.is_eq(nf, 1), nf, ww, hh, yy, cb, cr)
+
+# the blocks' walk ends in decode.done, whose samples are packed
+def blocks.pk(
+  left: Nat,
+  blk: Jpeg.Blk,
+  +ctrl: Jpeg.Ctrl,
+  +preds: Jpeg.Preds,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ri: U32,
+  yy: Array<U32>,
+  cb: Array<U32>,
+  cr: Array<U32>,
+  +ok: U32
+) -> pk.Ty(pic.px(Jpeg.decode.blocks(left, blk, ctrl, preds, frame, scan, tabs, ri, yy, cb, cr, ok))):
+  match left:
+    case 0n:
+      match blk:
+        case Jpeg.Blk{+samples, _bits, _pred, +bok}:
+          dok.pk(U32.is_eq((ok * bok : U32), 0), frame,
+            Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(Jpeg.decode.ctrl.comp(ctrl), 0),
+              samples, yy),
+            Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(Jpeg.decode.ctrl.comp(ctrl), 1),
+              samples, cb),
+            Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(Jpeg.decode.ctrl.comp(ctrl), 2),
+              samples, cr))
+    case 1n+pp:
+      match blk:
+        case Jpeg.Blk{+samples, +bits, +pred, +bok}:
+          match ctrl:
+            case Jpeg.Ctrl{+comp, _bi, _mx, _my, _mcu, _rst}:
+              blocks.pk(pp, Jpeg.decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri),
+                Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ctrl, frame, scan, ri)),
+                Jpeg.decode.preds.next(Jpeg.decode.adv.duef(Jpeg.decode.adv(ctrl, frame, scan, ri)), preds, comp, pred),
+                frame, scan, tabs, ri,
+                Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(comp, 0), samples, yy),
+                Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(comp, 1), samples, cb),
+                Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(comp, 2), samples, cr),
+                (ok * bok : U32))
+
+# the scan starts the blocks' walk, or has no blocks
+def start.pk(
+  nn: Nat,
+  bits: Jpeg.Bits,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ri: U32,
+  yy: Array<U32>,
+  cb: Array<U32>,
+  cr: Array<U32>
+) -> pk.Ty(pic.px(Jpeg.decode.start(nn, bits, frame, scan, tabs, ri, yy, cb, cr))):
+  match nn:
+    case 0n:
+      none.pk()
+    case 1n+pp:
+      blocks.pk(pp, Jpeg.decode.block.of(bits, 0, Jpeg.decode.pred.zero(), frame, scan, tabs),
+        Jpeg.Ctrl{0, 0, 0, 0, 0, 0}, Jpeg.decode.pred.zero(), frame, scan, tabs, ri, yy, cb, cr, 1)
+
+# an empty frame has no samples; any other starts the scan
+def runn.pk(
+  empty: Bool,
+  +ww: U32,
+  +hh: U32,
+  frame: Jpeg.Frame,
+  scan: Jpeg.Scan,
+  tabs: Jpeg.Tabs,
+  ent: List<&2, U32>,
+  +ri: U32
+) -> pk.Ty(pic.px(Jpeg.decode.run.n(empty, ww, hh, frame, scan, tabs, ent, ri))):
+  match empty:
+    case True{}:
+      none.pk()
+    case False{}:
+      match frame:
+        case Jpeg.Frame{_w, _h, _nf, _ids, +hs, +vs, _tq, +hmax, +vmax}:
+          start.pk(U32.to_nat((Jpeg.decode.ceil(ww, (hmax * 8 : U32)) * Jpeg.decode.ceil(hh, (vmax * 8 : U32))
+            * Jpeg.decode.blocks.sum(hs, vs, 0) : U32)), Jpeg.Bits{0, 1, 0, ent}, frame, scan, tabs, ri,
+            Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)))
+
+# a run's samples are packed
+def run.pk(
+  frame: Jpeg.Frame,
+  scan: Jpeg.Scan,
+  tabs: Jpeg.Tabs,
+  ent: List<&2, U32>,
+  +ri: U32
+) -> pk.Ty(pic.px(Jpeg.decode.run(frame, scan, tabs, ent, ri))):
+  match frame:
+    case Jpeg.Frame{+ww, +hh, _nf, _ids, _hs, _vs, _tq, _hmax, _vmax}:
+      runn.pk(Bool.or(U32.is_eq(ww, 0), U32.is_eq(hh, 0)), ww, hh, frame, scan, tabs, ent, ri)
+
+# a walk that did not reach a baseline frame cleanly has no samples; one that did runs
+def fok.pk(
+  ok1: Bool,
+  ok2: Bool,
+  frame: Jpeg.Frame,
+  scan: Jpeg.Scan,
+  tabs: Jpeg.Tabs,
+  ent: List<&2, U32>,
+  +ri: U32
+) -> pk.Ty(pic.px(Jpeg.decode.finish.ok(ok1, ok2, frame, scan, tabs, ent, ri))):
+  match ok1 ok2:
+    case False{} _ok2:
+      none.pk()
+    case True{} False{}:
+      none.pk()
+    case True{} True{}:
+      run.pk(frame, scan, tabs, List.reverse(&2, U32, ent), ri)
+
+# a walk that did not stop has no samples
+def fph.pk(
+  phase: Jpeg.Phase,
+  frame: Jpeg.Frame,
+  scan: Jpeg.Scan,
+  tabs: Jpeg.Tabs,
+  ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32
+) -> pk.Ty(pic.px(Jpeg.decode.finish.ph(phase, frame, scan, tabs, ent, ri, kind, bad))):
+  match phase:
+    case Jpeg.Stop{}:
+      fok.pk(U32.is_eq(kind, 1), U32.is_eq(bad, 0), frame, scan, tabs, ent, ri)
+    case Jpeg.Seek{}:
+      none.pk()
+    case Jpeg.Mark{}:
+      none.pk()
+    case Jpeg.LenHi{_mark}:
+      none.pk()
+    case Jpeg.LenLo{_mark, _hi}:
+      none.pk()
+    case Jpeg.Pay{_mark, _left, _acc}:
+      none.pk()
+    case Jpeg.Ent{}:
+      none.pk()
+    case Jpeg.EntFF{}:
+      none.pk()
+
+# whatever the walk's state, the picture decode finishes with is packed
+def finish.pk(st: Jpeg.St) -> pk.Ty(pic.px(Jpeg.decode.finish(st))):
+  match st:
+    case Jpeg.St{+phase, +frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
+      fph.pk(phase, frame, scan, tabs, ent, ri, kind, bad)
+
+# the samples of a raster, or none
+def raster.px(mr: Maybe<&2, Img.Raster>) -> List<&2, U32>:
+  match mr:
+    case None{}:
+      []
+    case Some{rr}:
+      Img.pixels(rr)
+
+# a raster decode_jpeg returns has the samples of the picture decode returns
+def out.px(
+  mm: Maybe<&2, Jpeg.Pic>,
+  +img: Img.Raster,
+  h_dec: {Img.decode_jpeg.out(mm) == Some{img} : Maybe<&2, Img.Raster>}
+) -> {Img.pixels(img) == pic.px(mm) : List<&2, U32>}:
+  match mm:
+    case None{}:
+      Empty.absurd({Img.pixels(img) == [] : List<&2, U32>}, W7.none_some(Img.Raster, img, h_dec))
+    case Some{Jpeg.Pic{ww, hh, px}}:
+      Equal.sym(List<&2, U32>, px, Img.pixels(img), Equal.cong(Maybe<&2, Img.Raster>, List<&2, U32>,
+        mr => raster.px(mr), Some{Img.Raster{ww, hh, px}}, Some{img}, h_dec))
+
+# samples equal to packed samples are packed
+def pk.move(
+  +aa: List<&2, U32>,
+  +bb: List<&2, U32>,
+  eab: {aa == bb : List<&2, U32>},
+  pr: pk.Ty(bb)
+) -> pk.Ty(aa):
+  (gray, (ys, (bs, (rs, eb)))) = pr
+  (gray, (ys, (bs, (rs, Equal.trans(List<&2, U32>, aa, bb, Laws.jpeg.pack(gray, ys, bs, rs), eab, eb)))))
+
+def Laws.jpeg_decode_packed(bytes, img, h_dec):
+  pk.move(Img.pixels(img), pic.px(Jpeg.decode(bytes)), out.px(Jpeg.decode(bytes), img, h_dec),
+    finish.pk(Jpeg.decode.walk(bytes, Jpeg.decode.st0())))
+
+# a sample with alpha 255 passes the alpha test
+def op.one(+pp: U32, ea: {U32.shrn(pp, 24n) == 255 : U32}) -> {U32.is_eq(U32.shrn(pp, 24n), 255) == True{} : Bool}:
+  Equal.cong(U32, Bool, xx => U32.is_eq(xx, 255), U32.shrn(pp, 24n), 255, ea)
+
+# one opaque sample in front leaves the answer as it was
+def op.step(
+  +pp: U32,
+  +rest: List<&2, U32>,
+  +ok: Bool,
+  ea: {U32.shrn(pp, 24n) == 255 : U32},
+  ih: {Laws.all.opaque(rest, ok) == ok : Bool}
+) -> {Laws.all.opaque(pp <> rest, ok) == ok : Bool}:
+  Equal.trans(Bool, Laws.all.opaque(rest, Bool.and(U32.is_eq(U32.shrn(pp, 24n), 255), ok)),
+    Laws.all.opaque(rest, ok), ok,
+    Equal.cong(Bool, Bool, bb => Laws.all.opaque(rest, Bool.and(bb, ok)), U32.is_eq(U32.shrn(pp, 24n), 255), True{},
+      op.one(pp, ea)), ih)
+
+# gray samples are all opaque
+def op.grays(+ys: List<&2, U32>, +ok: Bool) -> {Laws.all.opaque(Laws.jpeg.grays(ys), ok) == ok : Bool}:
+  match ys:
+    case Nil{}:
+      {==}
+    case +yv <> +rest:
+      op.step(Jpeg.gray(yv), Laws.jpeg.grays(rest), ok, Laws.jpeg_gray_opaque(yv), op.grays(rest, ok))
+
+# colour samples are all opaque
+def op.rgbs(
+  +ys: List<&2, U32>,
+  +bs: List<&2, U32>,
+  +rs: List<&2, U32>,
+  +ok: Bool
+) -> {Laws.all.opaque(Laws.jpeg.rgbs(ys, bs, rs), ok) == ok : Bool}:
+  match ys bs rs:
+    case Nil{} _bs _rs:
+      {==}
+    case _yv <> _yt Nil{} _rs:
+      {==}
+    case _yv <> _yt _bv <> _bt Nil{}:
+      {==}
+    case +yv <> +yt +bv <> +bt +rv <> +rt:
+      op.step(Jpeg.rgb(yv, bv, rv), Laws.jpeg.rgbs(yt, bt, rt), ok, Laws.jpeg_rgb_opaque(yv, bv, rv),
+        op.rgbs(yt, bt, rt, ok))
+
+# packed samples are all opaque
+def op.pack(
+  gray: Bool,
+  +ys: List<&2, U32>,
+  +bs: List<&2, U32>,
+  +rs: List<&2, U32>
+) -> {Laws.all.opaque(Laws.jpeg.pack(gray, ys, bs, rs), True{}) == True{} : Bool}:
+  match gray:
+    case True{}:
+      op.grays(ys, True{})
+    case False{}:
+      op.rgbs(ys, bs, rs, True{})
+
+# samples that are packed are all opaque
+def op.of(+px: List<&2, U32>, pr: pk.Ty(px)) -> {Laws.all.opaque(px, True{}) == True{} : Bool}:
+  (gray, (ys, (bs, (rs, ep)))) = pr
+  Equal.trans(Bool, Laws.all.opaque(px, True{}), Laws.all.opaque(Laws.jpeg.pack(gray, ys, bs, rs), True{}), True{},
+    Equal.cong(List<&2, U32>, Bool, ll => Laws.all.opaque(ll, True{}), px, Laws.jpeg.pack(gray, ys, bs, rs), ep),
+    op.pack(gray, ys, bs, rs))
+
+def Laws.jpeg_decode_opaque(bytes, img, h_dec):
+  op.of(Img.pixels(img), Laws.jpeg_decode_packed(bytes, img, h_dec))
+
+# a segment marker starts its length field
+def mk.mark(
+  mk: Laws.Mk,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32
+) -> {Jpeg.decode.mark(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad)
+  == Jpeg.St{Jpeg.LenHi{Laws.mk.byte(mk)}, frame, scan, tabs, ent, ri, kind, bad} : Jpeg.St}:
+  match mk:
+    case Laws.MDht{}:
+      {==}
+    case Laws.MDqt{}:
+      {==}
+    case Laws.MSos{}:
+      {==}
+    case Laws.MDri{}:
+      {==}
+    case Laws.MCom{}:
+      {==}
+    case Laws.MApp0{}:
+      {==}
+    case Laws.MApp1{}:
+      {==}
+    case Laws.MApp2{}:
+      {==}
+    case Laws.MApp3{}:
+      {==}
+    case Laws.MApp4{}:
+      {==}
+    case Laws.MApp5{}:
+      {==}
+    case Laws.MApp6{}:
+      {==}
+    case Laws.MApp7{}:
+      {==}
+    case Laws.MApp8{}:
+      {==}
+    case Laws.MApp9{}:
+      {==}
+    case Laws.MApp10{}:
+      {==}
+    case Laws.MApp11{}:
+      {==}
+    case Laws.MApp12{}:
+      {==}
+    case Laws.MApp13{}:
+      {==}
+    case Laws.MApp14{}:
+      {==}
+    case Laws.MApp15{}:
+      {==}
+
+# a segment marker inside a scan stops the walk on an error
+def mk.ent(
+  mk: Laws.Mk,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32
+) -> {Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad)
+  == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1} : Jpeg.St}:
+  match mk:
+    case Laws.MDht{}:
+      {==}
+    case Laws.MDqt{}:
+      {==}
+    case Laws.MSos{}:
+      {==}
+    case Laws.MDri{}:
+      {==}
+    case Laws.MCom{}:
+      {==}
+    case Laws.MApp0{}:
+      {==}
+    case Laws.MApp1{}:
+      {==}
+    case Laws.MApp2{}:
+      {==}
+    case Laws.MApp3{}:
+      {==}
+    case Laws.MApp4{}:
+      {==}
+    case Laws.MApp5{}:
+      {==}
+    case Laws.MApp6{}:
+      {==}
+    case Laws.MApp7{}:
+      {==}
+    case Laws.MApp8{}:
+      {==}
+    case Laws.MApp9{}:
+      {==}
+    case Laws.MApp10{}:
+      {==}
+    case Laws.MApp11{}:
+      {==}
+    case Laws.MApp12{}:
+      {==}
+    case Laws.MApp13{}:
+      {==}
+    case Laws.MApp14{}:
+      {==}
+    case Laws.MApp15{}:
+      {==}
+
+# a segment's reader leaves kind as it found it, and the walk seeking, in a scan, or stopped
+def mk.disp(
+  mk: Laws.Mk,
+  body: List<&2, U32>,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32
+) -> {W7.inv(Jpeg.decode.dispatch(Laws.mk.byte(mk), body, frame, scan, tabs, ent, ri, kind, bad))
+  == U32.is_eq(kind, 0) : Bool}:
+  match mk:
+    case Laws.MDht{}:
+      W7.dht.inv(body, True{}, False{}, 0n, 0, 0, [], [], frame, scan, tabs, ent, ri, kind, bad)
+    case Laws.MDqt{}:
+      W7.dqt.inv(body, True{}, 0n, 0, [], frame, scan, tabs, ent, ri, kind, bad)
+    case Laws.MSos{}:
+      W7.sos.inv(body, frame, tabs, ent, ri, kind, bad)
+    case Laws.MDri{}:
+      W7.dri.inv(body, frame, scan, tabs, ent, kind, bad)
+    case Laws.MCom{}:
+      {==}
+    case Laws.MApp0{}:
+      W7.app0.inv(body, frame, scan, tabs, ent, ri, kind, bad)
+    case Laws.MApp1{}:
+      {==}
+    case Laws.MApp2{}:
+      {==}
+    case Laws.MApp3{}:
+      {==}
+    case Laws.MApp4{}:
+      {==}
+    case Laws.MApp5{}:
+      {==}
+    case Laws.MApp6{}:
+      {==}
+    case Laws.MApp7{}:
+      {==}
+    case Laws.MApp8{}:
+      {==}
+    case Laws.MApp9{}:
+      {==}
+    case Laws.MApp10{}:
+      {==}
+    case Laws.MApp11{}:
+      {==}
+    case Laws.MApp12{}:
+      {==}
+    case Laws.MApp13{}:
+      {==}
+    case Laws.MApp14{}:
+      {==}
+    case Laws.MApp15{}:
+      {==}
+
+# a frame header other than SOF0 stops the walk on an error
+def sofn.mark(
+  sn: Laws.Sofn,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32
+) -> {Jpeg.decode.mark(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad)
+  == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, 2, 1} : Jpeg.St}:
+  match sn:
+    case Laws.Sof1{}:
+      {==}
+    case Laws.Sof2{}:
+      {==}
+    case Laws.Sof3{}:
+      {==}
+    case Laws.Sof5{}:
+      {==}
+    case Laws.Sof6{}:
+      {==}
+    case Laws.Sof7{}:
+      {==}
+    case Laws.Sof9{}:
+      {==}
+    case Laws.Sof10{}:
+      {==}
+    case Laws.Sof11{}:
+      {==}
+    case Laws.Sof13{}:
+      {==}
+    case Laws.Sof14{}:
+      {==}
+    case Laws.Sof15{}:
+      {==}
+
+# a frame header's marker inside a scan stops the walk on an error
+def sofn.ent(
+  sn: Laws.Sofn,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32
+) -> {Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad)
+  == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1} : Jpeg.St}:
+  match sn:
+    case Laws.Sof1{}:
+      {==}
+    case Laws.Sof2{}:
+      {==}
+    case Laws.Sof3{}:
+      {==}
+    case Laws.Sof5{}:
+      {==}
+    case Laws.Sof6{}:
+      {==}
+    case Laws.Sof7{}:
+      {==}
+    case Laws.Sof9{}:
+      {==}
+    case Laws.Sof10{}:
+      {==}
+    case Laws.Sof11{}:
+      {==}
+    case Laws.Sof13{}:
+      {==}
+    case Laws.Sof14{}:
+      {==}
+    case Laws.Sof15{}:
+      {==}
+
+# what a segment's walk leaves: the kind it found and a phase between segments
+def seg.Goal(
+  ph: Jpeg.Phase,
+  mk: Laws.Mk,
+  hi: U32,
+  lo: U32,
+  body: List<&2, U32>,
+  frame: Jpeg.Frame,
+  scan: Jpeg.Scan,
+  tabs: Jpeg.Tabs,
+  ent: List<&2, U32>,
+  ri: U32,
+  kind: U32,
+  bad: U32
+) -> Type:
+  {W7.inv(Jpeg.decode.walk(Laws.seg.bytes(Laws.Seg{mk, hi, lo, body}), Jpeg.St{ph, frame, scan, tabs, ent, ri, kind,
+    bad})) == True{} : Bool}
+
+# a segment walked from a state between segments that read no frame header ends in one
+def seg.ph(
+  ph: Jpeg.Phase,
+  +mk: Laws.Mk,
+  +hi: U32,
+  +lo: U32,
+  +body: List<&2, U32>,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32,
+  h_fit: Laws.seg.Fits(hi, lo, body),
+  h_inv: {W7.inv(Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}) == True{} : Bool}
+) -> seg.Goal(ph, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad):
+  match ph:
+    case Jpeg.Seek{}:
+      (e_lt, e_len) = h_fit
+      +tail = {hi <> (lo <> body) : List<&2, U32>}
+      +mm = Laws.mk.byte(mk)
+      +lenhi = {Jpeg.St{Jpeg.LenHi{mm}, frame, scan, tabs, ent, ri, kind, bad} : Jpeg.St}
+      +disp = Jpeg.decode.dispatch(mm, body, frame, scan, tabs, ent, ri, kind, bad)
+      Equal.trans(Bool, W7.inv(Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, frame, scan, tabs, ent, ri, kind, bad))),
+        W7.inv(disp), True{},
+        Equal.cong(Jpeg.St, Bool, ss => W7.inv(ss),
+          Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, frame, scan, tabs, ent, ri, kind, bad)), disp,
+          Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, frame, scan, tabs, ent, ri, kind, bad)),
+            Jpeg.decode.walk(tail, lenhi), disp,
+            Equal.cong(Jpeg.St, Jpeg.St, ss => Jpeg.decode.walk(tail, ss),
+              Jpeg.decode.mark(mm, frame, scan, tabs, ent, ri, kind, bad), lenhi,
+              mk.mark(mk, frame, scan, tabs, ent, ri, kind, bad)),
+            W7.seg.read(U32.is_lt(Laws.seg.len(hi, lo), 2), Laws.seg.len(hi, lo), body, mm, frame, scan, tabs, ent, ri,
+              kind, bad, e_lt, e_len))),
+        Equal.trans(Bool, W7.inv(disp), U32.is_eq(kind, 0), True{}, mk.disp(mk, body, frame, scan, tabs, ent, ri, kind,
+          bad), h_inv))
+    case Jpeg.Stop{}:
+      +tail = {hi <> (lo <> body) : List<&2, U32>}
+      +stop = {Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad} : Jpeg.St}
+      Equal.trans(Bool, W7.inv(Jpeg.decode.walk(255 <> (Laws.mk.byte(mk) <> tail), stop)), U32.is_eq(kind, 0), True{},
+        Equal.cong(Jpeg.St, Bool, ss => W7.inv(ss), Jpeg.decode.walk(255 <> (Laws.mk.byte(mk) <> tail), stop), stop,
+          W7.stop.walk(255 <> (Laws.mk.byte(mk) <> tail), frame, scan, tabs, ent, ri, kind, bad)), h_inv)
+    case Jpeg.Ent{}:
+      +tail = {hi <> (lo <> body) : List<&2, U32>}
+      +mm = Laws.mk.byte(mk)
+      +stop = {Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1} : Jpeg.St}
+      +ff = {Jpeg.St{Jpeg.EntFF{}, frame, scan, tabs, ent, ri, kind, bad} : Jpeg.St}
+      Equal.trans(Bool, W7.inv(Jpeg.decode.walk(tail, Jpeg.decode.step(mm, ff))), U32.is_eq(kind, 0), True{},
+        Equal.cong(Jpeg.St, Bool, ss => W7.inv(ss), Jpeg.decode.walk(tail, Jpeg.decode.step(mm, ff)), stop,
+          Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, Jpeg.decode.step(mm, ff)), Jpeg.decode.walk(tail, stop), stop,
+            Equal.cong(Jpeg.St, Jpeg.St, ss => Jpeg.decode.walk(tail, ss), Jpeg.decode.step(mm, ff), stop,
+              mk.ent(mk, frame, scan, tabs, ent, ri, kind, bad)),
+            W7.stop.walk(tail, frame, scan, tabs, ent, ri, kind, 1))), h_inv)
+    case Jpeg.Mark{}:
+      Empty.absurd(seg.Goal(Jpeg.Mark{}, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad),
+        U32L.false_true(h_inv))
+    case Jpeg.LenHi{mark}:
+      Empty.absurd(seg.Goal(Jpeg.LenHi{mark}, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad),
+        U32L.false_true(h_inv))
+    case Jpeg.LenLo{mark, mhi}:
+      Empty.absurd(seg.Goal(Jpeg.LenLo{mark, mhi}, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad),
+        U32L.false_true(h_inv))
+    case Jpeg.Pay{mark, left, acc}:
+      Empty.absurd(seg.Goal(Jpeg.Pay{mark, left, acc}, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad),
+        U32L.false_true(h_inv))
+    case Jpeg.EntFF{}:
+      Empty.absurd(seg.Goal(Jpeg.EntFF{}, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad),
+        U32L.false_true(h_inv))
+
+# a segment walked from a state between segments that read no frame header ends in one
+def seg.inv(
+  +mk: Laws.Mk,
+  +hi: U32,
+  +lo: U32,
+  +body: List<&2, U32>,
+  st: Jpeg.St,
+  h_fit: Laws.seg.Fits(hi, lo, body),
+  h_inv: {W7.inv(st) == True{} : Bool}
+) -> {W7.inv(Jpeg.decode.walk(Laws.seg.bytes(Laws.Seg{mk, hi, lo, body}), st)) == True{} : Bool}:
+  match st:
+    case Jpeg.St{ph, +frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
+      seg.ph(ph, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad, h_fit, h_inv)
+
+# segments walked from a state between segments that read no frame header end in one
+def segs.inv(
+  ss: List<&2, Laws.Seg>,
+  +st: Jpeg.St,
+  h_fit: Laws.segs.Fit(ss),
+  h_inv: {W7.inv(st) == True{} : Bool}
+) -> {W7.inv(Jpeg.decode.walk(Laws.segs.bytes(ss), st)) == True{} : Bool}:
+  match ss:
+    case Nil{}:
+      h_inv
+    case Laws.Seg{+mk, +hi, +lo, +body} <> +rest:
+      (h_one, h_rest) = h_fit
+      +sb = Laws.seg.bytes(Laws.Seg{mk, hi, lo, body})
+      +rb = Laws.segs.bytes(rest)
+      Equal.trans(Bool, W7.inv(Jpeg.decode.walk(List.append(&2, U32, sb, rb), st)),
+        W7.inv(Jpeg.decode.walk(rb, Jpeg.decode.walk(sb, st))), True{},
+        Equal.cong(Jpeg.St, Bool, xx => W7.inv(xx), Jpeg.decode.walk(List.append(&2, U32, sb, rb), st),
+          Jpeg.decode.walk(rb, Jpeg.decode.walk(sb, st)), W7.walk.app(sb, rb, st)),
+        segs.inv(rest, Jpeg.decode.walk(sb, st), h_rest, seg.inv(mk, hi, lo, body, st, h_one, h_inv)))
+
+# a walk from st over xs decodes to none
+def fin.Goal(xs: List<&2, U32>, st: Jpeg.St) -> Type:
+  {Jpeg.decode.finish(Jpeg.decode.walk(xs, st)) == None{} : Maybe<&2, Jpeg.Pic>}
+
+# after the segments, a frame header other than SOF0 decodes to none
+def sofn.ph(
+  ph: Jpeg.Phase,
+  +sn: Laws.Sofn,
+  +rest: List<&2, U32>,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32,
+  h_inv: {W7.inv(Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}) == True{} : Bool}
+) -> fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}):
+  match ph:
+    case Jpeg.Seek{}:
+      W7.fin.after(rest, Jpeg.decode.mark(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad), frame, scan, tabs,
+        ent, ri, 2, 1, sofn.mark(sn, frame, scan, tabs, ent, ri, kind, bad), W7.fin.bad(frame, scan, tabs, ent, ri, 2))
+    case Jpeg.Ent{}:
+      W7.fin.after(rest, Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad),
+        frame, scan, tabs, ent, ri, kind, 1, sofn.ent(sn, frame, scan, tabs, ent, ri, kind, bad),
+        W7.fin.bad(frame, scan, tabs, ent, ri, kind))
+    case Jpeg.Stop{}:
+      W7.fin.after(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad},
+        frame, scan, tabs, ent, ri, kind, bad, {==}, W7.fin.none(frame, scan, tabs, ent, ri, kind, bad, h_inv))
+    case Jpeg.Mark{}:
+      Empty.absurd(fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{Jpeg.Mark{}, frame, scan, tabs, ent, ri,
+        kind, bad}),
+        U32L.false_true(h_inv))
+    case Jpeg.LenHi{mark}:
+      Empty.absurd(fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{Jpeg.LenHi{mark}, frame, scan, tabs, ent, ri,
+        kind, bad}),
+        U32L.false_true(h_inv))
+    case Jpeg.LenLo{mark, mhi}:
+      Empty.absurd(fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{Jpeg.LenLo{mark, mhi}, frame, scan, tabs, ent,
+        ri, kind, bad}),
+        U32L.false_true(h_inv))
+    case Jpeg.Pay{mark, left, acc}:
+      Empty.absurd(fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{Jpeg.Pay{mark, left, acc}, frame, scan, tabs,
+        ent, ri, kind, bad}),
+        U32L.false_true(h_inv))
+    case Jpeg.EntFF{}:
+      Empty.absurd(fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{Jpeg.EntFF{}, frame, scan, tabs, ent, ri,
+        kind, bad}),
+        U32L.false_true(h_inv))
+
+# after the segments, a frame header other than SOF0 decodes to none, whatever the state's phase
+def sofn.st(
+  +sn: Laws.Sofn,
+  +rest: List<&2, U32>,
+  st: Jpeg.St,
+  h_inv: {W7.inv(st) == True{} : Bool}
+) -> fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), st):
+  match st:
+    case Jpeg.St{ph, +frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
+      sofn.ph(ph, sn, rest, frame, scan, tabs, ent, ri, kind, bad, h_inv)
+
+# the walk of SOI and the segments decodes to none when a walk from where they leave it does
+def lead.none(
+  +ss: List<&2, Laws.Seg>,
+  +tail: List<&2, U32>,
+  h_fit: Laws.segs.Fit(ss),
+  h_tail: @st: Jpeg.St -> {W7.inv(st) == True{} : Bool} -> fin.Goal(tail, st)
+) -> {Img.decode_jpeg(Laws.jpeg.lead(ss, tail)) == None{} : Maybe<&2, Img.Raster>}:
+  +s1 = {Jpeg.St{Jpeg.Seek{}, Jpeg.decode.frame0(), Jpeg.decode.scan0(), Jpeg.decode.tabs0(), [], 0, 0, 0} : Jpeg.St}
+  +sb = Laws.segs.bytes(ss)
+  +s2 = Jpeg.decode.walk(sb, s1)
+  Equal.cong(Maybe<&2, Jpeg.Pic>, Maybe<&2, Img.Raster>, mm => Img.decode_jpeg.out(mm),
+    Jpeg.decode.finish(Jpeg.decode.walk(List.append(&2, U32, sb, tail), s1)), None{},
+    Equal.trans(Maybe<&2, Jpeg.Pic>, Jpeg.decode.finish(Jpeg.decode.walk(List.append(&2, U32, sb, tail), s1)),
+      Jpeg.decode.finish(Jpeg.decode.walk(tail, s2)), None{},
+      Equal.cong(Jpeg.St, Maybe<&2, Jpeg.Pic>, xx => Jpeg.decode.finish(xx),
+        Jpeg.decode.walk(List.append(&2, U32, sb, tail), s1), Jpeg.decode.walk(tail, s2), W7.walk.app(sb, tail, s1)),
+      h_tail(s2, segs.inv(ss, s1, h_fit, {==}))))
+
+def Laws.jpeg_refuse_sofn(segs, h_fit, sn, rest):
+  lead.none(segs, 255 <> (Laws.sofn.byte(sn) <> rest), h_fit, st => hi => sofn.st(sn, rest, st, hi))
+
+# an SOF0 segment whose precision is not 8, and what follows, as bytes
+def prec.bytes(+hi: U32, +lo: U32, +pp: U32, +body: List<&2, U32>, +rest: List<&2, U32>) -> List<&2, U32>:
+  List.append(&2, U32, 255 <> (192 <> (hi <> (lo <> (pp <> body)))), rest)
+
+# after the segments, an SOF0 segment whose precision is not 8 decodes to none
+def prec.ph(
+  ph: Jpeg.Phase,
+  +hi: U32,
+  +lo: U32,
+  +pp: U32,
+  +body: List<&2, U32>,
+  +rest: List<&2, U32>,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32,
+  h_len: Laws.seg.Fits(hi, lo, pp <> body),
+  h_pp: {U32.is_eq(pp, 8) == False{} : Bool},
+  h_inv: {W7.inv(Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}) == True{} : Bool}
+) -> fin.Goal(prec.bytes(hi, lo, pp, body, rest), Jpeg.St{W7.ph.norm(ph), frame, scan, tabs, ent, ri, kind, bad}):
+  match ph:
+    case Jpeg.Seek{}:
+      (e_lt, e_len) = h_len
+      +sof = {255 <> (192 <> (hi <> (lo <> (pp <> body)))) : List<&2, U32>}
+      +st = {Jpeg.St{Jpeg.Seek{}, frame, scan, tabs, ent, ri, kind, bad} : Jpeg.St}
+      Equal.trans(Maybe<&2, Jpeg.Pic>, Jpeg.decode.finish(Jpeg.decode.walk(List.append(&2, U32, sof, rest), st)),
+        Jpeg.decode.finish(Jpeg.decode.walk(rest, Jpeg.decode.walk(sof, st))), None{},
+        Equal.cong(Jpeg.St, Maybe<&2, Jpeg.Pic>, xx => Jpeg.decode.finish(xx),
+          Jpeg.decode.walk(List.append(&2, U32, sof, rest), st), Jpeg.decode.walk(rest, Jpeg.decode.walk(sof, st)),
+          W7.walk.app(sof, rest, st)),
+        W7.fin.after(rest, Jpeg.decode.walk(sof, st), Jpeg.decode.frame0(), scan, tabs, ent, ri, kind, 1,
+          Equal.trans(Jpeg.St, Jpeg.decode.walk(sof, st),
+            Jpeg.decode.read.sof.p(U32.is_eq(pp, 8), body, scan, tabs, ent, ri, kind, bad),
+            Jpeg.St{Jpeg.Stop{}, Jpeg.decode.frame0(), scan, tabs, ent, ri, kind, 1},
+            W7.seg.read(U32.is_lt(Laws.seg.len(hi, lo), 2), Laws.seg.len(hi, lo), pp <> body, 192, frame, scan, tabs,
+              ent, ri, kind, bad, e_lt, e_len),
+            Equal.cong(Bool, Jpeg.St, bb => Jpeg.decode.read.sof.p(bb, body, scan, tabs, ent, ri, kind, bad),
+              U32.is_eq(pp, 8), False{}, h_pp)),
+          W7.fin.bad(Jpeg.decode.frame0(), scan, tabs, ent, ri, kind)))
+    case Jpeg.Ent{}:
+      +sof = {255 <> (192 <> (hi <> (lo <> (pp <> body)))) : List<&2, U32>}
+      +st = {Jpeg.St{Jpeg.Ent{}, frame, scan, tabs, ent, ri, kind, bad} : Jpeg.St}
+      Equal.trans(Maybe<&2, Jpeg.Pic>, Jpeg.decode.finish(Jpeg.decode.walk(List.append(&2, U32, sof, rest), st)),
+        Jpeg.decode.finish(Jpeg.decode.walk(rest, Jpeg.decode.walk(sof, st))), None{},
+        Equal.cong(Jpeg.St, Maybe<&2, Jpeg.Pic>, xx => Jpeg.decode.finish(xx),
+          Jpeg.decode.walk(List.append(&2, U32, sof, rest), st), Jpeg.decode.walk(rest, Jpeg.decode.walk(sof, st)),
+          W7.walk.app(sof, rest, st)),
+        W7.fin.after(rest, Jpeg.decode.walk(sof, st), frame, scan, tabs, ent, ri, kind, 1,
+          W7.stop.walk(hi <> (lo <> (pp <> body)), frame, scan, tabs, ent, ri, kind, 1),
+          W7.fin.bad(frame, scan, tabs, ent, ri, kind)))
+    case Jpeg.Stop{}:
+      W7.fin.after(prec.bytes(hi, lo, pp, body, rest), Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad},
+        frame, scan, tabs, ent, ri, kind, bad, {==}, W7.fin.none(frame, scan, tabs, ent, ri, kind, bad, h_inv))
+    case Jpeg.Mark{}:
+      W7.fin.after(prec.bytes(hi, lo, pp, body, rest), Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad},
+        frame, scan, tabs, ent, ri, kind, bad, {==}, W7.fin.none(frame, scan, tabs, ent, ri, kind, bad,
+          Empty.absurd({U32.is_eq(kind, 0) == True{} : Bool}, U32L.false_true(h_inv))))
+    case Jpeg.LenHi{_mark}:
+      W7.fin.after(prec.bytes(hi, lo, pp, body, rest), Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad},
+        frame, scan, tabs, ent, ri, kind, bad, {==}, W7.fin.none(frame, scan, tabs, ent, ri, kind, bad,
+          Empty.absurd({U32.is_eq(kind, 0) == True{} : Bool}, U32L.false_true(h_inv))))
+    case Jpeg.LenLo{_mark, _mhi}:
+      W7.fin.after(prec.bytes(hi, lo, pp, body, rest), Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad},
+        frame, scan, tabs, ent, ri, kind, bad, {==}, W7.fin.none(frame, scan, tabs, ent, ri, kind, bad,
+          Empty.absurd({U32.is_eq(kind, 0) == True{} : Bool}, U32L.false_true(h_inv))))
+    case Jpeg.Pay{_mark, _left, _acc}:
+      W7.fin.after(prec.bytes(hi, lo, pp, body, rest), Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad},
+        frame, scan, tabs, ent, ri, kind, bad, {==}, W7.fin.none(frame, scan, tabs, ent, ri, kind, bad,
+          Empty.absurd({U32.is_eq(kind, 0) == True{} : Bool}, U32L.false_true(h_inv))))
+    case Jpeg.EntFF{}:
+      W7.fin.after(prec.bytes(hi, lo, pp, body, rest), Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad},
+        frame, scan, tabs, ent, ri, kind, bad, {==}, W7.fin.none(frame, scan, tabs, ent, ri, kind, bad,
+          Empty.absurd({U32.is_eq(kind, 0) == True{} : Bool}, U32L.false_true(h_inv))))
+
+# after the segments, an SOF0 segment whose precision is not 8 decodes to none, whatever the state's phase
+def prec.st(
+  +hi: U32,
+  +lo: U32,
+  +pp: U32,
+  +body: List<&2, U32>,
+  +rest: List<&2, U32>,
+  st: Jpeg.St,
+  h_len: Laws.seg.Fits(hi, lo, pp <> body),
+  h_pp: {U32.is_eq(pp, 8) == False{} : Bool},
+  h_inv: {W7.inv(st) == True{} : Bool}
+) -> fin.Goal(prec.bytes(hi, lo, pp, body, rest), st):
+  match st:
+    case Jpeg.St{+ph, +frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
+      +xs = prec.bytes(hi, lo, pp, body, rest)
+      +h_st = {h_inv : {W7.inv(Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}) == True{} : Bool}}
+      Equal.trans(Maybe<&2, Jpeg.Pic>,
+        Jpeg.decode.finish(Jpeg.decode.walk(xs, Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad})),
+        Jpeg.decode.finish(Jpeg.decode.walk(xs, Jpeg.St{W7.ph.norm(ph), frame, scan, tabs, ent, ri, kind, bad})),
+        None{},
+        Equal.cong(Jpeg.Phase, Maybe<&2, Jpeg.Pic>, qq => Jpeg.decode.finish(Jpeg.decode.walk(xs, Jpeg.St{qq, frame,
+          scan, tabs, ent, ri, kind, bad})), ph, W7.ph.norm(ph), W7.ph.norm.eq(ph, U32L.and_left(W7.ph.ok(ph),
+          U32.is_eq(kind, 0), h_st))),
+        prec.ph(ph, hi, lo, pp, body, rest, frame, scan, tabs, ent, ri, kind, bad, h_len, h_pp, h_st))
+
+def Laws.jpeg_refuse_precision(segs, h_fit, hi, lo, pp, body, h_len, h_pp, rest):
+  lead.none(segs, prec.bytes(hi, lo, pp, body, rest), h_fit,
+    st => hs => prec.st(hi, lo, pp, body, rest, st, h_len, h_pp, hs))
+
+# ---- wp2-inflate ----
+
+def Laws.inflate_stored(sz, xs, h_sz, h_by, h_n):
+  Wp2.inflate_stored(sz, xs, h_sz, h_by, h_n)
+
+def Laws.inflate_enc_zlib(xs, h_by, h_n):
+  Wp2.inflate_stored(65535, xs, {==}, h_by, h_n)
+
+# ---- wp3-filter ----
+
+# rows_go from the law's hypotheses: the stride is not zero, and the fit is
+# stated at the stride
+def Laws.unfilter_filter(ft, ww, hh, bpp, rows, h_dims, h_wrap, h_rows, h_fit):
+  +d_ww = U32L.and_left(U32.is_gt(ww, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4))),
+    h_dims)
+  +d_rest = U32L.and_right(U32.is_gt(ww, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4))),
+    h_dims)
+  +d_bpp = U32L.and_left(U32.is_gt(bpp, 0), U32.is_le(bpp, 4),
+    U32L.and_right(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4)), d_rest))
+  +en = Flt.stride_nz(ww, bpp, d_ww, d_bpp, h_wrap)
+  +fit = Equal.trans(Bool, Laws.flt.fit(rows, U32.to_nat(U32.mul(ww, bpp)), True{}),
+    Laws.flt.fit(rows, Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)), True{}), True{},
+    Equal.cong(Nat, Bool, nn => Laws.flt.fit(rows, nn, True{}), U32.to_nat(U32.mul(ww, bpp)),
+      Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)), h_wrap),
+    h_fit)
+  Flt.top.go(Png.uf.ok(ww, hh, bpp), h_dims, ft, ww, hh, bpp, rows,
+    Flt.rows_go(rows, U32.to_nat(hh), h_rows, ft, bpp, U32.mul(ww, bpp), en, True{}, fit, [], []))
+
+# ---- wp1-crc ----
+
+def Laws.crc32_bitwise(xs):
+  Wp1.crc32_ref(xs)
+
+def Laws.png_crc_refused(pre, bad, rest, h_pre, h_bad, h_crc):
+  Equal.cong(Maybe<&2, Png.Pic>, Maybe<&2, Img.Raster>, mm => Img.decode_png.pic(mm),
+    Png.png.go(Laws.chunks.onto(pre, Laws.chunk.onto(bad, rest)), Png.ZLen{}, False{}, 0, 0, [], [], Png.pg.empty()),
+    None{}, Wp1.walk_all(pre, bad, rest, Png.pg.empty(), h_pre, h_bad, h_crc))
 
 # ---- wp5-png-decode ----
 
