@@ -130,3 +130,49 @@ law png_ihdr:
   exs rest: List<&2, U32>
   {Img.encode_png(Img.raster(ww, hh, px)) ==
     Some{List.append(&2, U32, ihdr_head(ww, hh, colour_type(all_opaque(px))), rest)} : Maybe<&2, List<&2, U32>>}
+
+# half of x, rounded down
+def half(xx: Nat) -> Nat:
+  match xx:
+    case 0n:
+      0n
+    case 1n+pp:
+      match pp:
+        case 0n:
+          0n
+        case 1n+qq:
+          1n+half(qq)
+
+# x < 2^n: halving x n times leaves 0
+def below(nn: Nat, xx: Nat) -> Bool:
+  match nn:
+    case 0n:
+      Nat.is_eq(xx, 0n)
+    case 1n+pp:
+      below(pp, half(xx))
+
+# the rasters the row calls encodable: neither side 0, the area w * h (h rows
+# of w, as natural numbers) below 2^32, and w * h samples
+def png_ok(+ww: U32, +hh: U32, +px: List<&2, U32>) -> Bool:
+  +area = Nat.mul(U32.to_nat(hh), U32.to_nat(ww))
+  Bool.and(Bool.and(Bool.not(Nat.is_eq(U32.to_nat(ww), 0n)), Bool.not(Nat.is_eq(U32.to_nat(hh), 0n))),
+    Bool.and(below(32n, area), Nat.is_eq(List.length(&2, U32, px), area)))
+
+# LAW: a raster with both sides above 0, w * h below 2^32 and w * h samples encodes
+# IMG-PNG-3
+law png_encodes:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for h_ok: {png_ok(ww, hh, px) == True{} : Bool}
+  {Maybe.is_some(&2, List<&2, U32>, Img.encode_png(Img.raster(ww, hh, px))) == True{} : Bool}
+
+# LAW: for a raster of fewer than 2^32 samples, encode_png is none exactly when
+# a side is 0, w * h is 2^32 or more, or the sample count is not w * h
+# IMG-PNG-3
+law png_refuses:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for h_len: {below(32n, List.length(&2, U32, px)) == True{} : Bool}
+  {Maybe.is_none(&2, List<&2, U32>, Img.encode_png(Img.raster(ww, hh, px))) == Bool.not(png_ok(ww, hh, px)) : Bool}

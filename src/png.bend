@@ -1563,15 +1563,35 @@ def enc.opaque(px: List<&2, U32>, zz: Bool) -> Bool:
     case +c <> t True{}:
       enc.opaque(t, U32.is_eq(enc.a(c), 255))
 
-# width times height fits in a U32
-def enc.area(+ww: U32, +hh: U32) -> Bool:
-  Bool.or(U32.is_zero(ww), U32.is_le(hh, U32.div(4294967295, ww)))
+# c less w, h times over: for w above 0, true exactly when c is w * h. `zh`
+# means no rows are left, `zlt` that c is below w. The samples are fuel: c is
+# at most their count, so the walk stops before they run out.
+def enc.rows(
+  fuel: List<&2, U32>,
+  zh: Bool,
+  zlt: Bool,
+  +ww: U32,
+  +hh: U32,
+  +cc: U32
+) -> Bool:
+  match fuel zh zlt:
+    case _fuel True{} _zlt:
+      U32.is_zero(cc)
+    case _fuel False{} True{}:
+      False{}
+    case Nil{} False{} False{}:
+      False{}
+    case _px <> rest False{} False{}:
+      +c2 = (cc - ww : U32)
+      +h2 = (hh - 1 : U32)
+      enc.rows(rest, U32.is_zero(h2), U32.is_lt(c2, ww), ww, h2, c2)
 
-# a positive area whose sample list covers it
-def enc.good(+ww: U32, +hh: U32, px: List<&2, U32>) -> Bool:
-  +area = (ww * hh : U32)
+# a positive area whose sample list covers it: both sides above 0, and the
+# sample count, taken in a word, is w * h. A count that is w * h is below
+# 2^32, so the area is too.
+def enc.good(+ww: U32, +hh: U32, +px: List<&2, U32>) -> Bool:
   +n = enc.len(px, 0)
-  Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), Bool.and(enc.area(ww, hh), U32.is_eq(n, area)))
+  Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), enc.rows(px, U32.is_zero(hh), U32.is_lt(n, ww), ww, hh, n))
 
 # filtered bytes: one per row, plus the channels of every sample
 def enc.nbytes(op: Bool, +ww: U32, +hh: U32) -> U32:
