@@ -1,4 +1,4 @@
-# ezimg/inflate: zlib-wrapped DEFLATE for a PNG IDAT stream (compression
+# src/inflate: zlib-wrapped DEFLATE for a PNG IDAT stream (compression
 # method 0). Blocks are stored, fixed Huffman, or dynamic Huffman.
 import Base
 

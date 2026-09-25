@@ -1,4 +1,4 @@
-# ezimg: the proofs. `bend ezimg/PROOF.bend` is the gate.
+# ezimg: the proofs. `bend PROOF.bend` is the gate.
 import Base
 import ./LAWS.bend as Laws
 

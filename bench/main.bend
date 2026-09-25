@@ -1,6 +1,6 @@
 # Pillow vs ezimg bench driver. EZR: "EZR1" + u32le w/h + row-major U32 samples.
 # Built as a native ELF via `bend bench/main.bend -o …` (CC=bend-cc or clang -O3).
-import ../ezimg/main.bend as Img
+import ../main.bend as Img
 
 def arg.at(xs: List<String>, n: Nat) -> String:
   match xs n:

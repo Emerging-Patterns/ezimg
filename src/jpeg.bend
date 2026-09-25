@@ -1,4 +1,4 @@
-# ezimg: baseline JPEG. Sequential 8-bit Huffman (SOF0), JFIF APP0, grayscale or YCbCr.
+# src/jpeg: baseline JPEG. Sequential 8-bit Huffman (SOF0), JFIF APP0, grayscale or YCbCr.
 
 import Base
 

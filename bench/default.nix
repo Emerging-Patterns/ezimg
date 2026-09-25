@@ -6,7 +6,7 @@
   lib,
   bend,
   bend-cc,
-  # Flake `self` (repo root). Used only to copy ezimg/ + bench/main.bend.
+  # Flake `self` (repo root). Used only to copy main.bend, src/ and bench/main.bend.
   self,
 }:
 
@@ -21,7 +21,8 @@ let
     dontUnpack = true;
     nativeBuildInputs = [ bend llvm.clang ];
     buildPhase = ''
-      cp -r ${self}/ezimg ./ezimg
+      cp ${self}/main.bend ./main.bend
+      cp -r ${self}/src ./src
       mkdir -p bench
       cp ${./main.bend} bench/main.bend
       cd bench

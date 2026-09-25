@@ -23,7 +23,7 @@ raster for a baseline sequential JPEG, and none when the bytes are not one.
 `height`, `size`, `count`, and `fill` are the pixel helpers.
 
 ```
-import ./ezimg/main.bend as Img
+import ./main.bend as Img
 
 def main() -> U32:
   Img.width(Img.raster(2, 3, [0, 1, 2, 3, 4, 5]))
@@ -31,8 +31,8 @@ def main() -> U32:
 
 ## Compliance
 
-Closed equalities in `ezimg/LAWS.bend`, proved in `ezimg/PROOF.bend`
-(`bend ezimg/PROOF.bend`), target:
+Closed equalities in `LAWS.bend`, proved in `PROOF.bend`
+(`bend PROOF.bend`), target:
 
 - [ISO/IEC 15948](https://www.iso.org/standard/29581.html) (PNG) and the
   [W3C PNG specification](https://www.w3.org/TR/png/): the eight-byte
