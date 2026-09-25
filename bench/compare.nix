@@ -273,7 +273,8 @@ def correct_jpeg():
         im = Image.new("RGB", (w, h))
         im.putdata([(x * 255 // 15, y * 255 // 15, (x + y) * 255 // 30) for y in range(h) for x in range(w)])
         data = pillow_jpeg(im, quality=95, subsampling=ss)
-        path = os.path.join(WORK, f"pil_16x16_grad_{label.replace(':', '')}.jpg"); open(path, "wb").write(data)
+        tag = label.replace(":", "")
+        path = os.path.join(WORK, f"pil_16x16_grad_{tag}.jpg"); open(path, "wb").write(data)
         pil = Image.open(io.BytesIO(data)); pil.load()
         r, got = run_decode("jpeg-dec", path, 60)
         if got is None:
