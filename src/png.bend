@@ -1000,17 +1000,18 @@ def enc.be(+nn: U32) -> List<&2, U32>:
 def enc.a(+cc: U32) -> U32:
   U32.and(255, U32.shrn(cc, 24n))
 
-# red of a 0xAARRGGBB sample
+# red of a 0xAARRGGBB sample. The mask goes first here too, so a sample's
+# bits, once taken apart, reduce to the byte.
 def enc.r(+cc: U32) -> U32:
-  ((cc >> 16n : U32) .&. 255 : U32)
+  (255 .&. (cc >> 16n : U32) : U32)
 
 # green of a 0xAARRGGBB sample
 def enc.g(+cc: U32) -> U32:
-  ((cc >> 8n : U32) .&. 255 : U32)
+  (255 .&. (cc >> 8n : U32) : U32)
 
 # blue of a 0xAARRGGBB sample
 def enc.b(+cc: U32) -> U32:
-  (cc .&. 255 : U32)
+  (255 .&. cc : U32)
 
 # one opaque pixel, newest-first, so a later reverse is R, G, B
 def enc.push.rgb(+cc: U32, acc: List<&2, U32>) -> List<&2, U32>:

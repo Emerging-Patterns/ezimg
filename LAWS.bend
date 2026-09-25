@@ -1749,6 +1749,186 @@ law jpeg_walk_mcu:
   for h_end: {U32.is_lt((comp + 1 : U32), ns) == False{} : Bool}
   {jpg.adv.at(Jpeg.decode.adv(Jpeg.Ctrl{comp, bi, mx, my, mcu, rst}, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
     vmax}, Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, ri)) == (0, 0, (mcu + 1 : U32)) : U32 & U32 & U32}
+# ---- wp9-png-roundtrip ----
+
+# a chunk as PNG section 5.3 lays it out, then rest: the length of the data,
+# the four type bytes, the data, and the CRC-32 of the type and the data, the
+# length and the CRC four bytes each, most significant first
+def spec.chunk(+typ: List<&2, U32>, +data: List<&2, U32>, rest: List<&2, U32>) -> List<&2, U32>:
+  List.append(&2, U32, spec.be4(U32.from_nat(List.length(&2, U32, data))), List.append(&2, U32, typ,
+    List.append(&2, U32, data, List.append(&2, U32, spec.be4(crc.ref(List.append(&2, U32, typ, data))), rest))))
+
+# a chunk that may be left out, then rest
+def spec.chunk.opt(+typ: List<&2, U32>, mm: Maybe<&2, List<&2, U32>>, rest: List<&2, U32>) -> List<&2, U32>:
+  match mm:
+    case None{}:
+      rest
+    case Some{data}:
+      spec.chunk(typ, data, rest)
+
+# one IDAT chunk for each list of bytes, in order, then rest
+def spec.idats(ds: List<&2, List<&2, U32>>, rest: List<&2, U32>) -> List<&2, U32>:
+  match ds:
+    case Nil{}:
+      rest
+    case data <> tl:
+      spec.chunk([73, 68, 65, 84], data, spec.idats(tl, rest))
+
+# the IHDR data: width, height, bit depth 8, the colour type, and compression,
+# filter and interlace methods 0
+def spec.ihdr.data(+ww: U32, +hh: U32, +cc: U32) -> List<&2, U32>:
+  List.append(&2, U32, spec.be4(ww), List.append(&2, U32, spec.be4(hh), [8, cc, 0, 0, 0]))
+
+# a PNG file in the order PNG section 5.6 gives: the signature, IHDR, PLTE if
+# there is one, tRNS if there is one, the IDAT chunks, and IEND
+def spec.png(
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  plte: Maybe<&2, List<&2, U32>>,
+  trns: Maybe<&2, List<&2, U32>>,
+  idats: List<&2, List<&2, U32>>
+) -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), spec.chunk([73, 72, 68, 82], spec.ihdr.data(ww, hh, cc),
+    spec.chunk.opt([80, 76, 84, 69], plte, spec.chunk.opt([116, 82, 78, 83], trns,
+      spec.idats(idats, spec.chunk([73, 69, 78, 68], [], []))))))
+
+# a list's length, counted in a U32, does not wrap: the list is shorter than 2^32
+def spec.fits(xs: List<&2, U32>) -> Type:
+  {U32.to_nat(U32.from_nat(List.length(&2, U32, xs))) == List.length(&2, U32, xs) : Nat}
+
+# a chunk that may be left out fits
+def spec.fits.opt(mm: Maybe<&2, List<&2, U32>>) -> Type:
+  match mm:
+    case None{}:
+      Unit
+    case Some{xs}:
+      spec.fits(xs)
+
+# every list fits
+def spec.fits.all(ds: List<&2, List<&2, U32>>) -> Type:
+  match ds:
+    case Nil{}:
+      Unit
+    case xs <> tl:
+      spec.fits(xs) & spec.fits.all(tl)
+
+# a palette's length is a multiple of 3 from 3 to 768: 1 to 256 entries
+def spec.pal.len(xs: List<&2, U32>) -> Bool:
+  +nn = U32.from_nat(List.length(&2, U32, xs))
+  Bool.and(U32.is_gt(nn, 0), Bool.and(U32.is_zero((nn % 3 : U32)), U32.is_le(nn, 768)))
+
+# PLTE (PNG section 11.2.3): colour type 3 needs one; it may appear for colour
+# types 2, 3 and 6, with a palette's length
+def spec.plte.ok(+cc: U32, mm: Maybe<&2, List<&2, U32>>) -> Bool:
+  match mm:
+    case None{}:
+      Bool.not(U32.is_eq(cc, 3))
+    case Some{xs}:
+      Bool.and(Bool.or(U32.is_eq(cc, 2), Bool.or(U32.is_eq(cc, 3), U32.is_eq(cc, 6))), spec.pal.len(xs))
+
+# tRNS (PNG section 11.3.2.1): it may appear for colour types 0 and 2, and for
+# colour type 3 after a PLTE
+def spec.trns.ok(+cc: U32, plte: Maybe<&2, List<&2, U32>>, trns: Maybe<&2, List<&2, U32>>) -> Bool:
+  match trns:
+    case None{}:
+      True{}
+    case Some{_xs}:
+      Bool.or(Bool.or(U32.is_eq(cc, 0), U32.is_eq(cc, 2)), Bool.and(U32.is_eq(cc, 3), Maybe.is_some(&2, List<&2, U32>,
+        plte)))
+
+# a chunk's data, or no bytes when it is left out
+def spec.or.nil(mm: Maybe<&2, List<&2, U32>>) -> List<&2, U32>:
+  match mm:
+    case None{}:
+      []
+    case Some{xs}:
+      xs
+
+# a raster of the samples, when there are some
+def spec.raster(mm: Maybe<&2, List<&2, U32>>, +ww: U32, +hh: U32) -> Maybe<&2, Img.Raster>:
+  match mm:
+    case None{}:
+      None{}
+    case Some{px}:
+      Some{Img.raster(ww, hh, px)}
+
+# the pixel stage's raster from the inflated data: the scanlines unfiltered,
+# then packed by px.of for the colour type, PLTE and tRNS; none when the data
+# does not inflate or a stage refuses
+def spec.decoded(
+  mm: Maybe<&2, List<&2, U32>>,
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  plte: List<&2, U32>,
+  trns: List<&2, U32>
+) -> Maybe<&2, Img.Raster>:
+  match mm:
+    case None{}:
+      None{}
+    case Some{raw}:
+      spec.raster(spec.px.then(Png.unfilter(raw, ww, hh, Png.png.bpp(cc)), cc, plte, trns), ww, hh)
+
+# LAW: the chunk walker hands the pixel stage the IHDR's size and colour type,
+# the PLTE and tRNS data, and the IDAT data concatenated: a file of the
+# signature, IHDR, PLTE and tRNS where allowed, any IDAT chunks and IEND
+# decodes to the raster px.of packs from the unfiltered inflated data
+# IMG-PNG-9
+law png_walk:
+  for +ww: U32
+  for +hh: U32
+  for +cc: U32
+  for +plte: Maybe<&2, List<&2, U32>>
+  for +trns: Maybe<&2, List<&2, U32>>
+  for +idats: List<&2, List<&2, U32>>
+  for h_ww: {U32.is_gt(ww, 0) == True{} : Bool}
+  for h_hh: {U32.is_gt(hh, 0) == True{} : Bool}
+  for h_cc: {spec.colour.ok(cc) == True{} : Bool}
+  for h_pl: {spec.plte.ok(cc, plte) == True{} : Bool}
+  for h_tr: {spec.trns.ok(cc, plte, trns) == True{} : Bool}
+  for h_fp: spec.fits.opt(plte)
+  for h_ft: spec.fits.opt(trns)
+  for h_fi: spec.fits.all(idats)
+  {Img.decode_png(spec.png(ww, hh, cc, plte, trns, idats)) == spec.decoded(Inf.inflate(List.concat(&2, U32, idats)),
+    ww, hh, cc, spec.or.nil(plte), spec.or.nil(trns)) : Maybe<&2, Img.Raster>}
+
+# the channels encode_png writes for each sample: red, green and blue when
+# every sample is opaque, and alpha too otherwise
+def spec.nch(op: Bool) -> Nat:
+  match op:
+    case True{}:
+      3n
+    case False{}:
+      4n
+
+# the scanline bytes encode_png writes for a raster: each of the h rows is a
+# filter byte, then the channels of its w samples
+def spec.scan.len(+ww: U32, +hh: U32, op: Bool) -> Nat:
+  Nat.mul(U32.to_nat(hh), 1n+Nat.mul(U32.to_nat(ww), spec.nch(op)))
+
+# what decode_png makes of an encoding, when there is one
+def spec.png.back(mm: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Img.Raster>:
+  match mm:
+    case None{}:
+      None{}
+    case Some{bytes}:
+      Img.decode_png(bytes)
+
+# LAW: a well-formed raster with both sides nonzero whose scanlines fit one
+# stored block decodes from its PNG to itself: nb, the scanline byte count
+# as a U32, is at most 65535
+# IMG-PNG-2
+law png_roundtrip_one:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for +nb: U32
+  for h_ok: {png_ok(ww, hh, px) == True{} : Bool}
+  for h_nb: {U32.to_nat(nb) == spec.scan.len(ww, hh, all_opaque(px)) : Nat}
+  for h_one: {U32.is_le(nb, 65535) == True{} : Bool}
+  {spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} : Maybe<&2, Img.Raster>}
+
 
 # ---- wp10-jpeg-finish ----
 
