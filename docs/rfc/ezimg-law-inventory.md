@@ -254,7 +254,7 @@ requirement depends on.
   Pillow's view of ezimg's PNG. Confirmed through the bench driver
   (`jpeg-dec` then `png-enc`). The bench's own compare script works around
   it (`compare.nix`, "Grayscale JPEG decode yields a lone Y sample").
-- **F-2. 4:2:2 JPEG decodes to the wrong picture instead of none.** A
+- **F-2 (fixed by BC-2). 4:2:2 JPEG decodes to the wrong picture instead of none.** A
   24 by 16 and a 32 by 32 gradient at `subsampling=1` return `Some`, and
   exactly half the samples (x = 8 to 15 of every 16) are `0x000000`.
   4:2:0 luma is right; 4:2:0 colour differs from Pillow only where chroma
@@ -315,4 +315,5 @@ requirement depends on.
 | Phase 1, bolt v1.7.0 | done | flake.lock pins bolt `38da7d9` (v1.7.0); `bolt.bend` keeps the law rules at warn and `unsafe` at error; 810 short parameter names renamed within their defs, 177 headers reflowed, 3 long lines wrapped; bolt v1.7.0 reports 0 errors and 174 law warnings (89 L001, 85 L002); ez test and the Pillow check pass, and the bench driver's output is byte-identical to master's on all 146 probe cases |
 | Phase 2, SPEC.md and the closed laws | done | SPEC.md with 22 Proved rows, all pending, and 4 Trusted assumptions (IMG-PNG-10 and IMG-JPG-7 in the requirement tables, IMG-TRUST-1 and 2 in the trust boundary); all 85 closed laws and their fixtures deleted, with `Jenc.spots` and the marker defs only laws named (`app0`, `sof0`, `sof2`, `sof9`, `dht`, `dqt`, `sos`, `jfif`); `LAWS.bend` still imports every module so the gate type-checks them; `closed` and `trace` at error, `coverage` at warn (80 defs); the README's Compliance section points at SPEC.md |
 | BC-1, one sample format | done | JPEG decode returns `0xAARRGGBB` with alpha 255, gray repeated in R, G and B, through `Jpeg.opaque`, `Jpeg.rgb` and `Jpeg.gray`; F-1 fixed. Partial laws `jpeg_rgb_opaque` and `jpeg_gray_opaque` tagged IMG-PIX-1, each caught its own planted mutant. Against the pre-change driver on the audit's probe files: PNG decode and both encoders byte-identical (116 outputs), 23 colour JPEG decodes gained alpha 255, 2 gray JPEG decodes repeat Y; the updated Pillow check fails 11 of 38 on the old driver and passes 38 of 38 on the new |
-| BC-2 to BC-4 | next | |
+| BC-2, subsampled JPEG | done | root cause: a block's row in its MCU was `bi div vi`, T.81 A.2.3 says `bi div hi` (`src/jpeg.bend`, `decode.geom.go`). One-line fix. Against `djpeg -nosmooth` over 48 cjpeg files (8 luma layouts by 3 sizes by gradient and noise): every layout within 3 levels after, up to 244 off before except 1x1 and 2x2, which are byte-identical before and after; 4 files with chroma other than 1x1 within 3 after, up to 255 before. The Pillow check gains 4:2:2 and 4:2:0 luma cases: 4:2:2 fails on the old driver (luma off by 140) and passes on the new. IMG-JPG-2's wording is REVIEW-13 |
+| BC-3 and BC-4 | next | |

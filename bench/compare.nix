@@ -263,6 +263,26 @@ def correct_jpeg():
                      "PASS" if ok_both else "FAIL",
                      f"PSNR={both['psnr']:.2f} max_abs={both['max_abs']}")
 
+    # Subsampled chroma: every luma block of an MCU lands in its own place (BC-2).
+    # Pillow smooths chroma when it upsamples and ezimg replicates it, as T.81
+    # allows, so only luma is compared, on a smooth gradient.
+    def luma(p):
+        return 0.299 * ((p >> 16) & 255) + 0.587 * ((p >> 8) & 255) + 0.114 * (p & 255)
+    for label, ss in (("4:2:2", 1), ("4:2:0", 2)):
+        w = h = 16
+        im = Image.new("RGB", (w, h))
+        im.putdata([(x * 255 // 15, y * 255 // 15, (x + y) * 255 // 30) for y in range(h) for x in range(w)])
+        data = pillow_jpeg(im, quality=95, subsampling=ss)
+        path = os.path.join(WORK, f"pil_16x16_grad_{label.replace(':', '')}.jpg"); open(path, "wb").write(data)
+        pil = Image.open(io.BytesIO(data)); pil.load()
+        r, got = run_decode("jpeg-dec", path, 60)
+        if got is None:
+            add_case("D pillow→ezimg jpeg", f"16x16 gradient {label}", "FAIL", f"rc={r['rc']}")
+            continue
+        dl = max(abs(luma(a) - luma(b)) for a, b in zip(got[2], as_rgb_words(pil)))
+        ok = got[:2] == (w, h) and dl <= 3.0 and opaque(got[2])
+        add_case("D pillow→ezimg jpeg", f"16x16 gradient {label}", "PASS" if ok else "FAIL", f"max luma diff={dl:.2f}")
+
     # A JPEG decoded by ezimg and saved as PNG by ezimg keeps its colour and is
     # opaque: one sample format for every decoder and encoder (IMG-PIX-1).
     for name, im, kw in (("RGB 8x8 red 4:4:4", Image.new("RGB", (8, 8), (220, 40, 40)), {"subsampling": 0}),
