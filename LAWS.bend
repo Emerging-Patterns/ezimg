@@ -88,6 +88,46 @@ law sig_only:
   for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.parse_signature(xs)) == True{} : Bool}
   {xs == List.append(&2, U32, Img.png_sig(), List.drop(&2, U32, xs, 8n)) : List<&2, U32>}
 
+# ---- wp2-inflate ----
+
+# every value is at most 255, and `ok` carries that forward
+def bytes.go(xs: List<&2, U32>, ok: Bool) -> Bool:
+  match xs ok:
+    case _xs False{}:
+      False{}
+    case Nil{} True{}:
+      True{}
+    case +xx <> tl True{}:
+      bytes.go(tl, U32.is_le(xx, 255))
+
+# every value of xs is a byte, 0 to 255
+def bytes(xs: List<&2, U32>) -> Bool:
+  bytes.go(xs, True{})
+
+# the zlib stream ezimg writes for xs in stored blocks of at most sz bytes:
+# CMF and FLG 120 1, the encoder's stored blocks, and the Adler-32 of xs
+def zlib.stored(+sz: U32, +xs: List<&2, U32>) -> List<&2, U32>:
+  Png.enc.cat([120, 1], Png.enc.cat(Png.enc.blocks(sz, xs), Png.enc.be(Inf.adler.of(xs))))
+
+# LAW: every byte list with fewer than 2^32 bytes, in the zlib stream ezimg writes with stored blocks of any size from 1
+# to 65535, inflates to itself
+# IMG-PNG-7
+law inflate_stored:
+  for +sz: U32
+  for +xs: List<&2, U32>
+  for h_sz: {Bool.and(U32.is_le(1, sz), U32.is_le(sz, 65535)) == True{} : Bool}
+  for h_by: {bytes(xs) == True{} : Bool}
+  for h_n: {U32.to_nat(Png.enc.len(xs, 0)) == List.length(&2, U32, xs) : Nat}
+  {Inf.inflate(zlib.stored(sz, xs)) == Some{xs} : Maybe<&2, List<&2, U32>>}
+
+# LAW: the zlib stream enc.zlib writes for a PNG's IDAT inflates to the bytes it was given
+# IMG-PNG-7
+law inflate_enc_zlib:
+  for +xs: List<&2, U32>
+  for h_by: {bytes(xs) == True{} : Bool}
+  for h_n: {U32.to_nat(Png.enc.len(xs, 0)) == List.length(&2, U32, xs) : Nat}
+  {Inf.inflate(Png.enc.zlib(xs, Png.enc.len(xs, 0))) == Some{xs} : Maybe<&2, List<&2, U32>>}
+
 # ---- wp3-filter ----
 
 # the five filter types of PNG section 9.2 (W3C PNG, 9.2 "Filter types for

@@ -3,6 +3,7 @@
 import Base
 import ./LAWS.bend as Laws
 import ./proof/u32.bend as U32L
+import ./proof/wp2-inflate.bend as Wp2
 import ./proof/wp3-filter.bend as Flt
 import ./proof/wp1-crc.bend as Wp1
 import ./main.bend as Img
@@ -221,6 +222,14 @@ def sig.only.go(
 
 def Laws.sig_only(xs, h_some):
   sig.only.go(Img.sig.match(Img.png_sig(), xs, True{}), xs, {==}, h_some)
+
+# ---- wp2-inflate ----
+
+def Laws.inflate_stored(sz, xs, h_sz, h_by, h_n):
+  Wp2.inflate_stored(sz, xs, h_sz, h_by, h_n)
+
+def Laws.inflate_enc_zlib(xs, h_by, h_n):
+  Wp2.inflate_stored(65535, xs, {==}, h_by, h_n)
 
 # ---- wp3-filter ----
 
