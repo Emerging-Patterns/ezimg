@@ -166,16 +166,10 @@ def uf.nth(xs: List<&2, U32>, zz: Bool, +ii: U32) -> U32:
     case _h <> t False{}:
       uf.nth(t, U32.is_zero((ii - 1 : U32)), (ii - 1 : U32))
 
-def uf.back.at(zz: Bool, xs: List<&2, U32>, +ii: U32) -> U32:
-  match zz:
-    case True{}:
-      0
-    case False{}:
-      uf.nth(xs, U32.is_zero(ii), ii)
-
-# the byte `bpp` back, or zero before the first pixel
-def uf.back(xs: List<&2, U32>, +bpp: U32, +xx: U32) -> U32:
-  uf.back.at(U32.is_lt(xx, bpp), xs, (bpp - 1 : U32))
+# the byte `bpp` back, or zero before the first pixel: `xs` holds the bytes
+# before this one in the row, newest first, so it is too short there
+def uf.back(xs: List<&2, U32>, +bpp: U32) -> U32:
+  uf.nth(xs, U32.is_zero((bpp - 1 : U32)), (bpp - 1 : U32))
 
 def uf.bb(prest: List<&2, U32>) -> U32:
   match prest:
@@ -228,8 +222,9 @@ def uf.paeth(+aa: U32, +bb: U32, +cc: U32) -> U32:
 def uf.avg(+aa: U32, +bb: U32) -> U32:
   ((aa + bb : U32) >> 1n : U32)
 
+# a reconstructed byte: filtered byte plus predictor, mod 256 (mask first)
 def uf.add(+ff: U32, +pp: U32) -> U32:
-  ((ff + pp : U32) .&. 255 : U32)
+  U32.and(255, (ff + pp : U32))
 
 def uf.p4(z4: Bool, +aa: U32, +bb: U32, +cc: U32) -> U32:
   match z4:
@@ -266,12 +261,11 @@ def uf.recon(
   +ff: U32,
   +ft: U32,
   +bpp: U32,
-  +xx: U32,
   prest: List<&2, U32>,
   phist: List<&2, U32>,
   cur: List<&2, U32>
 ) -> U32:
-  uf.add(ff, uf.pred(ft, uf.back(cur, bpp, xx), uf.bb(prest), uf.back(phist, bpp, xx)))
+  uf.add(ff, uf.pred(ft, uf.back(cur, bpp), uf.bb(prest), uf.back(phist, bpp)))
 
 def uf.phase(zz: Bool) -> Uf:
   match zz:
@@ -290,6 +284,9 @@ def uf.done(rows: Nat, all: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
     case 1n+_p:
       None{}
 
+# walk the filtered stream: a filter byte opens each row (UFilt), then its
+# bytes (UBody). `left` counts the row's bytes after the current one, and
+# `zlast`, whether it is zero, marks the row's last byte.
 def uf.go(
   xs: List<&2, U32>,
   ph: Uf,
@@ -301,7 +298,7 @@ def uf.go(
   +phist: List<&2, U32>,
   +cur: List<&2, U32>,
   all: List<&2, U32>,
-  +xx: U32,
+  +left: U32,
   +ft: U32
 ) -> Maybe<&2, List<&2, U32>>:
   match xs ph zlast:
@@ -315,22 +312,23 @@ def uf.go(
           None{}
         case 1n++r:
           uf.go(
-            rest, uf.phase(U32.is_le(b, 4)), U32.is_eq(stride, 1), bpp, stride, r,
-            prest, [], [], all, 0, b
+            rest, uf.phase(U32.is_le(b, 4)), U32.is_zero((stride - 1 : U32)), bpp, stride, r,
+            prest, [], [], all, (stride - 1 : U32), b
           )
     case +b <> rest UBody{} True{}:
-      +y = uf.recon(b, ft, bpp, xx, prest, phist, cur)
+      +y = uf.recon(b, ft, bpp, prest, phist, cur)
       +cur2 = {y <> cur : List<&2, U32>}
       uf.go(
         rest, UFilt{}, False{}, bpp, stride, rows, List.reverse(&2, U32, cur2),
         [], [], {y <> all : List<&2, U32>}, 0, 0
       )
     case +b <> rest UBody{} False{}:
-      +y = uf.recon(b, ft, bpp, xx, prest, phist, cur)
+      +y = uf.recon(b, ft, bpp, prest, phist, cur)
+      +nl = (left - 1 : U32)
       uf.go(
-        rest, UBody{}, U32.is_eq((xx + 2 : U32), stride), bpp, stride, rows,
+        rest, UBody{}, U32.is_zero(nl), bpp, stride, rows,
         uf.drop(prest), uf.push(prest, phist), {y <> cur : List<&2, U32>},
-        {y <> all : List<&2, U32>}, (xx + 1 : U32), ft
+        {y <> all : List<&2, U32>}, nl, ft
       )
     case Nil{} UBody{} _z:
       None{}
@@ -350,9 +348,6 @@ def unfilter(raw: List<&2, U32>, +ww: U32, +hh: U32, +bpp: U32) -> Maybe<&2, Lis
 
 def px.pack(+aa: U32, +rr: U32, +gg: U32, +bb: U32) -> U32:
   ((((aa << 24n : U32) .|. (rr << 16n : U32) : U32) .|. (gg << 8n : U32) : U32) .|. bb : U32)
-
-def px.seta(+cc: U32, +aa: U32) -> U32:
-  (((cc .&. 16777215 : U32) .|. (aa << 24n : U32) : U32))
 
 def px.hit.at(zz: Bool) -> U32:
   match zz:
@@ -430,40 +425,37 @@ def px.idx(xs: List<&2, U32>, +pal: List<&2, U32>, acc: List<&2, U32>) -> Maybe<
     case +i <> t:
       px.use(px.at(pal, U32.is_zero(i), i), c => px.idx(t, pal, {c <> acc : List<&2, U32>}))
 
-def pal.make(xs: List<&2, U32>, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  match xs:
-    case Nil{}:
-      Some{List.reverse(&2, U32, acc)}
-    case +r <> +g <> +b <> t:
-      pal.make(t, {px.pack(255, r, g, b) <> acc : List<&2, U32>})
-    case _other:
-      None{}
-
-def pal.tint(pxs: List<&2, U32>, als: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
-  match pxs als:
+# the palette's entries, 0xAARRGGBB, each alpha from tRNS while it lasts and
+# 255 after; none when PLTE is not whole entries
+def pal.make(xs: List<&2, U32>, als: List<&2, U32>, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match xs als:
     case Nil{} _als:
-      List.reverse(&2, U32, acc)
-    case +c <> t Nil{}:
-      pal.tint(t, [], {px.seta(c, 255) <> acc : List<&2, U32>})
-    case +c <> t +a <> at:
-      pal.tint(t, at, {px.seta(c, a) <> acc : List<&2, U32>})
+      Some{List.reverse(&2, U32, acc)}
+    case +r <> +g <> +b <> t Nil{}:
+      pal.make(t, [], {px.pack(255, r, g, b) <> acc : List<&2, U32>})
+    case +r <> +g <> +b <> t +a <> at:
+      pal.make(t, at, {px.pack(a, r, g, b) <> acc : List<&2, U32>})
+    case _xs _als:
+      None{}
 
 def png.le(xs: List<&2, U32>, ys: List<&2, U32>) -> Bool:
   U32.is_le(U32.from_nat(List.length(&2, U32, xs)), U32.from_nat(List.length(&2, U32, ys)))
 
-def pal.gate(zz: Bool, +als: List<&2, U32>, +pxs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+# the palette, when tRNS has no more entries than it
+def pal.gate(zz: Bool, pxs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match zz:
     case False{}:
       None{}
     case True{}:
-      Some{pal.tint(pxs, als, [])}
+      Some{pxs}
 
+# check tRNS against the palette's length
 def pal.ready(mm: Maybe<&2, List<&2, U32>>, +als: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match mm:
     case None{}:
       None{}
     case Some{+pxs}:
-      pal.gate(png.le(als, pxs), als, pxs)
+      pal.gate(png.le(als, pxs), pxs)
 
 def px.indexed.at(mm: Maybe<&2, List<&2, U32>>, samples: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match mm:
@@ -472,8 +464,8 @@ def px.indexed.at(mm: Maybe<&2, List<&2, U32>>, samples: List<&2, U32>) -> Maybe
     case Some{pal}:
       px.idx(samples, pal, [])
 
-def px.indexed(samples: List<&2, U32>, plte: List<&2, U32>, trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  px.indexed.at(pal.ready(pal.make(plte, []), trns), samples)
+def px.indexed(samples: List<&2, U32>, plte: List<&2, U32>, +trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  px.indexed.at(pal.ready(pal.make(plte, trns, []), trns), samples)
 
 def key.grey(xs: List<&2, U32>) -> Key:
   match xs:
@@ -993,15 +985,15 @@ def decode(xs: List<&2, U32>) -> Maybe<&2, Pic>:
 
 # the low byte
 def enc.byte(+nn: U32) -> U32:
-  (nn .&. 255 : U32)
+  (255 .&. nn : U32)
 
 # the next byte up
 def enc.hi(+nn: U32) -> U32:
-  ((nn >> 8n : U32) .&. 255 : U32)
+  (255 .&. (nn >> 8n : U32) : U32)
 
 # four bytes, big-endian
 def enc.be(+nn: U32) -> List<&2, U32>:
-  [((nn >> 24n : U32) .&. 255 : U32), ((nn >> 16n : U32) .&. 255 : U32), enc.hi(nn), enc.byte(nn)]
+  [(255 .&. (nn >> 24n : U32) : U32), (255 .&. (nn >> 16n : U32) : U32), enc.hi(nn), enc.byte(nn)]
 
 # alpha of a 0xAARRGGBB sample
 def enc.a(+cc: U32) -> U32:
