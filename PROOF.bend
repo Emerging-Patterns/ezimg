@@ -975,15 +975,22 @@ def Laws.png_ihdr(ww, hh, px, h_some):
   head.open(Png.enc.good(ww, hh, px), ww, hh, px, h_some)
 
 # U32.is_lt as Nat order
-def lt.nat(+cc: U32, +ww: U32, zz: Bool, ee: {U32.is_lt(cc, ww) == zz : Bool}) ->
-  {Cmp.is_lt(Nat.cmp(U32.to_nat(cc), U32.to_nat(ww))) == zz : Bool}:
+def lt.nat(
+  +cc: U32,
+  +ww: U32,
+  zz: Bool,
+  ee: {U32.is_lt(cc, ww) == zz : Bool}
+) -> {Cmp.is_lt(Nat.cmp(U32.to_nat(cc), U32.to_nat(ww))) == zz : Bool}:
   Equal.trans(Bool, Cmp.is_lt(Nat.cmp(U32.to_nat(cc), U32.to_nat(ww))), U32.is_lt(cc, ww), zz,
     Equal.cong(Cmp, Bool, xx => Cmp.is_lt(xx), Nat.cmp(U32.to_nat(cc), U32.to_nat(ww)), U32.cmp(cc, ww),
       Equal.sym(Cmp, U32.cmp(cc, ww), Nat.cmp(U32.to_nat(cc), U32.to_nat(ww)), Wp4.u32_cmp_nat(cc, ww))), ee)
 
 # U32.is_zero as Nat equality with 0
-def zero.nat(+hh: U32, zz: Bool, ee: {U32.is_zero(hh) == zz : Bool}) ->
-  {Cmp.is_eq(Nat.cmp(U32.to_nat(hh), 0n)) == zz : Bool}:
+def zero.nat(
+  +hh: U32,
+  zz: Bool,
+  ee: {U32.is_zero(hh) == zz : Bool}
+) -> {Cmp.is_eq(Nat.cmp(U32.to_nat(hh), 0n)) == zz : Bool}:
   Equal.trans(Bool, Cmp.is_eq(Nat.cmp(U32.to_nat(hh), 0n)), U32.is_zero(hh), zz,
     Equal.cong(Cmp, Bool, xx => Cmp.is_eq(xx), Nat.cmp(U32.to_nat(hh), 0n), U32.cmp(hh, 0),
       Equal.sym(Cmp, U32.cmp(hh, 0), Nat.cmp(U32.to_nat(hh), 0n), Wp4.u32_cmp_nat(hh, 0))), ee)
@@ -1003,8 +1010,12 @@ def iseq.mul(
     Equal.cong(Nat, Bool, xx => Nat.is_eq(ab, Nat.mul(xx, ww)), ha, hb, eh))
 
 # no rows left: the walk asks whether c is 0, and 0 rows of w is 0
-def rows.done(+hh: U32, +cc: U32, +ww: U32, e_zh: {U32.is_zero(hh) == True{} : Bool}) ->
-  {U32.is_zero(cc) == Nat.is_eq(U32.to_nat(cc), Nat.mul(U32.to_nat(hh), U32.to_nat(ww))) : Bool}:
+def rows.done(
+  +hh: U32,
+  +cc: U32,
+  +ww: U32,
+  e_zh: {U32.is_zero(hh) == True{} : Bool}
+) -> {U32.is_zero(cc) == Nat.is_eq(U32.to_nat(cc), Nat.mul(U32.to_nat(hh), U32.to_nat(ww))) : Bool}:
   +e0 = {U32L.ueq(hh, 0, e_zh) : {hh == 0 : U32}}
   Equal.trans(Bool, U32.is_zero(cc), Nat.is_eq(U32.to_nat(cc), Nat.mul(U32.to_nat(0), U32.to_nat(ww))),
     Nat.is_eq(U32.to_nat(cc), Nat.mul(U32.to_nat(hh), U32.to_nat(ww))),
@@ -1109,7 +1120,8 @@ def rows.step.go(
     {List.length(&2, U32, rest) == Nat.add(dd, Nat.add(ef, wp)) : Nat}}
   +e_f2 = {Equal.trans(Nat, List.length(&2, U32, rest), Nat.add(dd, Nat.add(ef, wp)),
     Nat.add(U32.to_nat(c2), Nat.add(ef, wp)), e_rl,
-    Equal.cong(Nat, Nat, xx => Nat.add(xx, Nat.add(ef, wp)), dd, U32.to_nat(c2), Equal.sym(Nat, U32.to_nat(c2), dd, e_c2))) :
+    Equal.cong(Nat, Nat, xx => Nat.add(xx, Nat.add(ef, wp)), dd, U32.to_nat(c2),
+      Equal.sym(Nat, U32.to_nat(c2), dd, e_c2))) :
     {List.length(&2, U32, rest) == Nat.add(U32.to_nat(c2), Nat.add(ef, wp)) : Nat}}
   +e_rest = {ih(Nat.add(ef, wp), e_f2) :
     {Png.enc.rows(rest, U32.is_zero(h2), U32.is_lt(c2, ww), ww, h2, c2) ==
@@ -1186,7 +1198,8 @@ def len.nat(
         {Laws.below(32n, 1n+Nat.add(vn, lt)) == True{} : Bool}}
       +n1 = (nn + 1 : U32)
       +ei = {Wp4.u32_inc_nat(nn, Wp4.below_mono(32n, 1n+vn, lt, hb1)) : {U32.to_nat(n1) == 1n+vn : Nat}}
-      +hb2 = {Equal.trans(Bool, Laws.below(32n, Nat.add(U32.to_nat(n1), lt)), Laws.below(32n, 1n+Nat.add(vn, lt)), True{},
+      +hb2 = {Equal.trans(Bool, Laws.below(32n, Nat.add(U32.to_nat(n1), lt)), Laws.below(32n, 1n+Nat.add(vn, lt)),
+        True{},
         Equal.cong(Nat, Bool, xx => Laws.below(32n, Nat.add(xx, lt)), U32.to_nat(n1), 1n+vn, ei), hb1) :
         {Laws.below(32n, Nat.add(U32.to_nat(n1), lt)) == True{} : Bool}}
       Equal.trans(Nat, U32.to_nat(Png.enc.len(tl, n1)), Nat.add(U32.to_nat(n1), lt), Nat.add(vn, 1n+lt),

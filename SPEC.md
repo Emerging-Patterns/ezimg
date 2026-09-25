@@ -53,8 +53,8 @@ What a sample means, for every decoder and encoder.
 | :---- | :---- | :---- | :---- | :---- |
 | IMG-PNG-1 | `parse_signature(xs)` is `Some(png_sig())` exactly when `xs` begins with the eight bytes 137 80 78 71 13 10 26 10, and none otherwise. | Proved | proved | LAWS.bend sig_opens; LAWS.bend sig_only |
 | IMG-PNG-2 | For every well-formed raster `r` with both sides nonzero, `decode_png(encode_png(r))` is `Some(r)`. | Proved | pending | |
-| IMG-PNG-3 | `encode_png(r)` is none exactly when a side of `r` is 0, `r` is not well formed, or `w * h` is 2^32 or more. | Proved | pending | |
-| IMG-PNG-4 | When `encode_png(r)` is some, its IHDR has bit depth 8 and interlace 0, and colour type 2 exactly when every sample of `r` has alpha 255, colour type 6 otherwise. | Proved | pending | |
+| IMG-PNG-3 | `encode_png(r)` is none exactly when a side of `r` is 0, `r` is not well formed, or `w * h` is 2^32 or more. | Proved | pending | LAWS.bend png_encodes; LAWS.bend png_refuses |
+| IMG-PNG-4 | When `encode_png(r)` is some, its IHDR has bit depth 8 and interlace 0, and colour type 2 exactly when every sample of `r` has alpha 255, colour type 6 otherwise. | Proved | proved | LAWS.bend png_ihdr |
 | IMG-PNG-5 | `Crc.crc32(xs)` equals the bitwise ISO 3309 CRC-32 of `xs` for every byte list, and `decode_png` returns none for every input in which some chunk's stored CRC differs from the CRC-32 of its type and data. | Proved | pending | |
 | IMG-PNG-6 | For every filter type 0 to 4 and every scanlines of a given width and bytes per pixel, `Png.unfilter` applied to the rows filtered by the PNG specification's filter function returns `Some` of the rows. | Proved | pending | |
 | IMG-PNG-7 | For every byte list `xs` and every block size from 1 to 65535, `Inf.inflate` of the zlib stream of `xs` in stored blocks of that size is `Some(xs)`. | Proved | pending | |
@@ -81,11 +81,12 @@ What a sample means, for every decoder and encoder.
 | ID | Proved so far | Missing |
 | :---- | :---- | :---- |
 | IMG-PIX-1 | `Jpeg.rgb` and `Jpeg.gray`, the two functions JPEG decode packs samples with, give alpha 255 for every input (`jpeg_rgb_opaque`, `jpeg_gray_opaque`) | that every sample `decode_jpeg` returns is one of theirs; that `gray` repeats the level in R, G and B; that every sample `decode_png` returns is `0xAARRGGBB` (IMG-PNG-9) |
+| IMG-PNG-3 | a raster with both sides above 0, `w * h` below 2^32 and `w * h` samples encodes (`png_encodes`); for a raster of fewer than 2^32 samples, `encode_png` is none exactly when the row says (`png_refuses`) | a raster of 2^32 or more samples: the guard counts samples in a U32, so `w * h + k * 2^32` samples with `w * h` below 2^32 encode, and the row is false as worded for them (a decision for the maintainer) |
 | IMG-PNG-9 | `Png.px.of`, the pixel stage, packs unfiltered bytes as the row says for every colour type: gray, gray with a tRNS key, gray and alpha, RGB, RGB with a tRNS key, RGBA (`png_px_grey`, `png_px_grey_key`, `png_px_ga`, `png_px_rgb`, `png_px_rgb_key`, `png_px_rgba`), and each index it decodes as its palette entry with alpha from tRNS or 255 (`png_px_indexed`); the decoder's last stage is `px.of` of `Png.unfilter`'s output with the width and height kept (`png_samples_frame`) | that the chunk walker hands that stage the IHDR's colour type, the PLTE and tRNS data, and the concatenated IDAT data inflated, so that the laws reach `decode_png` itself |
 
-Every Proved row but IMG-JPG-4, IMG-PIX-2, IMG-RAS-5, IMG-PNG-1 and IMG-PNG-8 is pending; IMG-PIX-1 has the partial laws above. The rollout in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md) orders them: the behavior changes first (IMG-PIX-1 needed BC-1, which has landed; IMG-JPG-2 needed BC-2 and IMG-JPG-4 needed BC-3, which have landed), then refusals and frames (IMG-PNG-3, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2), then content (IMG-PNG-5, IMG-PNG-7, IMG-PNG-6, IMG-PNG-9, IMG-PNG-4, IMG-RAS-3, IMG-RAS-4, and the headline IMG-PNG-2), and the JPEG content rows last (IMG-PIX-1, IMG-JPG-5, IMG-JPG-2, IMG-JPG-6, IMG-JPG-3).
+Every Proved row but IMG-JPG-4, IMG-PIX-2, IMG-RAS-5, IMG-PNG-1, IMG-PNG-4 and IMG-PNG-8 is pending; IMG-PIX-1, IMG-PNG-3 and IMG-PNG-9 have the partial laws above. The rollout in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md) orders them: the behavior changes first (IMG-PIX-1 needed BC-1, which has landed; IMG-JPG-2 needed BC-2 and IMG-JPG-4 needed BC-3, which have landed), then refusals and frames (IMG-PNG-3, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2), then content (IMG-PNG-5, IMG-PNG-7, IMG-PNG-6, IMG-PNG-9, IMG-PNG-4, IMG-RAS-3, IMG-RAS-4, and the headline IMG-PNG-2), and the JPEG content rows last (IMG-PIX-1, IMG-JPG-5, IMG-JPG-2, IMG-JPG-6, IMG-JPG-3).
 
-No row is known to fail today. IMG-JPG-2 covers every sampling layout the frame parser accepts, which BC-2 made decode correctly (REVIEW-13).
+No row is known to fail today on an input that fits in memory; IMG-PNG-3 fails as worded on rasters of 2^32 or more samples (above). IMG-JPG-2 covers every sampling layout the frame parser accepts, which BC-2 made decode correctly (REVIEW-13).
 
 ## Trust boundary
 

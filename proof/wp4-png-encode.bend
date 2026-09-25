@@ -168,8 +168,11 @@ law ge_split:
   {cc == Nat.add(ww, dd) : Nat}
 
 # the rest of ge_split, one more on both sides
-def ge_split.up(+cc: Nat, +ww: Nat, pr: &dd: Nat -> {cc == Nat.add(ww, dd) : Nat}) ->
-  &dd: Nat -> {1n+cc == Nat.add(1n+ww, dd) : Nat}:
+def ge_split.up(
+  +cc: Nat,
+  +ww: Nat,
+  pr: &dd: Nat -> {cc == Nat.add(ww, dd) : Nat}
+) -> &dd: Nat -> {1n+cc == Nat.add(1n+ww, dd) : Nat}:
   (dd, ed) = pr
   (dd, Equal.cong(Nat, Nat, zz => 1n+zz, cc, Nat.add(ww, dd), ed))
 
@@ -530,15 +533,23 @@ def bitv(cc: Bool) -> Nat:
       1n
 
 # an odd digit is the value it was split from
-def dig.odd(+rr: Nat, +dd: Nat, er: {rr == Laws.half(dd) : Nat}, ed: {dd == 1n+Nat.double(Laws.half(dd)) : Nat}) ->
-  {1n+Nat.double(rr) == dd : Nat}:
+def dig.odd(
+  +rr: Nat,
+  +dd: Nat,
+  er: {rr == Laws.half(dd) : Nat},
+  ed: {dd == 1n+Nat.double(Laws.half(dd)) : Nat}
+) -> {1n+Nat.double(rr) == dd : Nat}:
   Equal.trans(Nat, 1n+Nat.double(rr), 1n+Nat.double(Laws.half(dd)), dd,
     Equal.cong(Nat, Nat, zz => 1n+Nat.double(zz), rr, Laws.half(dd), er),
     Equal.sym(Nat, dd, 1n+Nat.double(Laws.half(dd)), ed))
 
 # an even digit is the value it was split from
-def dig.even(+rr: Nat, +dd: Nat, er: {rr == Laws.half(dd) : Nat}, ed: {dd == Nat.double(Laws.half(dd)) : Nat}) ->
-  {Nat.double(rr) == dd : Nat}:
+def dig.even(
+  +rr: Nat,
+  +dd: Nat,
+  er: {rr == Laws.half(dd) : Nat},
+  ed: {dd == Nat.double(Laws.half(dd)) : Nat}
+) -> {Nat.double(rr) == dd : Nat}:
   Equal.trans(Nat, Nat.double(rr), Nat.double(Laws.half(dd)), dd,
     Equal.cong(Nat, Nat, zz => Nat.double(zz), rr, Laws.half(dd), er),
     Equal.sym(Nat, dd, Nat.double(Laws.half(dd)), ed))
@@ -548,6 +559,10 @@ def sub.ih(+pp: Nat, +at: Word(pp), +bt: Word(pp)) -> Type:
   @kk: Bool -> @dd: Nat -> {Word.to_nat(pp, at) == Nat.add(nb(kk), Nat.add(Word.to_nat(pp, bt), dd)) : Nat} ->
     {Word.to_nat(pp, Word.adc(pp, at, bt, True{}, kk)) == dd : Nat}
 
+# d split as the digit ds, and a less the borrow and b is half of d
+def sub.split(+pp: Nat, +at: Word(pp), +bt: Word(pp), +kk: Bool, +dd: Nat, +ds: Nat) -> Type:
+  {dd == ds : Nat} & {Word.to_nat(pp, at) == Nat.add(nb(kk), Nat.add(Word.to_nat(pp, bt), Laws.half(dd))) : Nat}
+
 # an odd split: the low bit is 1, the rest is the rest of the difference
 def sub.odd(
   +pp: Nat,
@@ -556,8 +571,7 @@ def sub.odd(
   +kk: Bool,
   +dd: Nat,
   ih: sub.ih(pp, at, bt),
-  pr: {dd == 1n+Nat.double(Laws.half(dd)) : Nat} &
-    {Word.to_nat(pp, at) == Nat.add(nb(kk), Nat.add(Word.to_nat(pp, bt), Laws.half(dd))) : Nat}
+  pr: sub.split(pp, at, bt, kk, dd, 1n+Nat.double(Laws.half(dd)))
 ) -> {1n+Nat.double(Word.to_nat(pp, Word.adc(pp, at, bt, True{}, kk))) == dd : Nat}:
   (ed, ex) = pr
   dig.odd(Word.to_nat(pp, Word.adc(pp, at, bt, True{}, kk)), dd, ih(kk, Laws.half(dd), ex), ed)
@@ -570,8 +584,7 @@ def sub.even(
   +kk: Bool,
   +dd: Nat,
   ih: sub.ih(pp, at, bt),
-  pr: {dd == Nat.double(Laws.half(dd)) : Nat} &
-    {Word.to_nat(pp, at) == Nat.add(nb(kk), Nat.add(Word.to_nat(pp, bt), Laws.half(dd))) : Nat}
+  pr: sub.split(pp, at, bt, kk, dd, Nat.double(Laws.half(dd)))
 ) -> {Nat.double(Word.to_nat(pp, Word.adc(pp, at, bt, True{}, kk))) == dd : Nat}:
   (ed, ex) = pr
   dig.even(Word.to_nat(pp, Word.adc(pp, at, bt, True{}, kk)), dd, ih(kk, Laws.half(dd), ex), ed)
@@ -599,15 +612,18 @@ def sub.step(
       sub.odd(pp, at, bt, False{}, dd, ih, split_odd(Word.to_nat(pp, bt), Word.to_nat(pp, at), dd, hd))
     case True{} False{} False{}:
       sub.even(pp, at, bt, True{}, dd, ih,
-        split_even(Word.to_nat(pp, bt), Word.to_nat(pp, at), dd, succ_inj(Nat.double(Word.to_nat(pp, at)), Nat.add(Nat.double(Word.to_nat(pp, bt)), dd), hd)))
+        split_even(Word.to_nat(pp, bt), Word.to_nat(pp, at), dd, succ_inj(Nat.double(Word.to_nat(pp, at)),
+          Nat.add(Nat.double(Word.to_nat(pp, bt)), dd), hd)))
     case True{} False{} True{}:
       sub.odd(pp, at, bt, True{}, dd, ih, split_odd2(Word.to_nat(pp, bt), Word.to_nat(pp, at), dd, hd))
     case True{} True{} False{}:
       sub.odd(pp, at, bt, False{}, dd, ih,
-        split_odd(Word.to_nat(pp, bt), Word.to_nat(pp, at), dd, succ_inj(Nat.double(Word.to_nat(pp, at)), 1n+Nat.add(Nat.double(Word.to_nat(pp, bt)), dd), hd)))
+        split_odd(Word.to_nat(pp, bt), Word.to_nat(pp, at), dd, succ_inj(Nat.double(Word.to_nat(pp, at)),
+          1n+Nat.add(Nat.double(Word.to_nat(pp, bt)), dd), hd)))
     case True{} True{} True{}:
       sub.even(pp, at, bt, True{}, dd, ih,
-        split_even(Word.to_nat(pp, bt), Word.to_nat(pp, at), dd, succ_inj(Nat.double(Word.to_nat(pp, at)), Nat.add(Nat.double(Word.to_nat(pp, bt)), dd), hd)))
+        split_even(Word.to_nat(pp, bt), Word.to_nat(pp, at), dd, succ_inj(Nat.double(Word.to_nat(pp, at)),
+          Nat.add(Nat.double(Word.to_nat(pp, bt)), dd), hd)))
 
 # no borrow into a word of no bits: the difference is 0
 def sub.nil(
@@ -680,20 +696,33 @@ def carry.odd(
     ih(kk, Laws.half(dd), hs, hb), ed)
 
 # half of d, from d written as a digit
-def half.of(+dd: Nat, +xx: Nat, +yy: Nat, hd: {xx == dd : Nat}, eh: {Laws.half(xx) == yy : Nat}) ->
-  {Laws.half(dd) == yy : Nat}:
+def half.of(
+  +dd: Nat,
+  +xx: Nat,
+  +yy: Nat,
+  hd: {xx == dd : Nat},
+  eh: {Laws.half(xx) == yy : Nat}
+) -> {Laws.half(dd) == yy : Nat}:
   Equal.trans(Nat, Laws.half(dd), Laws.half(xx), yy,
     Equal.cong(Nat, Nat, zz => Laws.half(zz), dd, xx, Equal.sym(Nat, xx, dd, hd)), eh)
 
 # d, even, written back from its half
-def even.back(+dd: Nat, +yy: Nat, hd: {Nat.double(yy) == dd : Nat}, eh: {Laws.half(dd) == yy : Nat}) ->
-  {dd == Nat.double(Laws.half(dd)) : Nat}:
+def even.back(
+  +dd: Nat,
+  +yy: Nat,
+  hd: {Nat.double(yy) == dd : Nat},
+  eh: {Laws.half(dd) == yy : Nat}
+) -> {dd == Nat.double(Laws.half(dd)) : Nat}:
   Equal.trans(Nat, dd, Nat.double(yy), Nat.double(Laws.half(dd)), Equal.sym(Nat, Nat.double(yy), dd, hd),
     Equal.cong(Nat, Nat, zz => Nat.double(zz), yy, Laws.half(dd), Equal.sym(Nat, Laws.half(dd), yy, eh)))
 
 # d, odd, written back from its half
-def odd.back(+dd: Nat, +yy: Nat, hd: {1n+Nat.double(yy) == dd : Nat}, eh: {Laws.half(dd) == yy : Nat}) ->
-  {dd == 1n+Nat.double(Laws.half(dd)) : Nat}:
+def odd.back(
+  +dd: Nat,
+  +yy: Nat,
+  hd: {1n+Nat.double(yy) == dd : Nat},
+  eh: {Laws.half(dd) == yy : Nat}
+) -> {dd == 1n+Nat.double(Laws.half(dd)) : Nat}:
   Equal.trans(Nat, dd, 1n+Nat.double(yy), 1n+Nat.double(Laws.half(dd)), Equal.sym(Nat, 1n+Nat.double(yy), dd, hd),
     Equal.cong(Nat, Nat, zz => 1n+Nat.double(zz), yy, Laws.half(dd), Equal.sym(Nat, Laws.half(dd), yy, eh)))
 
@@ -798,7 +827,8 @@ def u32_inc_nat(aa, hb):
       +b2 = {Equal.trans(Bool, Laws.below(31n, vt), Laws.below(31n, Laws.half(1n+Nat.double(vt))), True{},
         Equal.cong(Nat, Bool, zz => Laws.below(31n, zz), vt, Laws.half(1n+Nat.double(vt)),
           Equal.sym(Nat, Laws.half(1n+Nat.double(vt)), vt, half_odd(vt))), hb) : {Laws.below(31n, vt) == True{} : Bool}}
-      Equal.cong(Nat, Nat, zz => 1n+Nat.double(zz), Word.to_nat(31n, Word.adc(31n, xt, Word.zero(31n), False{}, False{})),
+      Equal.cong(Nat, Nat, zz => 1n+Nat.double(zz),
+        Word.to_nat(31n, Word.adc(31n, xt, Word.zero(31n), False{}, False{})),
         vt, word_carry(31n, xt, False{}, vt, {==}, b2))
     case U32{WCon{True{}, +xt}}:
       +vt = Word.to_nat(31n, xt)
