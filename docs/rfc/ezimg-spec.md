@@ -323,9 +323,9 @@ bolt: it is a test under another name.
 
 | Phase | What lands | Leaves true |
 | :---- | :---- | :---- |
-| 0 | This RFC and the inventory | nothing changes; the evidence is reviewable |
-| layout | `main.bend` at the top and the modules under `src/`, as `ez init` lays them out; `bench/bolt.bend` keeps the driver's law rules at warn | the package has the shape its siblings have; no def changed |
-| 1 | bolt v1.7.0 with laws at warn; its 987 style findings fixed | the tree lints clean on a bolt that has `trace` |
+| 0 (done) | This RFC and the inventory | nothing changes; the evidence is reviewable |
+| layout (done) | `main.bend` at the top and the modules under `src/`, as `ez init` lays them out; `bench/bolt.bend` keeps the driver's law rules at warn | the package has the shape its siblings have; no def changed |
+| 1 (done) | bolt v1.7.0 with laws at warn; its 987 style findings fixed | the tree lints clean on a bolt that has `trace` |
 | 2 | SPEC.md with every row pending; all 85 closed laws, `spots` and law-only markers deleted; `closed` and `trace` at error; the README's Compliance section points at SPEC.md | the gate says exactly what is proved (nothing yet) |
 | 3 | BC-1 to BC-4, one PR each | no confirmed bug remains |
 | 4 | cheap rows: IMG-PNG-1, IMG-RAS-5, IMG-PIX-2, IMG-PNG-3, IMG-JPG-4, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2 | refusals and frames proved |

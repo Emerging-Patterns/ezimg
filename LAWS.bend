@@ -267,8 +267,8 @@ law decode_png_idx:
   {Img.decode_png(fix.idx()) == Some{Img.raster(1, 1, [4294901760])} : Maybe<&2, Img.Raster>}
 
 # an encoding, decoded; none stays none
-def enc.back(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Img.Raster>:
-  match m:
+def enc.back(mm: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Img.Raster>:
+  match mm:
     case None{}:
       None{}
     case Some{xs}:
@@ -484,8 +484,8 @@ def step.tone() -> List<&2, U32>:
 def step.block() -> List<&2, List<&2, U32>>:
   [step.tone(), step.tone(), step.tone(), step.tone(), step.tone(), step.tone(), step.tone(), step.tone()]
 
-def step.pack(+v: U32) -> U32:
-  U32.or(U32.shln(v, 16n), U32.or(U32.shln(v, 8n), v))
+def step.pack(+vv: U32) -> U32:
+  U32.or(U32.shln(vv, 16n), U32.or(U32.shln(vv, 8n), vv))
 
 def step.packed() -> List<&2, U32>:
   [step.pack(0), step.pack(0), step.pack(0), step.pack(0), step.pack(255), step.pack(255), step.pack(255),

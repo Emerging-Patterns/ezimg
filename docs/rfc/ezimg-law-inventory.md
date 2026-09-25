@@ -309,4 +309,5 @@ requirement depends on.
 | :---- | :---- | :---- |
 | Audit and RFC | done | this inventory and `docs/rfc/ezimg-spec.md`; every REVIEW item accepted as recommended |
 | Layout | done | `main.bend` and `src/`, `LAWS.bend` and `PROOF.bend` at the root; `bench/bolt.bend` sets the driver's law rules to warn; ez test, bolt, and the Pillow check pass on a fresh copy |
-| Phase 1, bolt v1.7.0 | next | |
+| Phase 1, bolt v1.7.0 | done | flake.lock pins bolt `38da7d9` (v1.7.0); `bolt.bend` keeps the law rules at warn and `unsafe` at error; 810 short parameter names renamed within their defs, 177 headers reflowed, 3 long lines wrapped; bolt v1.7.0 reports 0 errors and 174 law warnings (89 L001, 85 L002); ez test and the Pillow check pass, and the bench driver's output is byte-identical to master's on all 146 probe cases |
+| Phase 2, SPEC.md and the closed laws | next | |
