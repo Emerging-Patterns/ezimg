@@ -231,6 +231,18 @@ luma only, since chroma upsampling is the decoder's choice.
 IMG-JPG-7 is Trusted for the same reason as IMG-PNG-10: a law sees only
 ezimg, and a claim about files another program writes needs that program.
 
+### Writing code the laws can reach
+
+A `U32` is a 32-bit `Word` of Bools, lowest bit first, and `Bool.or` and
+`Bool.and` match on their first argument. So a bit fact over a quantified
+sample reduces by taking the word apart when the constant is the first
+operand, `U32.or(4278190080, xx)`, and is stuck when it is the second. The
+spike for BC-1 proved "alpha is 255" over every sample in under a second
+with the constant first, and could not state it without a case split per bit
+with the constant second. Code that sets or masks bits a law will reach puts
+the constant first, and names the step (`Jpeg.opaque`, `Jpeg.rgb.bits`) so
+the proof can apply a lemma to it.
+
 ### Retiring closed laws
 
 All 85 go in one PR (REVIEW-10), together with `Jenc.spots` and marker defs
@@ -272,7 +284,7 @@ bug.
 
 | Change | Row | REVIEW | Breaks |
 | :---- | :---- | :---- | :---- |
-| BC-1: JPEG decode returns `0xFFrrggbb`, gray repeated in R, G, B | IMG-PIX-1 | 1 | code reading JPEG samples as `0x00rrggbb` or as a lone Y |
+| BC-1 (landed): JPEG decode returns `0xFFrrggbb`, gray repeated in R, G, B | IMG-PIX-1 | 1 | code reading JPEG samples as `0x00rrggbb` or as a lone Y |
 | BC-2: 4:2:2 luma placed correctly, and an unsupported sampling refused | IMG-JPG-2 | 2 | nothing that worked |
 | BC-3: `encode_jpeg` returns `Maybe` | IMG-JPG-4 | 3 | every caller of `encode_jpeg` |
 | BC-4: `premultiply` and `straight` removed | none | 4 | callers of two identity functions |

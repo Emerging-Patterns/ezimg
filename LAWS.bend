@@ -11,3 +11,17 @@ import ./src/inflate.bend as Inf
 import ./src/png.bend as Png
 import ./src/jpeg.bend as Jpeg
 import ./src/jpeg_enc.bend as Jenc
+
+# LAW: every sample Jpeg.rgb packs is opaque, for every Y, Cb and Cr
+# IMG-PIX-1
+law jpeg_rgb_opaque:
+  for +yy: U32
+  for +cb: U32
+  for +cr: U32
+  {U32.shrn(Jpeg.rgb(yy, cb, cr), 24n) == 255 : U32}
+
+# LAW: every sample Jpeg.gray packs is opaque, for every level
+# IMG-PIX-1
+law jpeg_gray_opaque:
+  for +yy: U32
+  {U32.shrn(Jpeg.gray(yy), 24n) == 255 : U32}

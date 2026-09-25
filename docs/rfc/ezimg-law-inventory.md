@@ -246,7 +246,7 @@ requirement depends on.
 
 ### Bugs
 
-- **F-1. Decoders return three sample formats.** PNG decode returns
+- **F-1 (fixed by BC-1). Decoders return three sample formats.** PNG decode returns
   `0xAARRGGBB`; JPEG colour decode returns `0x00RRGGBB`; JPEG gray decode
   returns the Y value alone. `encode_png` reads the top byte as alpha, so a
   JPEG decoded and saved as PNG is fully transparent, and a gray JPEG
@@ -314,4 +314,5 @@ requirement depends on.
 | Layout | done | `main.bend` and `src/`, `LAWS.bend` and `PROOF.bend` at the root; `bench/bolt.bend` sets the driver's law rules to warn; ez test, bolt, and the Pillow check pass on a fresh copy |
 | Phase 1, bolt v1.7.0 | done | flake.lock pins bolt `38da7d9` (v1.7.0); `bolt.bend` keeps the law rules at warn and `unsafe` at error; 810 short parameter names renamed within their defs, 177 headers reflowed, 3 long lines wrapped; bolt v1.7.0 reports 0 errors and 174 law warnings (89 L001, 85 L002); ez test and the Pillow check pass, and the bench driver's output is byte-identical to master's on all 146 probe cases |
 | Phase 2, SPEC.md and the closed laws | done | SPEC.md with 22 Proved rows, all pending, and 4 Trusted assumptions (IMG-PNG-10 and IMG-JPG-7 in the requirement tables, IMG-TRUST-1 and 2 in the trust boundary); all 85 closed laws and their fixtures deleted, with `Jenc.spots` and the marker defs only laws named (`app0`, `sof0`, `sof2`, `sof9`, `dht`, `dqt`, `sos`, `jfif`); `LAWS.bend` still imports every module so the gate type-checks them; `closed` and `trace` at error, `coverage` at warn (80 defs); the README's Compliance section points at SPEC.md |
-| Phase 3, behavior changes BC-1 to BC-4 | next | |
+| BC-1, one sample format | done | JPEG decode returns `0xAARRGGBB` with alpha 255, gray repeated in R, G and B, through `Jpeg.opaque`, `Jpeg.rgb` and `Jpeg.gray`; F-1 fixed. Partial laws `jpeg_rgb_opaque` and `jpeg_gray_opaque` tagged IMG-PIX-1, each caught its own planted mutant. Against the pre-change driver on the audit's probe files: PNG decode and both encoders byte-identical (116 outputs), 23 colour JPEG decodes gained alpha 255, 2 gray JPEG decodes repeat Y; the updated Pillow check fails 11 of 38 on the old driver and passes 38 of 38 on the new |
+| BC-2 to BC-4 | next | |

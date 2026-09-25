@@ -11,7 +11,7 @@ WORK = os.environ.get("EZIMG_BENCH_WORK", os.path.join(os.environ.get("TMPDIR", 
 MODE = os.environ.get("EZIMG_BENCH_MODE", "correctness")  # correctness | speed | all
 os.makedirs(WORK, exist_ok=True)
 
-GRAY_JPEG = 8421504
+GRAY_JPEG = 0xFF808080
 GRAY_PNG = 0xFF808080
 lines, cases, speed_rows = [], [], []
 fails = 0
@@ -63,6 +63,9 @@ def pillow_jpeg(im, **kw):
 
 def as_rgb_words(im):
     return [pack_rgb(r, g, b) for r, g, b in im.convert("RGB").getdata()]
+
+def opaque(pix):
+    return all((p >> 24) & 255 == 255 for p in pix)
 
 def as_rgba_words(im):
     return [pack_rgba(r, g, b, a) for r, g, b, a in im.convert("RGBA").getdata()]
@@ -174,7 +177,7 @@ def correct_jpeg():
             add_case("C ezimg jpeg gray128", name, "FAIL", f"encode rc={er['rc']}")
             continue
         im = Image.open(jpg); im.load()
-        ok_p = as_rgb_words(im) == pix and im.size == (w, h)
+        ok_p = as_rgb_words(im) == [p & 0xFFFFFF for p in pix] and im.size == (w, h)
         add_case("C ezimg jpeg → Pillow", name, "PASS" if ok_p else "FAIL",
                  f"Pillow {im.size} {os.path.getsize(jpg)}B")
         r, got = run_decode("jpeg-dec", jpg, 60)
@@ -199,15 +202,12 @@ def correct_jpeg():
         if got is None:
             add_case("D pillow→ezimg jpeg", name, "FAIL", f"rc={r['rc']}")
             continue
-        # Grayscale JPEG decode yields a lone Y sample (low 8 bits). Expand to
-        # packed RGB for compare against Pillow's RGB view of the same file.
+        # Every JPEG sample is packed 0xAARRGGBB with alpha 255, gray included.
         gpix = got[2]
-        if kind == "gray":
-            gpix = [pack_rgb(p & 255, p & 255, p & 255) for p in gpix]
         m = channel_metrics(gpix, as_rgb_words(pil), "rgb")
-        ok = m["exact"] or m["max_abs"] <= 1
+        ok = (m["exact"] or m["max_abs"] <= 1) and opaque(gpix)
         add_case("D pillow→ezimg jpeg", name, "PASS" if ok else "FAIL",
-                 f"exact={m['exact']} PSNR={m['psnr']:.2f} max_abs={m['max_abs']}")
+                 f"max_abs={m['max_abs']} opaque={opaque(gpix)}")
 
     def pattern(w, h, kind):
         rng = random.Random(1)
@@ -234,7 +234,7 @@ def correct_jpeg():
             add_case("D pillow→ezimg jpeg", f"16x16 {label} q95", "FAIL", f"rc={r['rc']}")
         else:
             m = channel_metrics(got[2], pref, "rgb")
-            ok = m["max_abs"] <= 3 and m["psnr"] >= 45.0
+            ok = m["max_abs"] <= 3 and m["psnr"] >= 45.0 and opaque(got[2])
             add_case("D pillow→ezimg jpeg", f"16x16 {label} q95", "PASS" if ok else "FAIL",
                      f"PSNR={m['psnr']:.2f} max_abs={m['max_abs']}")
 
@@ -262,6 +262,24 @@ def correct_jpeg():
             add_case("C2 ezimg decode vs Pillow decode", f"16x16 {label}",
                      "PASS" if ok_both else "FAIL",
                      f"PSNR={both['psnr']:.2f} max_abs={both['max_abs']}")
+
+    # A JPEG decoded by ezimg and saved as PNG by ezimg keeps its colour and is
+    # opaque: one sample format for every decoder and encoder (IMG-PIX-1).
+    for name, im, kw in (("RGB 8x8 red 4:4:4", Image.new("RGB", (8, 8), (220, 40, 40)), {"subsampling": 0}),
+                         ("L 8x8 gray128", Image.new("L", (8, 8), 128), {})):
+        path = os.path.join(WORK, "x_" + name.replace(" ", "_").replace(":", "") + ".jpg")
+        open(path, "wb").write(pillow_jpeg(im, quality=95, **kw))
+        r, got = run_decode("jpeg-dec", path, 60)
+        png = path + ".png"
+        er = ez(["png-enc", path + ".ezr", png], 60) if got is not None else {"rc": None}
+        if got is None or er["rc"] != 0 or not os.path.exists(png):
+            add_case("E jpeg→ezimg→png", name, "FAIL", f"rc={er['rc']}")
+            continue
+        back = Image.open(png); back.load()
+        want = im.convert("RGB").getpixel((0, 0))
+        seen = back.convert("RGBA").getpixel((0, 0))
+        ok = back.mode == "RGB" and max(abs(a - b) for a, b in zip(seen[:3], want)) <= 2
+        add_case("E jpeg→ezimg→png", name, "PASS" if ok else "FAIL", f"mode {back.mode} pixel {seen} source {want}")
 
 def speed():
     log("\n== Speed (printable; does not fail the check) ==")

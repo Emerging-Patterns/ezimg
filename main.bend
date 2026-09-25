@@ -8,7 +8,7 @@ import ./src/png.bend as Png
 import ./src/jpeg.bend as Jpeg
 import ./src/jpeg_enc.bend as Jenc
 
-# a picture: width, height, and opaque U32 samples in row-major order
+# a picture: width, height, and row-major samples, each packed 0xAARRGGBB
 type Raster is Data:
   Raster{w: U32, h: U32, pixels: List<&2, U32>}
 
@@ -368,7 +368,7 @@ def decode_jpeg.out(got: Maybe<&2, Jpeg.Pic>) -> Maybe<&2, Raster>:
 def decode_jpeg(bytes: List<&2, U32>) -> Maybe<&2, Raster>:
   decode_jpeg.out(Jpeg.decode(bytes))
 
-# a baseline sequential 4:4:4 JPEG of packed RGB samples
+# a baseline sequential 4:4:4 JPEG of the samples' colour; alpha is dropped
 def encode_jpeg(img: Raster) -> List<&2, U32>:
   match img:
     case Raster{+w, +h, px}:

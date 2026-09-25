@@ -42,7 +42,7 @@ What a sample means, for every decoder and encoder.
 
 | ID | Requirement | Level | Status | Law |
 | :---- | :---- | :---- | :---- | :---- |
-| IMG-PIX-1 | Every sample `decode_png` and `decode_jpeg` return is packed `0xAARRGGBB`. Every JPEG sample has alpha 255, and a gray JPEG sample carries its Y value in R, G and B. | Proved | pending | |
+| IMG-PIX-1 | Every sample `decode_png` and `decode_jpeg` return is packed `0xAARRGGBB`. Every JPEG sample has alpha 255, and a gray JPEG sample carries its Y value in R, G and B. | Proved | pending | LAWS.bend jpeg_rgb_opaque; LAWS.bend jpeg_gray_opaque |
 | IMG-PIX-2 | `encode_jpeg` reads only the low 24 bits of each sample: two rasters that differ only in alpha encode to the same bytes. | Proved | pending | |
 
 ### PNG (IMG-PNG)
@@ -78,9 +78,13 @@ What a sample means, for every decoder and encoder.
 
 ## Left to prove
 
-Every Proved row is pending, and no law is written yet. The rollout in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md) orders them: the behavior changes first (IMG-PIX-1 needs BC-1, IMG-JPG-2 needs BC-2, IMG-JPG-4 needs BC-3), then refusals and frames (IMG-PNG-1, IMG-RAS-5, IMG-PIX-2, IMG-PNG-3, IMG-JPG-4, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2), then content (IMG-PNG-5, IMG-PNG-7, IMG-PNG-6, IMG-PNG-9, IMG-PNG-4, IMG-RAS-3, IMG-RAS-4, and the headline IMG-PNG-2), and the JPEG content rows last (IMG-PIX-1, IMG-JPG-5, IMG-JPG-2, IMG-JPG-6, IMG-JPG-3).
+| ID | Proved so far | Missing |
+| :---- | :---- | :---- |
+| IMG-PIX-1 | `Jpeg.rgb` and `Jpeg.gray`, the two functions JPEG decode packs samples with, give alpha 255 for every input (`jpeg_rgb_opaque`, `jpeg_gray_opaque`) | that every sample `decode_jpeg` returns is one of theirs; that `gray` repeats the level in R, G and B; that every sample `decode_png` returns is `0xAARRGGBB` (IMG-PNG-9) |
 
-Three rows fail today, and each is fixed by its own behavior change before its laws land: IMG-PIX-1 (JPEG samples carry alpha 0, and a gray JPEG sample is its Y value alone), IMG-JPG-2 (a 4:2:2 JPEG decodes to a raster with half its samples black), and IMG-JPG-4 (`encode_jpeg` returns bytes for a raster `encode_png` refuses).
+Every Proved row is pending; IMG-PIX-1 has the partial laws above. The rollout in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md) orders them: the behavior changes first (IMG-PIX-1 needed BC-1, which has landed; IMG-JPG-2 needs BC-2, IMG-JPG-4 needs BC-3), then refusals and frames (IMG-PNG-1, IMG-RAS-5, IMG-PIX-2, IMG-PNG-3, IMG-JPG-4, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2), then content (IMG-PNG-5, IMG-PNG-7, IMG-PNG-6, IMG-PNG-9, IMG-PNG-4, IMG-RAS-3, IMG-RAS-4, and the headline IMG-PNG-2), and the JPEG content rows last (IMG-PIX-1, IMG-JPG-5, IMG-JPG-2, IMG-JPG-6, IMG-JPG-3).
+
+Two rows fail today, and each is fixed by its own behavior change before its laws land: IMG-JPG-2 (a 4:2:2 JPEG decodes to a raster with half its samples black) and IMG-JPG-4 (`encode_jpeg` returns bytes for a raster `encode_png` refuses).
 
 ## Trust boundary
 
