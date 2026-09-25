@@ -996,3 +996,92 @@ law png_samples_frame:
   {Png.png.samples(Some{raw}, ww, hh, colour, plte, trns) ==
     spec.pic(spec.px.then(Png.unfilter(raw, ww, hh, Png.png.bpp(colour)), colour, plte, trns), ww, hh)
     : Maybe<&2, Png.Pic>}
+
+# ---- wp4-png-encode ----
+
+# a sample's alpha is 255: its top byte, shifted down, is 255
+def opaque(cc: U32) -> Bool:
+  U32.is_eq(U32.shrn(cc, 24n), 255)
+
+# every sample's alpha is 255
+def all_opaque(px: List<&2, U32>) -> Bool:
+  List.all(~&2, ~U32, ~opaque, px)
+
+# the colour type the PNG specification gives an 8-bit picture: 2 (RGB) when
+# every sample is opaque, 6 (RGBA) otherwise
+def colour_type(opq: Bool) -> U32:
+  match opq:
+    case True{}:
+      2
+    case False{}:
+      6
+
+# a word's four bytes, most significant first
+def be32(+nn: U32) -> List<&2, U32>:
+  [(255 .&. (nn >> 24n : U32) : U32), (255 .&. (nn >> 16n : U32) : U32), (255 .&. (nn >> 8n : U32) : U32),
+    (255 .&. nn : U32)]
+
+# the signature, then IHDR's length (13), its type, and its data: width,
+# height, bit depth 8, the colour type, compression 0, filter 0, interlace 0
+def ihdr_head(+ww: U32, +hh: U32, +ct: U32) -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), List.append(&2, U32, [0, 0, 0, 13, 73, 72, 68, 82],
+    List.append(&2, U32, be32(ww), List.append(&2, U32, be32(hh), [8, ct, 0, 0, 0]))))
+
+# LAW: an encoded PNG opens with the signature and an IHDR chunk of the
+# raster's width and height, bit depth 8, compression, filter and interlace 0,
+# and colour type 2 when every sample has alpha 255, 6 otherwise
+# IMG-PNG-4
+law png_ihdr:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_png(Img.raster(ww, hh, px))) == True{} : Bool}
+  exs rest: List<&2, U32>
+  {Img.encode_png(Img.raster(ww, hh, px)) ==
+    Some{List.append(&2, U32, ihdr_head(ww, hh, colour_type(all_opaque(px))), rest)} : Maybe<&2, List<&2, U32>>}
+
+# half of x, rounded down
+def half(xx: Nat) -> Nat:
+  match xx:
+    case 0n:
+      0n
+    case 1n+pp:
+      match pp:
+        case 0n:
+          0n
+        case 1n+qq:
+          1n+half(qq)
+
+# x < 2^n: halving x n times leaves 0
+def below(nn: Nat, xx: Nat) -> Bool:
+  match nn:
+    case 0n:
+      Nat.is_eq(xx, 0n)
+    case 1n+pp:
+      below(pp, half(xx))
+
+# the rasters the row calls encodable: neither side 0, the area w * h (h rows
+# of w, as natural numbers) below 2^32, and w * h samples
+def png_ok(+ww: U32, +hh: U32, +px: List<&2, U32>) -> Bool:
+  +area = Nat.mul(U32.to_nat(hh), U32.to_nat(ww))
+  Bool.and(Bool.and(Bool.not(Nat.is_eq(U32.to_nat(ww), 0n)), Bool.not(Nat.is_eq(U32.to_nat(hh), 0n))),
+    Bool.and(below(32n, area), Nat.is_eq(List.length(&2, U32, px), area)))
+
+# LAW: a raster with both sides above 0, w * h below 2^32 and w * h samples encodes
+# IMG-PNG-3
+law png_encodes:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for h_ok: {png_ok(ww, hh, px) == True{} : Bool}
+  {Maybe.is_some(&2, List<&2, U32>, Img.encode_png(Img.raster(ww, hh, px))) == True{} : Bool}
+
+# LAW: for a raster of fewer than 2^32 samples, encode_png is none exactly when
+# a side is 0, w * h is 2^32 or more, or the sample count is not w * h
+# IMG-PNG-3
+law png_refuses:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for h_len: {below(32n, List.length(&2, U32, px)) == True{} : Bool}
+  {Maybe.is_none(&2, List<&2, U32>, Img.encode_png(Img.raster(ww, hh, px))) == Bool.not(png_ok(ww, hh, px)) : Bool}
