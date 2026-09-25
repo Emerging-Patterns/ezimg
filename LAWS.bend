@@ -80,3 +80,10 @@ law map_at:
 law sig_opens:
   for +rest: List<&2, U32>
   {Img.parse_signature(List.append(&2, U32, Img.png_sig(), rest)) == Some{Img.png_sig()} : Maybe<&2, List<&2, U32>>}
+
+# LAW: parse_signature is some only when the bytes open with the eight signature bytes
+# IMG-PNG-1
+law sig_only:
+  for +xs: List<&2, U32>
+  for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.parse_signature(xs)) == True{} : Bool}
+  {xs == List.append(&2, U32, Img.png_sig(), List.drop(&2, U32, xs, 8n)) : List<&2, U32>}

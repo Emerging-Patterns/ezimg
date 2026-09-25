@@ -313,13 +313,30 @@ def map(~ff: U32 -> U32, img: Raster) -> Raster:
     case Raster{+w, +h, +px}:
       Raster{w, h, map.go(~ff, px)}
 
+# do the bytes open with the bytes of want? Each byte is compared with
+# U32.is_eq, not a literal pattern: a literal pattern matches bit by bit, so a
+# law over a symbolic byte cannot get past it, while is_eq has a lemma (ueq).
+# ok carries the answer so far, so the walk is a tail call.
+def sig.match(want: List<&2, U32>, bytes: List<&2, U32>, ok: Bool) -> Bool:
+  match want bytes:
+    case Nil{} _bytes:
+      ok
+    case _wh <> _wt Nil{}:
+      +_o = ok
+      False{}
+    case wh <> wt bh <> bt:
+      sig.match(wt, bt, Bool.and(ok, U32.is_eq(bh, wh)))
+
+def sig.pick(ok: Bool) -> Maybe<&2, List<&2, U32>>:
+  match ok:
+    case True{}:
+      Some{png_sig()}
+    case False{}:
+      None{}
+
 # the PNG signature when the bytes open with it, otherwise none
 def parse_signature(bytes: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  match bytes:
-    case 137 <> 80 <> 78 <> 71 <> 13 <> 10 <> 26 <> 10 <> _rest:
-      Some{png_sig()}
-    case _other:
-      None{}
+  sig.pick(sig.match(png_sig(), bytes, True{}))
 
 def decode_png.pic(mm: Maybe<&2, Png.Pic>) -> Maybe<&2, Raster>:
   match mm:
