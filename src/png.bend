@@ -993,15 +993,15 @@ def decode(xs: List<&2, U32>) -> Maybe<&2, Pic>:
 
 # the low byte
 def enc.byte(+nn: U32) -> U32:
-  (nn .&. 255 : U32)
+  (255 .&. nn : U32)
 
 # the next byte up
 def enc.hi(+nn: U32) -> U32:
-  ((nn >> 8n : U32) .&. 255 : U32)
+  (255 .&. (nn >> 8n : U32) : U32)
 
 # four bytes, big-endian
 def enc.be(+nn: U32) -> List<&2, U32>:
-  [((nn >> 24n : U32) .&. 255 : U32), ((nn >> 16n : U32) .&. 255 : U32), enc.hi(nn), enc.byte(nn)]
+  [(255 .&. (nn >> 24n : U32) : U32), (255 .&. (nn >> 16n : U32) : U32), enc.hi(nn), enc.byte(nn)]
 
 # alpha of a 0xAARRGGBB sample
 def enc.a(+cc: U32) -> U32:

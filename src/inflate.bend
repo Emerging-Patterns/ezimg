@@ -330,9 +330,9 @@ def lens.split(xs: List<&2, U32>, zz: Bool, +nn: U32, acc: List<&2, U32>) -> May
 def bits.push(ii: Nat, +bb: U32, acc: List<&2, U32>) -> List<&2, U32>:
   match ii:
     case 0n:
-      (bb .&. 1 : U32) <> acc
+      (1 .&. bb : U32) <> acc
     case 1n++p:
-      bits.push(p, bb, (((bb >> (1n+p) : U32) .&. 1 : U32) <> acc))
+      bits.push(p, bb, ((1 .&. (bb >> (1n+p) : U32) : U32) <> acc))
 
 # one bit list per byte
 def bits.rows(xs: List<&2, U32>) -> List<&2, List<&2, U32>>:
@@ -1815,7 +1815,7 @@ def rd.adler(
   +sym: U32,
   +rep: U32
 ) -> St:
-  +run2 = ((run << 8n : U32) .|. (val .&. 255 : U32) : U32)
+  +run2 = ((255 .&. val : U32) .|. (run << 8n : U32) : U32)
   +left2 = (left - 1 : U32)
   rd.adler.z(
     U32.is_zero(left2), run2, left2, out, wh, final, dist, lit, dts, clen,
@@ -1981,7 +1981,7 @@ def rd.raw(
   +rep: U32,
   +bit: U32
 ) -> St:
-  +acc2 = (acc .|. (bit << U32.to_nat(got)) : U32)
+  +acc2 = ((bit << U32.to_nat(got) : U32) .|. acc : U32)
   +got2 = (got + 1 : U32)
   rd.raw.at(
     U32.is_eq(got2, need), md, wh, acc2, got2, need, final, left, dist, out,
