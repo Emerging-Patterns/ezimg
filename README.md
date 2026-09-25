@@ -31,37 +31,19 @@ def main() -> U32:
 
 ## Compliance
 
-Closed equalities in `LAWS.bend`, proved in `PROOF.bend`
-(`bend PROOF.bend`), target:
+[SPEC.md](SPEC.md) lists every behavior ezimg guarantees, each under a stable
+ID, against [ISO/IEC 15948](https://www.iso.org/standard/29581.html) and the
+[W3C PNG specification](https://www.w3.org/TR/png/) for PNG, and
+[ISO/IEC 10918-1](https://www.iso.org/standard/18902.html) | ITU-T T.81 with
+JFIF (ITU-T T.871) for JPEG. A requirement is either Proved, by a quantified
+law in `LAWS.bend` that `bend PROOF.bend` checks, or Trusted, with the reason
+in SPEC.md's trust boundary. Every Proved row is pending today: the laws that
+stood here each checked one fixed input and were retired, and the quantified
+laws are landing row by row. The plan and the audit behind it are in
+[docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md).
 
-- [ISO/IEC 15948](https://www.iso.org/standard/29581.html) (PNG) and the
-  [W3C PNG specification](https://www.w3.org/TR/png/): the eight-byte
-  signature.
-- [ISO/IEC 10918-1](https://www.iso.org/standard/18902.html) | ITU-T T.81:
-  the SOI, EOI, APP0, SOF0, SOF2, SOF9, DHT, DQT, and SOS marker bytes, and a
-  baseline sequential 8-bit Huffman frame (SOF0) decoded to gray and to
-  4:4:4 YCbCr samples. Progressive SOF2 and arithmetic SOF9 decode as none.
-  A baseline SOF0 encode of the same shape writes SOI, APP0, the JFIF
-  identifier, DQT, SOF0, DHT, SOS, and EOI. A 1 by 1 and a 2 by 2 neutral
-  solid (packed sample 8421504) round-trip through that encode and decode.
-  Annex A.3.3: a constant level-shifted block has no AC coefficient, and the
-  forward and inverse transforms restore an 8 by 8 horizontal step. An 8 by 1
-  picture of that step round-trips through encode and the all-ones quantiser.
-- JFIF, [ISO/IEC 10918-5](https://www.iso.org/standard/54989.html) | ITU-T
-  T.871: the APP0 identifier `JFIF`, and the neutral and one saturated
-  YCbCr triple converted to a packed RGB sample.
-- [ISO/IEC 15948](https://www.iso.org/standard/29581.html) (PNG) and the
-  [W3C PNG specification](https://www.w3.org/TR/png/): chunk layout and CRC-32
-  (ISO 3309 / ITU-T V.42) over the chunk type and data.
-- IHDR fields: width, height, bit depth, colour type, compression method,
-  filter method, and interlace method.
-- Scanline filters None, Sub, Up, Average, and Paeth (filter method 0).
-- IDAT as zlib-wrapped DEFLATE, PNG compression method 0 (proved on a stored
-  block).
-- 8-bit colour types 0, 2, 3, 4, and 6, interlace method 0.
-- Encoding 8-bit colour type 2 when every sample is opaque, and colour type 6
-  otherwise, interlace method 0, filter None, a zlib stored-block IDAT
-  (compression method 0), and CRC-32 on IHDR, IDAT, and IEND. Decoding that
-  encoding returns the picture.
-
-Full codec conformance is not claimed yet.
+Scope today: PNG decode reads 8-bit colour types 0, 2, 3, 4 and 6 without
+interlace, and refuses anything else; PNG encode writes colour type 2 or 6.
+JPEG decode reads baseline sequential frames and refuses progressive and
+arithmetic ones; JPEG encode writes baseline 4:4:4. Full codec conformance is
+not claimed.

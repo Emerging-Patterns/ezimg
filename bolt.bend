@@ -1,7 +1,6 @@
-# bolt.bend: how bolt lints this repo. Every group is an error except the law
-# rules, which warn while SPEC.md's requirements are pending: the 85 closed
-# laws are retired in the change that lands SPEC.md, and `closed` and `trace`
-# turn to error there. See bolt/config.bend for the groups and levels.
+# bolt.bend: how bolt lints this repo. Every rule is an error except
+# `coverage`, which warns until the laws exist: the gate must see no errors.
+# See bolt/config.bend for the groups and levels.
 import Base
 
 # what will fail or blow up
@@ -16,11 +15,20 @@ def suspicious() -> String:
 def style() -> String:
   "error"
 
-# a def no quantified law reaches, a law with no binder: advice until the
-# closed laws are retired and the quantified ones land
+# a def no quantified law reaches, IO included: advice while SPEC.md's
+# requirements are pending. That rule is `coverage` (L001), which
+# `def coverage()` could also set on its own.
 def laws() -> String:
   "warn"
 
+# a law with no binder
+def closed() -> String:
+  "error"
+
 # an @unsafe def a law file reaches
 def unsafe() -> String:
+  "error"
+
+# SPEC.md's rows and the laws' tags agree
+def trace() -> String:
   "error"
