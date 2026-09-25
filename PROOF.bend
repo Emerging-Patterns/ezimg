@@ -4,6 +4,8 @@ import Base
 import ./LAWS.bend as Laws
 import ./proof/u32.bend as U32L
 import ./proof/wp2-inflate.bend as Wp2
+import ./proof/wp3-filter.bend as Flt
+import ./proof/wp1-crc.bend as Wp1
 import ./main.bend as Img
 import ./src/png.bend as Png
 import ./src/jpeg.bend as Jpeg
@@ -228,6 +230,37 @@ def Laws.inflate_stored(sz, xs, h_sz, h_by, h_n):
 
 def Laws.inflate_enc_zlib(xs, h_by, h_n):
   Wp2.inflate_stored(65535, xs, {==}, h_by, h_n)
+
+# ---- wp3-filter ----
+
+# rows_go from the law's hypotheses: the stride is not zero, and the fit is
+# stated at the stride
+def Laws.unfilter_filter(ft, ww, hh, bpp, rows, h_dims, h_wrap, h_rows, h_fit):
+  +d_ww = U32L.and_left(U32.is_gt(ww, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4))),
+    h_dims)
+  +d_rest = U32L.and_right(U32.is_gt(ww, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4))),
+    h_dims)
+  +d_bpp = U32L.and_left(U32.is_gt(bpp, 0), U32.is_le(bpp, 4),
+    U32L.and_right(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4)), d_rest))
+  +en = Flt.stride_nz(ww, bpp, d_ww, d_bpp, h_wrap)
+  +fit = Equal.trans(Bool, Laws.flt.fit(rows, U32.to_nat(U32.mul(ww, bpp)), True{}),
+    Laws.flt.fit(rows, Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)), True{}), True{},
+    Equal.cong(Nat, Bool, nn => Laws.flt.fit(rows, nn, True{}), U32.to_nat(U32.mul(ww, bpp)),
+      Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)), h_wrap),
+    h_fit)
+  Flt.top.go(Png.uf.ok(ww, hh, bpp), h_dims, ft, ww, hh, bpp, rows,
+    Flt.rows_go(rows, U32.to_nat(hh), h_rows, ft, bpp, U32.mul(ww, bpp), en, True{}, fit, [], []))
+
+# ---- wp1-crc ----
+
+def Laws.crc32_bitwise(xs):
+  Wp1.crc32_ref(xs)
+
+def Laws.png_crc_refused(pre, bad, rest, h_pre, h_bad, h_crc):
+  Equal.cong(Maybe<&2, Png.Pic>, Maybe<&2, Img.Raster>, mm => Img.decode_png.pic(mm),
+    Png.png.go(Laws.chunks.onto(pre, Laws.chunk.onto(bad, rest)), Png.ZLen{}, False{}, 0, 0, [], [], Png.pg.empty()),
+    None{}, Wp1.walk_all(pre, bad, rest, Png.pg.empty(), h_pre, h_bad, h_crc))
+
 # ---- wp5-png-decode ----
 
 # byte 3, 2, 1 and 0 of a U32, as spec.be4 writes them
