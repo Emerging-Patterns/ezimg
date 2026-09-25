@@ -4977,8 +4977,32 @@ def w8.walk.more(
       Empty.absurd({Jpeg.decode.adv.bi(False{}, comp, bi, mx, my, mcu, rst, ww, hmax, ns, ri) ==
         Jpeg.Adv{Jpeg.Ctrl{comp, (bi + 1 : U32), mx, my, mcu, rst}, 0, rst} : Jpeg.Adv}, U32L.false_true(h_more))
 
-def Laws.jpeg_walk_unit(comp, bi, mx, my, mcu, rst, ww, _hh, _nf, ids, hs, vs, _tq, hmax, _vmax, ns, sids, _td, _ta,
-  _ss, _se, _ah, ri, h_more):
+def Laws.jpeg_walk_unit(
+  comp,
+  bi,
+  mx,
+  my,
+  mcu,
+  rst,
+  ww,
+  _hh,
+  _nf,
+  ids,
+  hs,
+  vs,
+  _tq,
+  hmax,
+  _vmax,
+  ns,
+  sids,
+  _td,
+  _ta,
+  _ss,
+  _se,
+  _ah,
+  ri,
+  h_more
+):
   w8.walk.more(U32.is_lt((bi + 1 : U32), Laws.jpg.units(comp, sids, ids, hs, vs)), comp, bi, mx, my, mcu, rst, ww,
     hmax, ns, ri, h_more)
 
@@ -5028,8 +5052,33 @@ def w8.walk.comp(
     case False{}:
       w8.walk.next(U32.is_lt((comp + 1 : U32), ns), comp, mx, my, mcu, rst, ww, hmax, ri, h_next)
 
-def Laws.jpeg_walk_comp(comp, bi, mx, my, mcu, rst, ww, _hh, _nf, ids, hs, vs, _tq, hmax, _vmax, ns, sids, _td, _ta,
-  _ss, _se, _ah, ri, h_last, h_next):
+def Laws.jpeg_walk_comp(
+  comp,
+  bi,
+  mx,
+  my,
+  mcu,
+  rst,
+  ww,
+  _hh,
+  _nf,
+  ids,
+  hs,
+  vs,
+  _tq,
+  hmax,
+  _vmax,
+  ns,
+  sids,
+  _td,
+  _ta,
+  _ss,
+  _se,
+  _ah,
+  ri,
+  h_last,
+  h_next
+):
   w8.walk.comp(U32.is_lt((bi + 1 : U32), Laws.jpg.units(comp, sids, ids, hs, vs)), comp, bi, mx, my, mcu, rst, ww,
     hmax, ns, ri, h_last, h_next)
 
@@ -5111,7 +5160,32 @@ def w8.walk.last(
     case False{}:
       w8.walk.end(U32.is_lt((comp + 1 : U32), ns), comp, mx, my, mcu, rst, ww, hmax, ri, h_end)
 
-def Laws.jpeg_walk_mcu(comp, bi, mx, my, mcu, rst, ww, _hh, _nf, ids, hs, vs, _tq, hmax, _vmax, ns, sids, _td, _ta,
-  _ss, _se, _ah, ri, h_last, h_end):
+def Laws.jpeg_walk_mcu(
+  comp,
+  bi,
+  mx,
+  my,
+  mcu,
+  rst,
+  ww,
+  _hh,
+  _nf,
+  ids,
+  hs,
+  vs,
+  _tq,
+  hmax,
+  _vmax,
+  ns,
+  sids,
+  _td,
+  _ta,
+  _ss,
+  _se,
+  _ah,
+  ri,
+  h_last,
+  h_end
+):
   w8.walk.last(U32.is_lt((bi + 1 : U32), Laws.jpg.units(comp, sids, ids, hs, vs)), comp, bi, mx, my, mcu, rst, ww,
     hmax, ns, ri, h_last, h_end)
