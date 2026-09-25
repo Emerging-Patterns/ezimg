@@ -1749,3 +1749,177 @@ law jpeg_walk_mcu:
   for h_end: {U32.is_lt((comp + 1 : U32), ns) == False{} : Bool}
   {jpg.adv.at(Jpeg.decode.adv(Jpeg.Ctrl{comp, bi, mx, my, mcu, rst}, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
     vmax}, Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, ri)) == (0, 0, (mcu + 1 : U32)) : U32 & U32 & U32}
+
+# ---- wp10-jpeg-finish ----
+
+# LAW: painting one 8 by 8 block whose samples each cover pw by ph pixels, for every pw and ph (4 by 4
+# included) and onto any plane, one that earlier blocks painted included, writes its sample k over the
+# pw by ph pixels at (ox + (k mod 8) * pw, oy + (k div 8) * ph) that lie inside the frame, row by row,
+# and nothing else
+# IMG-JPG-2
+law jpeg_block_cover_all:
+  for +pw: U32
+  for +ph: U32
+  for +ox: U32
+  for +oy: U32
+  for +ww: U32
+  for +hh: U32
+  for +samples: List<&2, U32>
+  for plane: Array<U32>
+  {Jpeg.decode.paint.use(Jpeg.Geom{ox, oy, pw, ph, ww, hh}, True{}, samples, plane) ==
+    jpg.cover(8n, plane, samples, 0, ox, oy, pw, ph, ww, hh) : Array<U32>}
+
+# LAW: a SOF0 segment of one component whose sampling factor is outside 1, 2 and 4 makes decode_jpeg
+# none, whatever came before its marker (fill bytes included), however much longer than the component
+# its length field makes the segment, and whatever follows
+# IMG-JPG-2
+law jpeg_refuse_factor1_any:
+  for +pre: List<&2, U32>
+  for +frame: Jpeg.Frame
+  for +scan: Jpeg.Scan
+  for +tabs: Jpeg.Tabs
+  for +ent: List<&2, U32>
+  for +ri: U32
+  for +kind: U32
+  for +bad: U32
+  for h_walk: {Jpeg.decode.walk(pre, Jpeg.decode.st0()) == Jpeg.St{Jpeg.LenHi{192}, frame, scan, tabs, ent, ri, kind,
+    bad} : Jpeg.St}
+  for +lh: U32
+  for +ll: U32
+  for +yh: U32
+  for +yl: U32
+  for +xh: U32
+  for +xl: U32
+  for +c1: U32
+  for +f1: U32
+  for +q1: U32
+  for +extra: List<&2, U32>
+  for h_len: {U32.is_lt(Jpeg.decode.u16(lh, ll), 2) == False{} : Bool}
+  for h_body: {U32.to_nat((Jpeg.decode.u16(lh, ll) - 2 : U32)) == List.length(&2, U32, List.append(&2, U32,
+    [8, yh, yl, xh, xl, 1, c1, f1, q1], extra)) : Nat}
+  for h_fac: {jpg.facs(f1) == False{} : Bool}
+  for +rest: List<&2, U32>
+  {Img.decode_jpeg(List.append(&2, U32, pre, lh <> ll <> List.append(&2, U32, List.append(&2, U32,
+    [8, yh, yl, xh, xl, 1, c1, f1, q1], extra), rest))) == None{} : Maybe<&2, Img.Raster>}
+
+# LAW: a SOF0 segment of three components, one of them with a sampling factor outside 1, 2 and 4,
+# makes decode_jpeg none, whatever came before its marker (fill bytes included), however much longer
+# than the components its length field makes the segment, and whatever follows
+# IMG-JPG-2
+law jpeg_refuse_factor3_any:
+  for +pre: List<&2, U32>
+  for +frame: Jpeg.Frame
+  for +scan: Jpeg.Scan
+  for +tabs: Jpeg.Tabs
+  for +ent: List<&2, U32>
+  for +ri: U32
+  for +kind: U32
+  for +bad: U32
+  for h_walk: {Jpeg.decode.walk(pre, Jpeg.decode.st0()) == Jpeg.St{Jpeg.LenHi{192}, frame, scan, tabs, ent, ri, kind,
+    bad} : Jpeg.St}
+  for +lh: U32
+  for +ll: U32
+  for +yh: U32
+  for +yl: U32
+  for +xh: U32
+  for +xl: U32
+  for +c1: U32
+  for +f1: U32
+  for +q1: U32
+  for +c2: U32
+  for +f2: U32
+  for +q2: U32
+  for +c3: U32
+  for +f3: U32
+  for +q3: U32
+  for +extra: List<&2, U32>
+  for h_len: {U32.is_lt(Jpeg.decode.u16(lh, ll), 2) == False{} : Bool}
+  for h_body: {U32.to_nat((Jpeg.decode.u16(lh, ll) - 2 : U32)) == List.length(&2, U32, List.append(&2, U32,
+    [8, yh, yl, xh, xl, 3, c1, f1, q1, c2, f2, q2, c3, f3, q3], extra)) : Nat}
+  for h_fac: {Bool.and(Bool.and(jpg.facs(f1), jpg.facs(f2)), jpg.facs(f3)) == False{} : Bool}
+  for +rest: List<&2, U32>
+  {Img.decode_jpeg(List.append(&2, U32, pre, lh <> ll <> List.append(&2, U32, List.append(&2, U32,
+    [8, yh, yl, xh, xl, 3, c1, f1, q1, c2, f2, q2, c3, f3, q3], extra), rest))) == None{} : Maybe<&2, Img.Raster>}
+
+# LAW: a SOF0 segment whose component count is neither 1 nor 3 makes decode_jpeg none, whatever its
+# components and their sampling factors, whatever came before its marker and whatever follows; with the
+# two laws above, a SOF0 frame with a factor outside 1, 2 and 4 is none for every component count
+# IMG-JPG-2
+law jpeg_refuse_count:
+  for +pre: List<&2, U32>
+  for +frame: Jpeg.Frame
+  for +scan: Jpeg.Scan
+  for +tabs: Jpeg.Tabs
+  for +ent: List<&2, U32>
+  for +ri: U32
+  for +kind: U32
+  for +bad: U32
+  for h_walk: {Jpeg.decode.walk(pre, Jpeg.decode.st0()) == Jpeg.St{Jpeg.LenHi{192}, frame, scan, tabs, ent, ri, kind,
+    bad} : Jpeg.St}
+  for +lh: U32
+  for +ll: U32
+  for +yh: U32
+  for +yl: U32
+  for +xh: U32
+  for +xl: U32
+  for +nf: U32
+  for h_nf: {Bool.or(U32.is_eq(nf, 1), U32.is_eq(nf, 3)) == False{} : Bool}
+  for +comps: List<&2, U32>
+  for h_len: {U32.is_lt(Jpeg.decode.u16(lh, ll), 2) == False{} : Bool}
+  for h_body: {U32.to_nat((Jpeg.decode.u16(lh, ll) - 2 : U32)) == List.length(&2, U32, 8 <> yh <> yl <> xh <> xl <>
+    nf <> comps) : Nat}
+  for +rest: List<&2, U32>
+  {Img.decode_jpeg(List.append(&2, U32, pre, lh <> ll <> List.append(&2, U32, 8 <> yh <> yl <> xh <> xl <> nf <> comps,
+    rest))) == None{} : Maybe<&2, Img.Raster>}
+
+# the sampling factor in fs (hs or vs) of the frame component that scan component comp names: the
+# first frame component whose identifier is the one the scan lists for comp (jpeg_comp_index)
+def jpg.fac.of(+comp: U32, +sids: List<&2, U32>, +ids: List<&2, U32>, +fs: List<&2, U32>) -> U32:
+  Jpeg.decode.at(fs, Jpeg.decode.index(ids, False{}, Jpeg.decode.at(sids, comp), 0))
+
+# where the decoder puts data units bi, bi + 1, ... of scan component comp of a scan that lists the
+# identifiers sids, in a frame whose components have identifiers ids and factors hs and vs
+def jpg.blocks.of(
+  left: Nat,
+  +bi: U32,
+  +comp: U32,
+  +sids: List<&2, U32>,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  +mx: U32,
+  +my: U32,
+  +hmax: U32,
+  +vmax: U32,
+  +ww: U32,
+  +hh: U32
+) -> List<&2, Jpeg.Geom>:
+  match left:
+    case 0n:
+      []
+    case 1n+pp:
+      Jpeg.decode.geom.go(comp, bi, mx, my, ww, hh, hmax, vmax, sids, ids, hs, vs) <>
+        jpg.blocks.of(pp, (bi + 1 : U32), comp, sids, ids, hs, vs, mx, my, hmax, vmax, ww, hh)
+
+# LAW: for every scan component, not only the frame's first, whose frame component has sampling factors
+# hi and vi of 1, 2 or 4, the decoder places the component's hi * vi data units of an MCU in T.81
+# A.2.3's order, hi to a row, each sample covering hmax / hi by vmax / vi pixels
+# IMG-JPG-2
+law jpeg_mcu_grid_comp:
+  for +comp: U32
+  for +sids: List<&2, U32>
+  for +ids: List<&2, U32>
+  for +hs: List<&2, U32>
+  for +vs: List<&2, U32>
+  for h_hi: {jpg.fac(jpg.fac.of(comp, sids, ids, hs)) == True{} : Bool}
+  for h_vi: {jpg.fac(jpg.fac.of(comp, sids, ids, vs)) == True{} : Bool}
+  for +mx: U32
+  for +my: U32
+  for +hmax: U32
+  for +vmax: U32
+  for +ww: U32
+  for +hh: U32
+  {jpg.blocks.of(U32.to_nat((jpg.fac.of(comp, sids, ids, hs) * jpg.fac.of(comp, sids, ids, vs) : U32)), 0, comp, sids,
+    ids, hs, vs, mx, my, hmax, vmax, ww, hh) == jpg.grid(U32.to_nat(jpg.fac.of(comp, sids, ids, vs)), 0,
+    jpg.fac.of(comp, sids, ids, hs), mx, my, hmax, vmax, U32.div(hmax, jpg.fac.of(comp, sids, ids, hs)),
+    U32.div(vmax, jpg.fac.of(comp, sids, ids, vs)), ww, hh) : List<&2, Jpeg.Geom>}

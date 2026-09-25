@@ -76,10 +76,6 @@ type Adv is Data:
 type Geom is Data:
   Geom{ox: U32, oy: U32, pw: U32, ph: U32, w: U32, h: U32}
 
-# sample cursor inside an upsampled block
-type Cursor is Data:
-  Cursor{k: U32, px: U32, py: U32}
-
 # SOF component lists while they are being read, and whether every component
 # so far was read whole with sampling factors the decoder places
 type Comps is Data:
@@ -489,36 +485,76 @@ def decode.look(
             case s <> st:
               decode.look.pref(decode.look(ct, lt, st, code, len), U32.is_eq(c, code), U32.is_eq(l, len), s)
 
-def decode.nbits(left: Nat, eq: Bool, xs: List<&2, U32>, +nn: U32, +buf: U32, +ok: U32, +acc: U32) -> Bits & U32:
+# whether a list of bytes opens with want. U32.is_eq, not a literal pattern, so a law reaches a
+# symbolic byte.
+def decode.head.is(xs: List<&2, U32>, +want: U32) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case +bb <> _rest:
+      U32.is_eq(bb, want)
+
+# left more bits onto acc, most significant first. nn bits remain in buf, top bit first at bit 7; eq
+# says buf is empty. ff says the byte before xs was a 255, and h255 and h0 whether xs opens with 255
+# or 0, each asked with U32.is_eq so a law reaches a symbolic byte. After a 255, 0 is a stuffed 255
+# (eight one bits) and 255 a fill byte; any other byte is a marker, and it or the end of the bytes
+# reads zero bits and sets ok to 0.
+def decode.nbits(
+  left: Nat,
+  eq: Bool,
+  xs: List<&2, U32>,
+  ff: Bool,
+  h255: Bool,
+  h0: Bool,
+  +nn: U32,
+  +buf: U32,
+  +ok: U32,
+  +acc: U32
+) -> Bits & U32:
   match left:
     case 0n:
       (Bits{nn, ok, buf, xs}, acc)
     case 1n+p:
       match eq:
         case False{}:
-          decode.nbits(p, U32.is_eq((nn - 1 : U32), 0), xs, (nn - 1 : U32), U32.and(U32.shl(buf), 255), ok,
-            U32.or(U32.shl(acc), U32.shrn(buf, 7n)))
+          decode.nbits(p, U32.is_eq((nn - 1 : U32), 0), xs, ff, h255, h0, (nn - 1 : U32), U32.and(255, U32.shl(buf)),
+            ok, U32.or(U32.shl(acc), U32.shrn(buf, 7n)))
         case True{}:
           match xs:
             case Nil{}:
-              decode.nbits(p, False{}, [], 7, 0, 0, U32.shl(acc))
-            case 255 <> rest:
-              match rest:
-                case Nil{}:
-                  decode.nbits(p, False{}, [], 7, 0, 0, U32.shl(acc))
-                case 0 <> more:
-                  decode.nbits(p, False{}, more, 7, 254, ok, U32.or(U32.shl(acc), 1))
-                case 255 <> more:
-                  decode.nbits(Succ{p}, True{}, more, 0, 0, ok, acc)
-                case _m <> more:
-                  decode.nbits(p, False{}, more, 7, 0, 0, U32.shl(acc))
-            case +b <> rest:
-              decode.nbits(p, False{}, rest, 7, U32.and(U32.shl(b), 255), ok, U32.or(U32.shl(acc), U32.shrn(b, 7n)))
+              decode.nbits(p, False{}, [], False{}, False{}, False{}, 7, 0, 0, U32.shl(acc))
+            case +bb <> +rest:
+              match ff:
+                case False{}:
+                  match h255:
+                    case True{}:
+                      decode.nbits(Succ{p}, True{}, rest, True{}, decode.head.is(rest, 255), decode.head.is(rest, 0),
+                        0, 0, ok, acc)
+                    case False{}:
+                      decode.nbits(p, False{}, rest, False{}, decode.head.is(rest, 255), decode.head.is(rest, 0), 7,
+                        U32.and(255, U32.shl(bb)), ok, U32.or(U32.shl(acc), U32.shrn(bb, 7n)))
+                case True{}:
+                  match h255:
+                    case True{}:
+                      decode.nbits(Succ{p}, True{}, rest, True{}, decode.head.is(rest, 255), decode.head.is(rest, 0),
+                        0, 0, ok, acc)
+                    case False{}:
+                      match h0:
+                        case True{}:
+                          decode.nbits(p, False{}, rest, False{}, decode.head.is(rest, 255), decode.head.is(rest, 0),
+                            7, 254, ok, U32.or(U32.shl(acc), 1))
+                        case False{}:
+                          decode.nbits(p, False{}, rest, False{}, decode.head.is(rest, 255), decode.head.is(rest, 0),
+                            7, 0, 0, U32.shl(acc))
+
+# nn more bits from a reader, the first of them at the next byte when its buffer is empty
+def decode.nbits.of(left: Nat, +xs: List<&2, U32>, +nn: U32, +buf: U32, +ok: U32) -> Bits & U32:
+  decode.nbits(left, U32.is_eq(nn, 0), xs, False{}, decode.head.is(xs, 255), decode.head.is(xs, 0), nn, buf, ok, 0)
 
 def decode.one(bits: Bits) -> Bits & U32:
   match bits:
     case Bits{+n, +ok, +buf, xs}:
-      decode.nbits(1n, U32.is_eq(n, 0), xs, n, buf, ok, 0)
+      decode.nbits.of(1n, xs, n, buf, ok)
 
 def decode.ask.bit(tab: Huff, got: Bits & U32, +code: U32, +len: U32) -> Ask:
   match tab:
@@ -563,7 +599,7 @@ def decode.bits.of(bits: Bits) -> Nat & U32 & List<&2, U32> & U32 & U32:
 def decode.read.n(+cat: U32, bits: Bits) -> Bits & U32:
   match bits:
     case Bits{+n, +ok, +buf, xs}:
-      decode.nbits(U32.to_nat(cat), U32.is_eq(n, 0), xs, n, buf, ok, 0)
+      decode.nbits.of(U32.to_nat(cat), xs, n, buf, ok)
 
 def decode.extend.s(small: Bool, +mag: U32, +cat: U32) -> U32:
   match small:
@@ -1040,26 +1076,6 @@ def decode.geom(ctrl: Ctrl, frame: Frame, scan: Scan) -> Geom:
             case Scan{_ns, +sids, _td, _ta, _ss, _se, _ah}:
               decode.geom.go(comp, bi, mx, my, w, h, hmax, vmax, sids, ids, hs, vs)
 
-def decode.cursor.py(more: Bool, +kk: U32, +py: U32) -> Cursor:
-  match more:
-    case True{}:
-      Cursor{kk, 0, (py + 1 : U32)}
-    case False{}:
-      Cursor{(kk + 1 : U32), 0, 0}
-
-def decode.cursor.px(more: Bool, +kk: U32, +px: U32, +py: U32, +ph: U32) -> Cursor:
-  match more:
-    case True{}:
-      Cursor{kk, (px + 1 : U32), py}
-    case False{}:
-      decode.cursor.py(U32.is_lt((py + 1 : U32), ph), kk, py)
-
-def decode.cursor(+kk: U32, +px: U32, +py: U32, +pw: U32, +ph: U32) -> Cursor:
-  decode.cursor.px(U32.is_lt((px + 1 : U32), pw), kk, px, py, ph)
-
-def decode.splat.n(+pw: U32, +ph: U32) -> Nat:
-  U32.to_nat(((pw * ph : U32) * 64 : U32))
-
 def decode.splat.in(xin: Bool, yin: Bool, plane: Array<U32>, +xx: U32, +yy: U32, +ww: U32, +sample: U32) -> Array<U32>:
   match xin:
     case False{}:
@@ -1071,28 +1087,52 @@ def decode.splat.in(xin: Bool, yin: Bool, plane: Array<U32>, +xx: U32, +yy: U32,
         case True{}:
           Array.set(U32, plane, (yy * ww + xx : U32), sample)
 
-def decode.splat.put(
-  plane: Array<U32>,
-  +kk: U32,
-  +px: U32,
-  +py: U32,
-  samples: List<&2, U32>,
-  +ox: U32,
-  +oy: U32,
-  +pw: U32,
-  +ph: U32,
-  +ww: U32,
-  +hh: U32
-) -> Array<U32>:
-  +x = (ox + U32.mod(kk, 8) * pw + px : U32)
-  +y = (oy + U32.div(kk, 8) * ph + py : U32)
-  decode.splat.in(U32.is_lt(x, ww), U32.is_lt(y, hh), plane, x, y, ww, decode.at(samples, kk))
-
-def decode.splat(
+# one pixel row of the pixels a sample covers: columns x0 + px onward, left pixels left, each written
+# only when it lies inside the frame
+def decode.splat.px(
   left: Nat,
-  cur: Cursor,
-  +samples: List<&2, U32>,
   plane: Array<U32>,
+  +x0: U32,
+  +yy: U32,
+  +px: U32,
+  +ww: U32,
+  +hh: U32,
+  +vv: U32
+) -> Array<U32>:
+  match left:
+    case 0n:
+      plane
+    case 1n+p:
+      decode.splat.px(p, decode.splat.in(U32.is_lt((x0 + px : U32), ww), U32.is_lt(yy, hh), plane, (x0 + px : U32), yy,
+        ww, vv), x0, yy, (px + 1 : U32), ww, hh, vv)
+
+# the pw by ph pixels one sample covers, from (x0, y0 + py), row by row
+def decode.splat.py(
+  left: Nat,
+  plane: Array<U32>,
+  +x0: U32,
+  +y0: U32,
+  +py: U32,
+  +pw: U32,
+  +ww: U32,
+  +hh: U32,
+  +vv: U32
+) -> Array<U32>:
+  match left:
+    case 0n:
+      plane
+    case 1n+p:
+      decode.splat.py(p, decode.splat.px(U32.to_nat(pw), plane, x0, (y0 + py : U32), 0, ww, hh, vv), x0, y0,
+        (py + 1 : U32), pw, ww, hh, vv)
+
+# samples 8 * row + col onward of one block row, each over the pw by ph pixels at
+# (ox + col * pw, oy + row * ph)
+def decode.splat.col(
+  left: Nat,
+  plane: Array<U32>,
+  +samples: List<&2, U32>,
+  +row: U32,
+  +col: U32,
   +ox: U32,
   +oy: U32,
   +pw: U32,
@@ -1102,15 +1142,31 @@ def decode.splat(
 ) -> Array<U32>:
   match left:
     case 0n:
-      match cur:
-        case Cursor{_k, _px, _py}:
-          +_s = decode.drop(samples)
-          plane
+      plane
     case 1n+p:
-      match cur:
-        case Cursor{+k, +px, +py}:
-          decode.splat(p, decode.cursor(k, px, py, pw, ph), samples,
-            decode.splat.put(plane, k, px, py, samples, ox, oy, pw, ph, ww, hh), ox, oy, pw, ph, ww, hh)
+      decode.splat.col(p, decode.splat.py(U32.to_nat(ph), plane, (ox + col * pw : U32), (oy + row * ph : U32), 0, pw,
+        ww, hh, decode.at(samples, (row * 8 + col : U32))), samples, row, (col + 1 : U32), ox, oy, pw, ph, ww, hh)
+
+# the rows of an 8 by 8 block from row down, each sample replicated over pw by ph pixels
+def decode.splat(
+  left: Nat,
+  plane: Array<U32>,
+  +samples: List<&2, U32>,
+  +row: U32,
+  +ox: U32,
+  +oy: U32,
+  +pw: U32,
+  +ph: U32,
+  +ww: U32,
+  +hh: U32
+) -> Array<U32>:
+  match left:
+    case 0n:
+      +_s = decode.drop(samples)
+      plane
+    case 1n+p:
+      decode.splat(p, decode.splat.col(8n, plane, samples, row, 0, ox, oy, pw, ph, ww, hh), samples, (row + 1 : U32),
+        ox, oy, pw, ph, ww, hh)
 
 def decode.paint.which(
   which: Bool,
@@ -1128,7 +1184,7 @@ def decode.paint.which(
       +_s = decode.drop(samples)
       plane
     case True{}:
-      decode.splat(decode.splat.n(pw, ph), Cursor{0, 0, 0}, samples, plane, ox, oy, pw, ph, ww, hh)
+      decode.splat(8n, plane, samples, 0, ox, oy, pw, ph, ww, hh)
 
 def decode.paint.use(gg: Geom, which: Bool, samples: List<&2, U32>, plane: Array<U32>) -> Array<U32>:
   match gg:
@@ -2244,6 +2300,26 @@ def decode.ent.rst.b(
     case False{}:
       St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
 
+# a byte of the entropy-coded data: 255 may open a stuffed pair or a marker, any other byte is data.
+# Compares with U32.is_eq, not a literal pattern, so a law reaches a symbolic byte.
+def decode.step.ent(
+  ff: Bool,
+  +bb: U32,
+  frame: Frame,
+  scan: Scan,
+  tabs: Tabs,
+  ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32
+) -> St:
+  match ff:
+    case True{}:
+      +_b = (bb - bb : U32)
+      St{EntFF{}, frame, scan, tabs, ent, ri, kind, bad}
+    case False{}:
+      St{Ent{}, frame, scan, tabs, bb <> ent, ri, kind, bad}
+
 def decode.step.ph(
   phase: Phase,
   +bb: U32,
@@ -2272,11 +2348,7 @@ def decode.step.ph(
     case Pay{+mark, +left, +acc}:
       decode.step.pay(left, bb, mark, acc, frame, scan, tabs, ent, ri, kind, bad)
     case Ent{}:
-      match bb:
-        case 255:
-          St{EntFF{}, frame, scan, tabs, ent, ri, kind, bad}
-        case _:
-          St{Ent{}, frame, scan, tabs, bb <> ent, ri, kind, bad}
+      decode.step.ent(U32.is_eq(bb, 255), bb, frame, scan, tabs, ent, ri, kind, bad)
     case EntFF{}:
       match bb:
         case 0:

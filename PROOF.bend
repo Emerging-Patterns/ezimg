@@ -16,6 +16,7 @@ import ./proof/wp5-png-decode.bend as W5
 import ./proof/wp7-jpeg-struct.bend as W7
 import ./src/jpeg_enc.bend as Jenc
 import ./proof/wp8-jpeg-numeric.bend as W8
+import ./proof/wp10-jpeg-finish.bend as W10
 
 # U32.or with 0xFF000000 first has alpha 255, whatever the other operand:
 # the 32 bits are taken apart four at a time, and Bool.or(True, b) is True.
@@ -4753,97 +4754,6 @@ def Laws.jpeg_mcu_grid(hi, vi, h_hi, h_vi, mx, my, hmax, vmax, ww, hh):
     w8.grid.vi(2, vi, h_vi, mx, my, hmax, vmax, ww, hh, {==}, {==}, {==}),
     w8.grid.vi(4, vi, h_vi, mx, my, hmax, vmax, ww, hh, {==}, {==}, {==}))
 
-# what jpeg_block_cover says for sample sizes pw and ph
-def w8.cover.eq(
-  +pw: U32,
-  +ph: U32,
-  +ox: U32,
-  +oy: U32,
-  +ww: U32,
-  +hh: U32,
-  +samples: List<&2, U32>,
-  +nn: U32
-) -> Type:
-  {Jpeg.decode.paint.use(Jpeg.Geom{ox, oy, pw, ph, ww, hh}, True{}, samples, Jpeg.decode.plane(nn)) ==
-    Laws.jpg.cover(8n, Jpeg.decode.plane(nn), samples, 0, ox, oy, pw, ph, ww, hh) : Array<U32>}
-
-# that statement unless the sizes are both 4, where nothing is claimed: the 4 by 4 case is never
-# normalised, which keeps the gate fast
-def w8.cover.if(
-  both4: Bool,
-  +pw: U32,
-  +ph: U32,
-  +ox: U32,
-  +oy: U32,
-  +ww: U32,
-  +hh: U32,
-  +samples: List<&2, U32>,
-  +nn: U32
-) -> Type:
-  match both4:
-    case True{}:
-      Unit
-    case False{}:
-      w8.cover.eq(pw, ph, ox, oy, ww, hh, samples, nn)
-
-# the motive of the case split on pw and ph
-def w8.cover.ty(
-  +pw: U32,
-  +ph: U32,
-  +ox: U32,
-  +oy: U32,
-  +ww: U32,
-  +hh: U32,
-  +samples: List<&2, U32>,
-  +nn: U32
-) -> Type:
-  w8.cover.if(Bool.and(U32.is_eq(pw, 4), U32.is_eq(ph, 4)), pw, ph, ox, oy, ww, hh, samples, nn)
-
-# for one width pw of 1, 2 or 4: every allowed height, one concrete case each
-def w8.cover.ph(
-  +pw: U32,
-  +ph: U32,
-  +h_ph: {Laws.jpg.fac(ph) == True{} : Bool},
-  +ox: U32,
-  +oy: U32,
-  +ww: U32,
-  +hh: U32,
-  +samples: List<&2, U32>,
-  +nn: U32,
-  p1: w8.cover.ty(pw, 1, ox, oy, ww, hh, samples, nn),
-  p2: w8.cover.ty(pw, 2, ox, oy, ww, hh, samples, nn),
-  p4: w8.cover.ty(pw, 4, ox, oy, ww, hh, samples, nn)
-) -> w8.cover.ty(pw, ph, ox, oy, ww, hh, samples, nn):
-  W8.fac_elim(vv => w8.cover.ty(pw, vv, ox, oy, ww, hh, samples, nn), ph, U32.is_eq(ph, 1), {==}, h_ph, p1, p2, p4)
-
-# with the premise that the sizes are not both 4, the case split's answer is the statement
-def w8.cover.use(
-  both4: Bool,
-  +pw: U32,
-  +ph: U32,
-  +ox: U32,
-  +oy: U32,
-  +ww: U32,
-  +hh: U32,
-  +samples: List<&2, U32>,
-  +nn: U32,
-  h_44: {both4 == False{} : Bool},
-  got: w8.cover.if(both4, pw, ph, ox, oy, ww, hh, samples, nn)
-) -> w8.cover.eq(pw, ph, ox, oy, ww, hh, samples, nn):
-  match both4:
-    case False{}:
-      got
-    case True{}:
-      Empty.absurd(w8.cover.eq(pw, ph, ox, oy, ww, hh, samples, nn),
-        U32L.false_true(Equal.sym(Bool, True{}, False{}, h_44)))
-
-def Laws.jpeg_block_cover(pw, ph, h_pw, h_ph, h_44, ox, oy, ww, hh, samples, nn):
-  w8.cover.use(Bool.and(U32.is_eq(pw, 4), U32.is_eq(ph, 4)), pw, ph, ox, oy, ww, hh, samples, nn, h_44,
-    W8.fac_elim(vv => w8.cover.ty(vv, ph, ox, oy, ww, hh, samples, nn), pw, U32.is_eq(pw, 1), {==}, h_pw,
-      w8.cover.ph(1, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, {==}),
-      w8.cover.ph(2, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, {==}),
-      w8.cover.ph(4, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, Unit{})))
-
 # no Cb sample: no colour, whatever the Y and Cr samples
 def w8.rgb3.nb(aa: Maybe<&2, U32>, cc: Maybe<&2, U32>) -> {None{} == Laws.jpg.rgb3(aa, None{}, cc) : Maybe<&2, U32>}:
   match aa:
@@ -5189,3 +5099,126 @@ def Laws.jpeg_walk_mcu(
 ):
   w8.walk.last(U32.is_lt((bi + 1 : U32), Laws.jpg.units(comp, sids, ids, hs, vs)), comp, bi, mx, my, mcu, rst, ww,
     hmax, ns, ri, h_last, h_end)
+
+# ---- wp10-jpeg-finish ----
+
+def Laws.jpeg_block_cover_all(pw, ph, ox, oy, ww, hh, samples, plane):
+  W10.cv.all(8n, plane, samples, 0, ox, oy, pw, ph, ww, hh)
+
+def Laws.jpeg_block_cover(pw, ph, _h_pw, _h_ph, _h_44, ox, oy, ww, hh, samples, nn):
+  W10.cv.all(8n, Jpeg.decode.plane(nn), samples, 0, ox, oy, pw, ph, ww, hh)
+
+def Laws.jpeg_mcu_grid_comp(comp, sids, ids, hs, vs, h_hi, h_vi, mx, my, hmax, vmax, ww, hh):
+  +hi = Laws.jpg.fac.of(comp, sids, ids, hs)
+  +vi = Laws.jpg.fac.of(comp, sids, ids, vs)
+  Equal.trans(List<&2, Jpeg.Geom>, Laws.jpg.blocks.of(U32.to_nat((hi * vi : U32)), 0, comp, sids, ids, hs, vs, mx, my,
+    hmax, vmax, ww, hh), Laws.jpg.blocks(U32.to_nat((hi * vi : U32)), 0, hi, vi, mx, my, hmax, vmax, ww, hh),
+    Laws.jpg.grid(U32.to_nat(vi), 0, hi, mx, my, hmax, vmax, U32.div(hmax, hi), U32.div(vmax, vi), ww, hh),
+    W10.grid.of(U32.to_nat((hi * vi : U32)), 0, comp, sids, ids, hs, vs, mx, my, hmax, vmax, ww, hh),
+    Laws.jpeg_mcu_grid(hi, vi, h_hi, h_vi, mx, my, hmax, vmax, ww, hh))
+
+def Laws.jpeg_refuse_factor1_any(
+  pre,
+  frame,
+  scan,
+  tabs,
+  ent,
+  ri,
+  kind,
+  bad,
+  h_walk,
+  lh,
+  ll,
+  yh,
+  yl,
+  xh,
+  xl,
+  c1,
+  f1,
+  q1,
+  extra,
+  h_len,
+  h_body,
+  h_fac,
+  rest
+):
+  +body = {List.append(&2, U32, [8, yh, yl, xh, xl, 1, c1, f1, q1], extra) : List<&2, U32>}
+  w8.tail(pre, lh <> ll <> List.append(&2, U32, body, rest), Jpeg.St{Jpeg.LenHi{192}, frame, scan, tabs, ent, ri,
+    kind, bad}, rest, scan, tabs, ent, ri, kind, h_walk,
+    W10.sof.seg(lh, ll, body, rest, frame, scan, tabs, ent, ri, kind, bad, h_len, h_body,
+      Equal.cong(Bool, Jpeg.St, ok => Jpeg.decode.read.sof.c(ok, Bool.and(Jpeg.decode.nf.ok(1), U32.is_eq(bad, 0)),
+        U32.is_eq(Jpeg.decode.vmax([U32.shrn(f1, 4n)], 0), 0), Jpeg.decode.u16(xh, xl), Jpeg.decode.u16(yh, yl), 1,
+        [c1], [U32.shrn(f1, 4n)], [U32.and(f1, 15)], [q1], scan, tabs, ent, ri, kind), Laws.jpg.facs(f1), False{},
+        h_fac)))
+
+def Laws.jpeg_refuse_factor3_any(
+  pre,
+  frame,
+  scan,
+  tabs,
+  ent,
+  ri,
+  kind,
+  bad,
+  h_walk,
+  lh,
+  ll,
+  yh,
+  yl,
+  xh,
+  xl,
+  c1,
+  f1,
+  q1,
+  c2,
+  f2,
+  q2,
+  c3,
+  f3,
+  q3,
+  extra,
+  h_len,
+  h_body,
+  h_fac,
+  rest
+):
+  +body = {List.append(&2, U32, [8, yh, yl, xh, xl, 3, c1, f1, q1, c2, f2, q2, c3, f3, q3], extra) : List<&2, U32>}
+  w8.tail(pre, lh <> ll <> List.append(&2, U32, body, rest), Jpeg.St{Jpeg.LenHi{192}, frame, scan, tabs, ent, ri,
+    kind, bad}, rest, scan, tabs, ent, ri, kind, h_walk,
+    W10.sof.seg(lh, ll, body, rest, frame, scan, tabs, ent, ri, kind, bad, h_len, h_body,
+      Equal.cong(Bool, Jpeg.St, ok => Jpeg.decode.read.sof.c(ok, Bool.and(Jpeg.decode.nf.ok(3), U32.is_eq(bad, 0)),
+        U32.is_eq(Jpeg.decode.vmax([U32.shrn(f1, 4n), U32.shrn(f2, 4n), U32.shrn(f3, 4n)], 0), 0),
+        Jpeg.decode.u16(xh, xl), Jpeg.decode.u16(yh, yl), 3, [c1, c2, c3],
+        [U32.shrn(f1, 4n), U32.shrn(f2, 4n), U32.shrn(f3, 4n)], [U32.and(f1, 15), U32.and(f2, 15), U32.and(f3, 15)],
+        [q1, q2, q3], scan, tabs, ent, ri, kind),
+        Bool.and(Bool.and(Laws.jpg.facs(f1), Laws.jpg.facs(f2)), Laws.jpg.facs(f3)), False{}, h_fac)))
+
+def Laws.jpeg_refuse_count(
+  pre,
+  frame,
+  scan,
+  tabs,
+  ent,
+  ri,
+  kind,
+  bad,
+  h_walk,
+  lh,
+  ll,
+  yh,
+  yl,
+  xh,
+  xl,
+  nf,
+  h_nf,
+  comps,
+  h_len,
+  h_body,
+  rest
+):
+  +body = {8 <> yh <> yl <> xh <> xl <> nf <> comps : List<&2, U32>}
+  w8.tail(pre, lh <> ll <> List.append(&2, U32, body, rest), Jpeg.St{Jpeg.LenHi{192}, frame, scan, tabs, ent, ri,
+    kind, bad}, rest, scan, tabs, ent, ri, kind, h_walk,
+    W10.sof.seg(lh, ll, body, rest, frame, scan, tabs, ent, ri, kind, bad, h_len, h_body,
+      W10.sof.cnt(Jpeg.decode.read.cs(U32.to_nat(nf), comps, [], [], [], [], True{}), Jpeg.decode.u16(xh, xl),
+        Jpeg.decode.u16(yh, yl), nf, scan, tabs, ent, ri, kind, bad, h_nf)))
