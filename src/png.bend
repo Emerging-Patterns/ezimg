@@ -351,9 +351,6 @@ def unfilter(raw: List<&2, U32>, +ww: U32, +hh: U32, +bpp: U32) -> Maybe<&2, Lis
 def px.pack(+aa: U32, +rr: U32, +gg: U32, +bb: U32) -> U32:
   ((((aa << 24n : U32) .|. (rr << 16n : U32) : U32) .|. (gg << 8n : U32) : U32) .|. bb : U32)
 
-def px.seta(+cc: U32, +aa: U32) -> U32:
-  (((cc .&. 16777215 : U32) .|. (aa << 24n : U32) : U32))
-
 def px.hit.at(zz: Bool) -> U32:
   match zz:
     case True{}:
@@ -430,40 +427,37 @@ def px.idx(xs: List<&2, U32>, +pal: List<&2, U32>, acc: List<&2, U32>) -> Maybe<
     case +i <> t:
       px.use(px.at(pal, U32.is_zero(i), i), c => px.idx(t, pal, {c <> acc : List<&2, U32>}))
 
-def pal.make(xs: List<&2, U32>, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  match xs:
-    case Nil{}:
-      Some{List.reverse(&2, U32, acc)}
-    case +r <> +g <> +b <> t:
-      pal.make(t, {px.pack(255, r, g, b) <> acc : List<&2, U32>})
-    case _other:
-      None{}
-
-def pal.tint(pxs: List<&2, U32>, als: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
-  match pxs als:
+# the palette's entries, 0xAARRGGBB, each alpha from tRNS while it lasts and
+# 255 after; none when PLTE is not whole entries
+def pal.make(xs: List<&2, U32>, als: List<&2, U32>, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match xs als:
     case Nil{} _als:
-      List.reverse(&2, U32, acc)
-    case +c <> t Nil{}:
-      pal.tint(t, [], {px.seta(c, 255) <> acc : List<&2, U32>})
-    case +c <> t +a <> at:
-      pal.tint(t, at, {px.seta(c, a) <> acc : List<&2, U32>})
+      Some{List.reverse(&2, U32, acc)}
+    case +r <> +g <> +b <> t Nil{}:
+      pal.make(t, [], {px.pack(255, r, g, b) <> acc : List<&2, U32>})
+    case +r <> +g <> +b <> t +a <> at:
+      pal.make(t, at, {px.pack(a, r, g, b) <> acc : List<&2, U32>})
+    case _xs _als:
+      None{}
 
 def png.le(xs: List<&2, U32>, ys: List<&2, U32>) -> Bool:
   U32.is_le(U32.from_nat(List.length(&2, U32, xs)), U32.from_nat(List.length(&2, U32, ys)))
 
-def pal.gate(zz: Bool, +als: List<&2, U32>, +pxs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+# the palette, when tRNS has no more entries than it
+def pal.gate(zz: Bool, pxs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match zz:
     case False{}:
       None{}
     case True{}:
-      Some{pal.tint(pxs, als, [])}
+      Some{pxs}
 
+# check tRNS against the palette's length
 def pal.ready(mm: Maybe<&2, List<&2, U32>>, +als: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match mm:
     case None{}:
       None{}
     case Some{+pxs}:
-      pal.gate(png.le(als, pxs), als, pxs)
+      pal.gate(png.le(als, pxs), pxs)
 
 def px.indexed.at(mm: Maybe<&2, List<&2, U32>>, samples: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match mm:
@@ -472,8 +466,8 @@ def px.indexed.at(mm: Maybe<&2, List<&2, U32>>, samples: List<&2, U32>) -> Maybe
     case Some{pal}:
       px.idx(samples, pal, [])
 
-def px.indexed(samples: List<&2, U32>, plte: List<&2, U32>, trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  px.indexed.at(pal.ready(pal.make(plte, []), trns), samples)
+def px.indexed(samples: List<&2, U32>, plte: List<&2, U32>, +trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  px.indexed.at(pal.ready(pal.make(plte, trns, []), trns), samples)
 
 def key.grey(xs: List<&2, U32>) -> Key:
   match xs:
