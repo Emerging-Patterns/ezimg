@@ -1004,6 +1004,9 @@ def decode.geom.nz(+nn: U32) -> U32:
     case _:
       nn
 
+# where block bi of a component sits in its MCU: a component's hi * vi blocks
+# run left to right, hi to a row, then top to bottom (T.81 A.2.3), so its
+# column is bi mod hi and its row bi div hi
 def decode.geom.go(
   +comp: U32,
   +bi: U32,
@@ -1024,7 +1027,7 @@ def decode.geom.go(
   +pw = U32.div(hmax, decode.geom.nz(hi))
   +ph = U32.div(vmax, decode.geom.nz(vi))
   +bx = U32.mod(bi, decode.geom.nz(hi))
-  +by = U32.div(bi, decode.geom.nz(vi))
+  +by = U32.div(bi, decode.geom.nz(hi))
   Geom{(mx * hmax * 8 + bx * 8 * pw : U32), (my * vmax * 8 + by * 8 * ph : U32), pw, ph, ww, hh}
 
 def decode.geom(ctrl: Ctrl, frame: Frame, scan: Scan) -> Geom:
