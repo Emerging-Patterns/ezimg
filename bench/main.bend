@@ -205,15 +205,29 @@ def cmd.jpeg.dec(src: String, dst: String) -> IO(Unit):
     xs : List<&2, U32> <- read.file(src)
     write.maybe(dst, Img.decode_jpeg(xs))
 
+def write.jpeg(path: String, mm: Maybe<&2, List<&2, U32>>) -> IO(Unit):
+  match mm:
+    case None{}:
+      die.msg("encode_jpeg failed")
+    case Some{xs}:
+      write.file(path, xs)
+
 def cmd.jpeg.enc(src: String, dst: String) -> IO(Unit):
   do IO<Unit>:
     img : Img.Raster <- load.ezr(src)
-    write.file(dst, Img.encode_jpeg(img))
+    write.jpeg(dst, Img.encode_jpeg(img))
+
+def cmd.jpeg.rt.go(dst: String, mm: Maybe<&2, List<&2, U32>>) -> IO(Unit):
+  match mm:
+    case None{}:
+      die.msg("encode_jpeg failed")
+    case Some{xs}:
+      write.maybe(dst, Img.decode_jpeg(xs))
 
 def cmd.jpeg.rt(src: String, dst: String) -> IO(Unit):
   do IO<Unit>:
     img : Img.Raster <- load.ezr(src)
-    write.maybe(dst, Img.decode_jpeg(Img.encode_jpeg(img)))
+    cmd.jpeg.rt.go(dst, Img.encode_jpeg(img))
 
 def step.png.enc(+sum: U32, mm: Maybe<&2, List<&2, U32>>) -> U32:
   match mm:
@@ -243,8 +257,12 @@ def loop.png.dec(+xs: List<&2, U32>, nn: Nat, +sum: U32) -> U32:
     case 1n+p:
       loop.png.dec(xs, p, step.raster(sum, Img.decode_png(xs)))
 
-def step.jpeg.enc(+sum: U32, xs: List<&2, U32>) -> U32:
-  (sum + ulen(xs, 0) : U32)
+def step.jpeg.enc(+sum: U32, mm: Maybe<&2, List<&2, U32>>) -> U32:
+  match mm:
+    case None{}:
+      sum
+    case Some{xs}:
+      (sum + ulen(xs, 0) : U32)
 
 def loop.jpeg.enc(+img: Img.Raster, nn: Nat, +sum: U32) -> U32:
   match nn:

@@ -71,7 +71,7 @@ What a sample means, for every decoder and encoder.
 | IMG-JPG-1 | `decode_jpeg` returns none for every input whose first frame header is not SOF0, and for every SOF0 frame whose sample precision is not 8. | Proved | pending | |
 | IMG-JPG-2 | For a SOF0 frame, `decode_jpeg` returns none unless every chroma component has sampling factors 1 by 1 and luma has 1 by 1, 2 by 1 or 2 by 2; for those, the luma sample at every point is the one the frame codes for that point. | Proved | pending | |
 | IMG-JPG-3 | For every well-formed raster `r` with both sides nonzero, `decode_jpeg(encode_jpeg(r))` is a raster of `r`'s size whose every colour channel is within 3 of `r`'s, with alpha 255. | Proved | pending | |
-| IMG-JPG-4 | `encode_jpeg(r)` is none exactly when `encode_png(r)` is none. | Proved | pending | |
+| IMG-JPG-4 | `encode_jpeg(r)` is none exactly when `encode_png(r)` is none. | Proved | proved | LAWS.bend jpeg_png_refuse_alike |
 | IMG-JPG-5 | When `encode_jpeg(r)` is some, it begins with SOI, APP0 with the JFIF identifier, DQT, SOF0 carrying `r`'s width and height, DHT and SOS, and ends with EOI. | Proved | pending | |
 | IMG-JPG-6 | `Jpeg.rgb(y, cb, cr)` equals the T.871 YCbCr to RGB conversion, rounded to nearest and clamped to 0 to 255, for every `y`, `cb`, `cr` from 0 to 255. | Proved | pending | |
 | IMG-JPG-7 | `decode_jpeg` reads baseline files other encoders (libjpeg, Pillow) write to within the IDCT accuracy of T.81 Annex A.3.3. | Trusted | | |
@@ -82,9 +82,9 @@ What a sample means, for every decoder and encoder.
 | :---- | :---- | :---- |
 | IMG-PIX-1 | `Jpeg.rgb` and `Jpeg.gray`, the two functions JPEG decode packs samples with, give alpha 255 for every input (`jpeg_rgb_opaque`, `jpeg_gray_opaque`) | that every sample `decode_jpeg` returns is one of theirs; that `gray` repeats the level in R, G and B; that every sample `decode_png` returns is `0xAARRGGBB` (IMG-PNG-9) |
 
-Every Proved row is pending; IMG-PIX-1 has the partial laws above. The rollout in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md) orders them: the behavior changes first (IMG-PIX-1 needed BC-1, which has landed; IMG-JPG-2 needed BC-2, which has landed; IMG-JPG-4 needs BC-3), then refusals and frames (IMG-PNG-1, IMG-RAS-5, IMG-PIX-2, IMG-PNG-3, IMG-JPG-4, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2), then content (IMG-PNG-5, IMG-PNG-7, IMG-PNG-6, IMG-PNG-9, IMG-PNG-4, IMG-RAS-3, IMG-RAS-4, and the headline IMG-PNG-2), and the JPEG content rows last (IMG-PIX-1, IMG-JPG-5, IMG-JPG-2, IMG-JPG-6, IMG-JPG-3).
+Every Proved row but IMG-JPG-4 is pending; IMG-PIX-1 has the partial laws above. The rollout in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md) orders them: the behavior changes first (IMG-PIX-1 needed BC-1, which has landed; IMG-JPG-2 needed BC-2 and IMG-JPG-4 needed BC-3, which have landed), then refusals and frames (IMG-PNG-1, IMG-RAS-5, IMG-PIX-2, IMG-PNG-3, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2), then content (IMG-PNG-5, IMG-PNG-7, IMG-PNG-6, IMG-PNG-9, IMG-PNG-4, IMG-RAS-3, IMG-RAS-4, and the headline IMG-PNG-2), and the JPEG content rows last (IMG-PIX-1, IMG-JPG-5, IMG-JPG-2, IMG-JPG-6, IMG-JPG-3).
 
-One row fails today and waits on its behavior change: IMG-JPG-4 (`encode_jpeg` returns bytes for a raster `encode_png` refuses). IMG-JPG-2's layouts now decode correctly (BC-2), and the row's wording, which refuses some of them, is under review in the RFC (REVIEW-13).
+No row is known to fail today. IMG-JPG-2's layouts now decode correctly (BC-2), and the row's wording, which refuses some of them, is under review in the RFC (REVIEW-13).
 
 ## Trust boundary
 
