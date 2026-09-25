@@ -34,7 +34,7 @@ A tag may name a proved or a pending requirement, never a Trusted one or an ID n
 | IMG-RAS-2 | For every well-formed raster `r` and every `x`, `y`: `get(r, x, y)` is `Some` of sample `y * w + x` when `x < w` and `y < h`, and none otherwise; `set(r, x, y, c)` changes exactly that sample to `c` when the point is inside and returns `r` unchanged otherwise. | Proved | pending | |
 | IMG-RAS-3 | For every well-formed `r` and rectangle `(x, y, cw, ch)`, `crop` is well formed, its size is the rectangle's intersection with `r` (0 by 0 when that is empty), and its sample at `(i, j)` is `r`'s sample at `(x + i, y + j)`. | Proved | pending | |
 | IMG-RAS-4 | For every well-formed `dst` and `src` and offset `(x, y)`, `blit(dst, src, x, y)` has `dst`'s size, takes `src`'s sample at every point of `dst` that `src` covers, and leaves every other sample of `dst` unchanged. | Proved | pending | |
-| IMG-RAS-5 | For every raster `r` and function `f`, `map(f, r)` has `r`'s size and its sample `k` is `f` of `r`'s sample `k`. | Proved | pending | |
+| IMG-RAS-5 | For every raster `r` and function `f`, `map(f, r)` has `r`'s size and its sample `k` is `f` of `r`'s sample `k`. | Proved | proved | LAWS.bend map_size; LAWS.bend map_at |
 
 ### One sample format (IMG-PIX)
 
@@ -43,7 +43,7 @@ What a sample means, for every decoder and encoder.
 | ID | Requirement | Level | Status | Law |
 | :---- | :---- | :---- | :---- | :---- |
 | IMG-PIX-1 | Every sample `decode_png` and `decode_jpeg` return is packed `0xAARRGGBB`. Every JPEG sample has alpha 255, and a gray JPEG sample carries its Y value in R, G and B. | Proved | pending | LAWS.bend jpeg_rgb_opaque; LAWS.bend jpeg_gray_opaque |
-| IMG-PIX-2 | `encode_jpeg` reads only the low 24 bits of each sample: two rasters that differ only in alpha encode to the same bytes. | Proved | pending | |
+| IMG-PIX-2 | `encode_jpeg` reads only the low 24 bits of each sample: two rasters that differ only in alpha encode to the same bytes. | Proved | proved | LAWS.bend jpeg_alpha_blind |
 
 ### PNG (IMG-PNG)
 
@@ -82,7 +82,7 @@ What a sample means, for every decoder and encoder.
 | :---- | :---- | :---- |
 | IMG-PIX-1 | `Jpeg.rgb` and `Jpeg.gray`, the two functions JPEG decode packs samples with, give alpha 255 for every input (`jpeg_rgb_opaque`, `jpeg_gray_opaque`) | that every sample `decode_jpeg` returns is one of theirs; that `gray` repeats the level in R, G and B; that every sample `decode_png` returns is `0xAARRGGBB` (IMG-PNG-9) |
 
-Every Proved row but IMG-JPG-4 is pending; IMG-PIX-1 has the partial laws above. The rollout in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md) orders them: the behavior changes first (IMG-PIX-1 needed BC-1, which has landed; IMG-JPG-2 needed BC-2 and IMG-JPG-4 needed BC-3, which have landed), then refusals and frames (IMG-PNG-1, IMG-RAS-5, IMG-PIX-2, IMG-PNG-3, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2), then content (IMG-PNG-5, IMG-PNG-7, IMG-PNG-6, IMG-PNG-9, IMG-PNG-4, IMG-RAS-3, IMG-RAS-4, and the headline IMG-PNG-2), and the JPEG content rows last (IMG-PIX-1, IMG-JPG-5, IMG-JPG-2, IMG-JPG-6, IMG-JPG-3).
+Every Proved row but IMG-JPG-4, IMG-PIX-2 and IMG-RAS-5 is pending; IMG-PIX-1 has the partial laws above. The rollout in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md) orders them: the behavior changes first (IMG-PIX-1 needed BC-1, which has landed; IMG-JPG-2 needed BC-2 and IMG-JPG-4 needed BC-3, which have landed), then refusals and frames (IMG-PNG-1, IMG-PNG-3, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2), then content (IMG-PNG-5, IMG-PNG-7, IMG-PNG-6, IMG-PNG-9, IMG-PNG-4, IMG-RAS-3, IMG-RAS-4, and the headline IMG-PNG-2), and the JPEG content rows last (IMG-PIX-1, IMG-JPG-5, IMG-JPG-2, IMG-JPG-6, IMG-JPG-3).
 
 No row is known to fail today. IMG-JPG-2's layouts now decode correctly (BC-2), and the row's wording, which refuses some of them, is under review in the RFC (REVIEW-13).
 

@@ -360,6 +360,19 @@ def decode_jpeg.out(got: Maybe<&2, Jpeg.Pic>) -> Maybe<&2, Raster>:
 def decode_jpeg(bytes: List<&2, U32>) -> Maybe<&2, Raster>:
   decode_jpeg.out(Jpeg.decode(bytes))
 
+# a sample's colour, alpha cleared. The mask is the first operand, so a law
+# over any sample sees its bits without a case split.
+def colour(+pp: U32) -> U32:
+  U32.and(16777215, pp)
+
+# every sample's colour, alpha cleared
+def colours(px: List<&2, U32>) -> List<&2, U32>:
+  match px:
+    case Nil{}:
+      Nil{}
+    case pp <> rest:
+      colour(pp) <> colours(rest)
+
 def encode_jpeg.pick(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match ok:
     case False{}:
@@ -367,10 +380,11 @@ def encode_jpeg.pick(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&
     case True{}:
       Some{Jenc.encode(ww, hh, px)}
 
-# a baseline sequential 4:4:4 JPEG of the samples' colour, alpha dropped. None
-# exactly when encode_png is none: a side is zero, the area passes 2^32, or the
-# sample count is not the area. Both ask the same guard, Png.enc.good.
+# a baseline sequential 4:4:4 JPEG of the samples' colour: alpha is cleared
+# before the encoder sees a sample. None exactly when encode_png is none: a
+# side is zero, the area passes 2^32, or the sample count is not the area.
+# Both ask the same guard, Png.enc.good.
 def encode_jpeg(img: Raster) -> Maybe<&2, List<&2, U32>>:
   match img:
     case Raster{+w, +h, +px}:
-      encode_jpeg.pick(Png.enc.good(w, h, px), w, h, px)
+      encode_jpeg.pick(Png.enc.good(w, h, px), w, h, colours(px))
