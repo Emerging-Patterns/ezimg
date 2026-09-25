@@ -1591,15 +1591,11 @@ def encode.neutral.mcus(left: Nat, pp: Put) -> Put:
     case 1n+nleft:
       encode.neutral.mcus(nleft, encode.ztri(pp))
 
+# the entropy-coded bytes of a neutral picture: every MCU is three zero blocks
 def encode.neutral(+ww: U32, +hh: U32) -> List<&2, U32>:
-  +dcc = encode.dccounts()
-  +dcs = encode.dcsyms()
-  +acc = encode.accounts()
-  +acs = encode.acsyms()
   +mw = U32.div((ww + 7 : U32), 8)
   +mh = U32.div((hh + 7 : U32), 8)
-  encode.finish(ww, hh, encode.pad(encode.neutral.mcus(U32.to_nat((mw * mh : U32)), encode.put0())),
-    dcc, dcs, acc, acs)
+  encode.pad(encode.neutral.mcus(U32.to_nat((mw * mh : U32)), encode.put0()))
 
 # the rest of a solid picture is the same DC, so each later block is a zero difference
 def encode.solid.end(got: Array<U32> & Book & U32 & Put) -> Put:
@@ -1623,30 +1619,27 @@ def encode.solid.y(aa: Array<U32>, book: Book, bit: Put, +ctx: Ctx) -> Put:
   encode.solid.cb(encode.block(book, bit, 0, aa, 1, 1, 0, 0, 0, ctx), ctx)
 
 # one colour repeated. The first MCU is that block; every later MCU is three zero differences.
+# The result is the entropy-coded bytes.
 def encode.solid(+ww: U32, +hh: U32, +color: U32) -> List<&2, U32>:
-  +dcc = encode.dccounts()
-  +dcs = encode.dcsyms()
-  +acc = encode.accounts()
-  +acs = encode.acsyms()
   +mw = U32.div((ww + 7 : U32), 8)
   +mh = U32.div((hh + 7 : U32), 8)
   +n = (mw * mh : U32)
-  encode.finish(ww, hh, encode.pad(encode.neutral.mcus(U32.to_nat((n - 1 : U32)),
-    encode.solid.y(Array.set(U32, Jpeg.decode.plane(1), 0, color), encode.book(dcc, dcs, acc, acs),
-      encode.put0(), encode.ctx()))), dcc, dcs, acc, acs)
+  encode.pad(encode.neutral.mcus(U32.to_nat((n - 1 : U32)),
+    encode.solid.y(Array.set(U32, Jpeg.decode.plane(1), 0, color),
+      encode.book(encode.dccounts(), encode.dcsyms(), encode.accounts(), encode.acsyms()),
+      encode.put0(), encode.ctx())))
 
+# the entropy-coded bytes of any other picture, MCU by MCU
 def encode.go(+ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
-  +dcc = encode.dccounts()
-  +dcs = encode.dcsyms()
-  +acc = encode.accounts()
-  +acs = encode.acsyms()
   +mw = U32.div((ww + 7 : U32), 8)
   +mh = U32.div((hh + 7 : U32), 8)
   +area = (ww * hh : U32)
-  encode.finish(ww, hh, encode.pad(encode.mcus(U32.to_nat((mw * mh : U32)),
-    (encode.pix.load(U32.to_nat(area), px, Jpeg.decode.plane(area), 0), encode.book(dcc, dcs, acc, acs), 0, 0, 0,
-      encode.put0()), 0, 0, mw, ww, hh, encode.ctx())), dcc, dcs, acc, acs)
+  book = encode.book(encode.dccounts(), encode.dcsyms(), encode.accounts(), encode.acsyms())
+  encode.pad(encode.mcus(U32.to_nat((mw * mh : U32)),
+    (encode.pix.load(U32.to_nat(area), px, Jpeg.decode.plane(area), 0), book, 0, 0, 0,
+      encode.put0()), 0, 0, mw, ww, hh, encode.ctx()))
 
+# the entropy-coded bytes, by what the watch found: neutral, one solid colour, or anything else
 def encode.dispatch(+tag: U32, +color: U32, px: List<&2, U32>, +ww: U32, +hh: U32) -> List<&2, U32>:
   match tag:
     case 0:
@@ -1660,11 +1653,13 @@ def encode.dispatch(+tag: U32, +color: U32, px: List<&2, U32>, +ww: U32, +hh: U3
       +_c = (color - color : U32)
       encode.go(ww, hh, px)
 
+# the watch's answer, dispatched
 def encode.arm.use(got: U32 & U32 & List<&2, U32>, +ww: U32, +hh: U32) -> List<&2, U32>:
   match got:
     case (+tag, +color, px):
       encode.dispatch(tag, color, px, ww, hh)
 
+# the entropy-coded bytes of an accepted size
 def encode.arm(+ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
   encode.arm.use(encode.watch(U32.to_nat((ww * hh : U32)), px), ww, hh)
 
@@ -1674,7 +1669,8 @@ def encode.pick(bad: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U3
       +_d = encode.drop(px)
       encode.join(Jpeg.soi(), Jpeg.eoi())
     case False{}:
-      encode.arm(ww, hh, px)
+      encode.finish(ww, hh, encode.arm(ww, hh, px), encode.dccounts(), encode.dcsyms(), encode.accounts(),
+        encode.acsyms())
 
 # baseline sequential 4:4:4 JPEG bytes for packed RGB samples, or SOI EOI when the size is rejected
 def encode(+ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
