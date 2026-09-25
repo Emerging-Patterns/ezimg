@@ -272,7 +272,7 @@ requirement depends on.
 
 ### Behavior that looks accidental
 
-- **F-5. `premultiply` and `straight` are the identity.** They were written
+- **F-5 (resolved by BC-4, which removed both). `premultiply` and `straight` are the identity.** They were written
   when samples were opaque. They are now wrong for any sample with alpha
   below 255, and the three laws about them hold only because they are the
   identity.
@@ -317,4 +317,5 @@ requirement depends on.
 | BC-1, one sample format | done | JPEG decode returns `0xAARRGGBB` with alpha 255, gray repeated in R, G and B, through `Jpeg.opaque`, `Jpeg.rgb` and `Jpeg.gray`; F-1 fixed. Partial laws `jpeg_rgb_opaque` and `jpeg_gray_opaque` tagged IMG-PIX-1, each caught its own planted mutant. Against the pre-change driver on the audit's probe files: PNG decode and both encoders byte-identical (116 outputs), 23 colour JPEG decodes gained alpha 255, 2 gray JPEG decodes repeat Y; the updated Pillow check fails 11 of 38 on the old driver and passes 38 of 38 on the new |
 | BC-2, subsampled JPEG | done | root cause: a block's row in its MCU was `bi div vi`, T.81 A.2.3 says `bi div hi` (`src/jpeg.bend`, `decode.geom.go`). One-line fix. Against `djpeg -nosmooth` over 48 cjpeg files (8 luma layouts by 3 sizes by gradient and noise): every layout within 3 levels after, up to 244 off before except 1x1 and 2x2, which are byte-identical before and after; 4 files with chroma other than 1x1 within 3 after, up to 255 before. The Pillow check gains 4:2:2 and 4:2:0 luma cases: 4:2:2 fails on the old driver (luma off by 140) and passes on the new. IMG-JPG-2's wording is REVIEW-13 |
 | BC-3, `encode_jpeg` refuses | done | `encode_jpeg` returns `Maybe`, branching on the same guard as `encode_png` (`Png.enc.good`); F-4 fixed. `jpeg_png_refuse_alike` proves IMG-JPG-4 for every raster, the first proved row; a weaker guard and an always-refusing branch each fail it |
-| BC-4 | next | |
+| BC-4, `premultiply` and `straight` | done | both removed from `main.bend` (F-5): nothing called them, and each was the identity while samples carry alpha. IMG-RAS-6 stays reserved for a correct pair added later through spec-first-feature |
+| Phase 4, cheap rows | next | IMG-PNG-1, IMG-RAS-5, IMG-PIX-2, IMG-PNG-3, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2 |
