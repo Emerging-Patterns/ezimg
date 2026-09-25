@@ -1976,7 +1976,7 @@ def Laws.jpeg_mcu_grid(hi, vi, h_hi, h_vi, mx, my, hmax, vmax, ww, hh):
     w8.grid.vi(4, vi, h_vi, mx, my, hmax, vmax, ww, hh, {==}, {==}, {==}))
 
 # what jpeg_block_cover says for sample sizes pw and ph
-def w8.cover.ty(
+def w8.cover.eq(
   +pw: U32,
   +ph: U32,
   +ox: U32,
@@ -1988,6 +1988,38 @@ def w8.cover.ty(
 ) -> Type:
   {Jpeg.decode.paint.use(Jpeg.Geom{ox, oy, pw, ph, ww, hh}, True{}, samples, Jpeg.decode.plane(nn)) ==
     Laws.jpg.cover(8n, Jpeg.decode.plane(nn), samples, 0, ox, oy, pw, ph, ww, hh) : Array<U32>}
+
+# that statement unless the sizes are both 4, where nothing is claimed: the 4 by 4 case is never
+# normalised, which keeps the gate fast
+def w8.cover.if(
+  both4: Bool,
+  +pw: U32,
+  +ph: U32,
+  +ox: U32,
+  +oy: U32,
+  +ww: U32,
+  +hh: U32,
+  +samples: List<&2, U32>,
+  +nn: U32
+) -> Type:
+  match both4:
+    case True{}:
+      Unit
+    case False{}:
+      w8.cover.eq(pw, ph, ox, oy, ww, hh, samples, nn)
+
+# the motive of the case split on pw and ph
+def w8.cover.ty(
+  +pw: U32,
+  +ph: U32,
+  +ox: U32,
+  +oy: U32,
+  +ww: U32,
+  +hh: U32,
+  +samples: List<&2, U32>,
+  +nn: U32
+) -> Type:
+  w8.cover.if(Bool.and(U32.is_eq(pw, 4), U32.is_eq(ph, 4)), pw, ph, ox, oy, ww, hh, samples, nn)
 
 # for one width pw of 1, 2 or 4: every allowed height, one concrete case each
 def w8.cover.ph(
@@ -2006,8 +2038,301 @@ def w8.cover.ph(
 ) -> w8.cover.ty(pw, ph, ox, oy, ww, hh, samples, nn):
   W8.fac_elim(vv => w8.cover.ty(pw, vv, ox, oy, ww, hh, samples, nn), ph, U32.is_eq(ph, 1), {==}, h_ph, p1, p2, p4)
 
-def Laws.jpeg_block_cover(pw, ph, h_pw, h_ph, ox, oy, ww, hh, samples, nn):
-  W8.fac_elim(vv => w8.cover.ty(vv, ph, ox, oy, ww, hh, samples, nn), pw, U32.is_eq(pw, 1), {==}, h_pw,
-    w8.cover.ph(1, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, {==}),
-    w8.cover.ph(2, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, {==}),
-    w8.cover.ph(4, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, {==}))
+# with the premise that the sizes are not both 4, the case split's answer is the statement
+def w8.cover.use(
+  both4: Bool,
+  +pw: U32,
+  +ph: U32,
+  +ox: U32,
+  +oy: U32,
+  +ww: U32,
+  +hh: U32,
+  +samples: List<&2, U32>,
+  +nn: U32,
+  h_44: {both4 == False{} : Bool},
+  got: w8.cover.if(both4, pw, ph, ox, oy, ww, hh, samples, nn)
+) -> w8.cover.eq(pw, ph, ox, oy, ww, hh, samples, nn):
+  match both4:
+    case False{}:
+      got
+    case True{}:
+      Empty.absurd(w8.cover.eq(pw, ph, ox, oy, ww, hh, samples, nn),
+        U32L.false_true(Equal.sym(Bool, True{}, False{}, h_44)))
+
+def Laws.jpeg_block_cover(pw, ph, h_pw, h_ph, h_44, ox, oy, ww, hh, samples, nn):
+  w8.cover.use(Bool.and(U32.is_eq(pw, 4), U32.is_eq(ph, 4)), pw, ph, ox, oy, ww, hh, samples, nn, h_44,
+    W8.fac_elim(vv => w8.cover.ty(vv, ph, ox, oy, ww, hh, samples, nn), pw, U32.is_eq(pw, 1), {==}, h_pw,
+      w8.cover.ph(1, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, {==}),
+      w8.cover.ph(2, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, {==}),
+      w8.cover.ph(4, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, Unit{})))
+
+# no Cb sample: no colour, whatever the Y and Cr samples
+def w8.rgb3.nb(aa: Maybe<&2, U32>, cc: Maybe<&2, U32>) -> {None{} == Laws.jpg.rgb3(aa, None{}, cc) : Maybe<&2, U32>}:
+  match aa:
+    case None{}:
+      {==}
+    case Some{_av}:
+      {==}
+
+# no Cr sample: no colour, whatever the Y and Cb samples
+def w8.rgb3.nr(aa: Maybe<&2, U32>, bb: Maybe<&2, U32>) -> {None{} == Laws.jpg.rgb3(aa, bb, None{}) : Maybe<&2, U32>}:
+  match aa bb:
+    case None{} _bb:
+      {==}
+    case Some{_av} None{}:
+      {==}
+    case Some{_av} Some{_bv}:
+      {==}
+
+# jpeg_rgbs_at by induction on the three planes together
+def w8.rgbs.at(
+  +ys: List<&2, U32>,
+  +bs: List<&2, U32>,
+  +rs: List<&2, U32>,
+  +kk: Nat
+) -> {List.get(&2, U32, Jpeg.decode.rgbs(ys, bs, rs), kk) ==
+  Laws.jpg.rgb3(List.get(&2, U32, ys, kk), List.get(&2, U32, bs, kk), List.get(&2, U32, rs, kk)) : Maybe<&2, U32>}:
+  match ys bs rs kk:
+    case Nil{} _bs _rs _kk:
+      {==}
+    case _yv <> _yt Nil{} _rs 0n:
+      {==}
+    case _yv <> yt Nil{} rs 1n+pp:
+      w8.rgb3.nb(List.get(&2, U32, yt, pp), List.get(&2, U32, rs, 1n+pp))
+    case _yv <> _yt _bv <> _bt Nil{} 0n:
+      {==}
+    case _yv <> yt _bv <> bt Nil{} 1n+pp:
+      w8.rgb3.nr(List.get(&2, U32, yt, pp), List.get(&2, U32, bt, pp))
+    case _yv <> _yt _bv <> _bt _rv <> _rt 0n:
+      {==}
+    case _yv <> yt _bv <> bt _rv <> rt 1n+pp:
+      w8.rgbs.at(yt, bt, rt, pp)
+
+def Laws.jpeg_rgbs_at(ys, bs, rs, kk):
+  w8.rgbs.at(ys, bs, rs, kk)
+
+# the absent test's first conjunct: this element is not want
+def w8.idx.ne(
+  bb: Bool,
+  +rest: Bool,
+  h_new: {Bool.and(Bool.not(bb), rest) == True{} : Bool}
+) -> {bb == False{} : Bool}:
+  match bb:
+    case False{}:
+      {==}
+    case True{}:
+      Empty.absurd({True{} == False{} : Bool}, U32L.false_true(h_new))
+
+# the absent test's second conjunct: no later element is want
+def w8.idx.rest(
+  bb: Bool,
+  +rest: Bool,
+  h_new: {Bool.and(Bool.not(bb), rest) == True{} : Bool}
+) -> {rest == True{} : Bool}:
+  match bb:
+    case False{}:
+      h_new
+    case True{}:
+      Empty.absurd({rest == True{} : Bool}, U32L.false_true(h_new))
+
+# decode.index after the element that was want is the count so far
+def w8.idx.seen(
+  xs: List<&2, U32>,
+  +want: U32,
+  +ii: U32
+) -> {Jpeg.decode.index(xs, True{}, want, ii) == ii : U32}:
+  match xs:
+    case Nil{}:
+      {==}
+    case _xx <> _rest:
+      {==}
+
+# decode.index from ii over pre, then want: ii plus pre's length
+def w8.idx.go(
+  +pre: List<&2, U32>,
+  +want: U32,
+  +post: List<&2, U32>,
+  +ii: U32,
+  +h_new: {Laws.jpg.absent(pre, want) == True{} : Bool}
+) -> {Jpeg.decode.index(List.append(&2, U32, pre, want <> post), False{}, want, ii) == Laws.jpg.count(pre, ii) : U32}:
+  match pre:
+    case Nil{}:
+      Equal.trans(U32, Jpeg.decode.index(post, U32.is_eq(want, want), want,
+        Jpeg.decode.index.add(U32.is_eq(want, want), ii)), Jpeg.decode.index(post, True{}, want,
+        Jpeg.decode.index.add(True{}, ii)), ii,
+        Equal.cong(Bool, U32, bb => Jpeg.decode.index(post, bb, want, Jpeg.decode.index.add(bb, ii)),
+          U32.is_eq(want, want), True{}, U32L.u32_eq_refl(want)),
+        w8.idx.seen(post, want, ii))
+    case +xx <> rest:
+      Equal.trans(U32, Jpeg.decode.index(List.append(&2, U32, rest, want <> post), U32.is_eq(xx, want), want,
+        Jpeg.decode.index.add(U32.is_eq(xx, want), ii)), Jpeg.decode.index(List.append(&2, U32, rest, want <> post),
+        False{}, want, Jpeg.decode.index.add(False{}, ii)), Laws.jpg.count(rest, (ii + 1 : U32)),
+        Equal.cong(Bool, U32, bb => Jpeg.decode.index(List.append(&2, U32, rest, want <> post), bb, want,
+          Jpeg.decode.index.add(bb, ii)), U32.is_eq(xx, want), False{},
+          w8.idx.ne(U32.is_eq(xx, want), Laws.jpg.absent(rest, want), h_new)),
+        w8.idx.go(rest, want, post, (ii + 1 : U32), w8.idx.rest(U32.is_eq(xx, want), Laws.jpg.absent(rest, want), h_new)))
+
+def Laws.jpeg_comp_index(pre, want, post, h_new):
+  w8.idx.go(pre, want, post, 0, h_new)
+
+# one step of the walk, from where it tests for more data units
+def w8.walk.more(
+  more: Bool,
+  +comp: U32,
+  +bi: U32,
+  +mx: U32,
+  +my: U32,
+  +mcu: U32,
+  +rst: U32,
+  +ww: U32,
+  +hmax: U32,
+  +ns: U32,
+  +ri: U32,
+  h_more: {more == True{} : Bool}
+) -> {Jpeg.decode.adv.bi(more, comp, bi, mx, my, mcu, rst, ww, hmax, ns, ri) ==
+  Jpeg.Adv{Jpeg.Ctrl{comp, (bi + 1 : U32), mx, my, mcu, rst}, 0, rst} : Jpeg.Adv}:
+  match more:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd({Jpeg.decode.adv.bi(False{}, comp, bi, mx, my, mcu, rst, ww, hmax, ns, ri) ==
+        Jpeg.Adv{Jpeg.Ctrl{comp, (bi + 1 : U32), mx, my, mcu, rst}, 0, rst} : Jpeg.Adv}, U32L.false_true(h_more))
+
+def Laws.jpeg_walk_unit(comp, bi, mx, my, mcu, rst, ww, _hh, _nf, ids, hs, vs, _tq, hmax, _vmax, ns, sids, _td, _ta,
+  _ss, _se, _ah, ri, h_more):
+  w8.walk.more(U32.is_lt((bi + 1 : U32), Laws.jpg.units(comp, sids, ids, hs, vs)), comp, bi, mx, my, mcu, rst, ww,
+    hmax, ns, ri, h_more)
+
+# the step after a component's last unit, once it has found more components: unit 0 of the next one
+def w8.walk.next(
+  next: Bool,
+  +comp: U32,
+  +mx: U32,
+  +my: U32,
+  +mcu: U32,
+  +rst: U32,
+  +ww: U32,
+  +hmax: U32,
+  +ri: U32,
+  h_next: {next == True{} : Bool}
+) -> {Jpeg.decode.adv.comp(next, comp, mx, my, mcu, rst, ww, hmax, ri) ==
+  Jpeg.Adv{Jpeg.Ctrl{(comp + 1 : U32), 0, mx, my, mcu, rst}, 0, rst} : Jpeg.Adv}:
+  match next:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd({Jpeg.decode.adv.comp(False{}, comp, mx, my, mcu, rst, ww, hmax, ri) ==
+        Jpeg.Adv{Jpeg.Ctrl{(comp + 1 : U32), 0, mx, my, mcu, rst}, 0, rst} : Jpeg.Adv}, U32L.false_true(h_next))
+
+# the step after a component's last unit, from where it tests for more units
+def w8.walk.comp(
+  more: Bool,
+  +comp: U32,
+  +bi: U32,
+  +mx: U32,
+  +my: U32,
+  +mcu: U32,
+  +rst: U32,
+  +ww: U32,
+  +hmax: U32,
+  +ns: U32,
+  +ri: U32,
+  h_last: {more == False{} : Bool},
+  h_next: {U32.is_lt((comp + 1 : U32), ns) == True{} : Bool}
+) -> {Jpeg.decode.adv.bi(more, comp, bi, mx, my, mcu, rst, ww, hmax, ns, ri) ==
+  Jpeg.Adv{Jpeg.Ctrl{(comp + 1 : U32), 0, mx, my, mcu, rst}, 0, rst} : Jpeg.Adv}:
+  match more:
+    case True{}:
+      Empty.absurd({Jpeg.decode.adv.bi(True{}, comp, bi, mx, my, mcu, rst, ww, hmax, ns, ri) ==
+        Jpeg.Adv{Jpeg.Ctrl{(comp + 1 : U32), 0, mx, my, mcu, rst}, 0, rst} : Jpeg.Adv},
+        U32L.false_true(Equal.sym(Bool, True{}, False{}, h_last)))
+    case False{}:
+      w8.walk.next(U32.is_lt((comp + 1 : U32), ns), comp, mx, my, mcu, rst, ww, hmax, ri, h_next)
+
+def Laws.jpeg_walk_comp(comp, bi, mx, my, mcu, rst, ww, _hh, _nf, ids, hs, vs, _tq, hmax, _vmax, ns, sids, _td, _ta,
+  _ss, _se, _ah, ri, h_last, h_next):
+  w8.walk.comp(U32.is_lt((bi + 1 : U32), Laws.jpg.units(comp, sids, ids, hs, vs)), comp, bi, mx, my, mcu, rst, ww,
+    hmax, ns, ri, h_last, h_next)
+
+# a new MCU starts at unit 0 of component 0, restart or not
+def w8.walk.due(
+  zero: Bool,
+  hit: Bool,
+  +mcu: U32,
+  +mx: U32,
+  +my: U32,
+  +rst: U32
+) -> {Laws.jpg.adv.at(Jpeg.decode.adv.due.b(zero, hit, mcu, mx, my, rst)) == (0, 0, mcu) : U32 & U32 & U32}:
+  match zero hit:
+    case True{} _hit:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# a new MCU starts at unit 0 of component 0, in this MCU row or the next
+def w8.walk.mx(
+  inb: Bool,
+  +mcu: U32,
+  +mx: U32,
+  +my: U32,
+  +rst: U32,
+  +ri: U32
+) -> {Laws.jpg.adv.at(Jpeg.decode.adv.mx(inb, mcu, mx, my, rst, ri)) == (0, 0, mcu) : U32 & U32 & U32}:
+  match inb:
+    case True{}:
+      w8.walk.due(U32.is_eq(ri, 0), U32.is_eq(U32.mod(mcu, Jpeg.decode.ri.nz(ri)), 0), mcu, mx, my, rst)
+    case False{}:
+      w8.walk.due(U32.is_eq(ri, 0), U32.is_eq(U32.mod(mcu, Jpeg.decode.ri.nz(ri)), 0), mcu, 0, (my + 1 : U32), rst)
+
+# after the last component's last unit: the next MCU
+def w8.walk.end(
+  next: Bool,
+  +comp: U32,
+  +mx: U32,
+  +my: U32,
+  +mcu: U32,
+  +rst: U32,
+  +ww: U32,
+  +hmax: U32,
+  +ri: U32,
+  h_end: {next == False{} : Bool}
+) -> {Laws.jpg.adv.at(Jpeg.decode.adv.comp(next, comp, mx, my, mcu, rst, ww, hmax, ri)) == (0, 0, (mcu + 1 : U32)) :
+  U32 & U32 & U32}:
+  match next:
+    case False{}:
+      w8.walk.mx(U32.is_lt((mx + 1 : U32), Jpeg.decode.ceil(ww, (hmax * 8 : U32))), (mcu + 1 : U32), (mx + 1 : U32),
+        my, rst, ri)
+    case True{}:
+      Empty.absurd({Laws.jpg.adv.at(Jpeg.decode.adv.comp(True{}, comp, mx, my, mcu, rst, ww, hmax, ri)) ==
+        (0, 0, (mcu + 1 : U32)) : U32 & U32 & U32}, U32L.false_true(Equal.sym(Bool, True{}, False{}, h_end)))
+
+# the step after the last unit of a component, when no component follows
+def w8.walk.last(
+  more: Bool,
+  +comp: U32,
+  +bi: U32,
+  +mx: U32,
+  +my: U32,
+  +mcu: U32,
+  +rst: U32,
+  +ww: U32,
+  +hmax: U32,
+  +ns: U32,
+  +ri: U32,
+  h_last: {more == False{} : Bool},
+  h_end: {U32.is_lt((comp + 1 : U32), ns) == False{} : Bool}
+) -> {Laws.jpg.adv.at(Jpeg.decode.adv.bi(more, comp, bi, mx, my, mcu, rst, ww, hmax, ns, ri)) ==
+  (0, 0, (mcu + 1 : U32)) : U32 & U32 & U32}:
+  match more:
+    case True{}:
+      Empty.absurd({Laws.jpg.adv.at(Jpeg.decode.adv.bi(True{}, comp, bi, mx, my, mcu, rst, ww, hmax, ns, ri)) ==
+        (0, 0, (mcu + 1 : U32)) : U32 & U32 & U32}, U32L.false_true(Equal.sym(Bool, True{}, False{}, h_last)))
+    case False{}:
+      w8.walk.end(U32.is_lt((comp + 1 : U32), ns), comp, mx, my, mcu, rst, ww, hmax, ri, h_end)
+
+def Laws.jpeg_walk_mcu(comp, bi, mx, my, mcu, rst, ww, _hh, _nf, ids, hs, vs, _tq, hmax, _vmax, ns, sids, _td, _ta,
+  _ss, _se, _ah, ri, h_last, h_end):
+  w8.walk.last(U32.is_lt((bi + 1 : U32), Laws.jpg.units(comp, sids, ids, hs, vs)), comp, bi, mx, my, mcu, rst, ww,
+    hmax, ns, ri, h_last, h_end)

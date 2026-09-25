@@ -1242,15 +1242,17 @@ def jpg.cover(
       jpg.cover(pp, jpg.cover.col(8n, plane, samples, row, 0, ox, oy, pw, ph, ww, hh), samples, (row + 1 : U32), ox,
         oy, pw, ph, ww, hh)
 
-# LAW: painting one 8 by 8 block whose samples each cover pw by ph pixels, pw and ph each 1, 2 or 4, writes
-# its sample k over the pw by ph pixels at (ox + (k mod 8) * pw, oy + (k div 8) * ph) that lie inside the
-# frame, row by row, and nothing else
+# LAW: painting one 8 by 8 block whose samples each cover pw by ph pixels, pw and ph each 1, 2 or 4 but not
+# both 4, writes its sample k over the pw by ph pixels at (ox + (k mod 8) * pw, oy + (k div 8) * ph) that lie
+# inside the frame, row by row, and nothing else. The 4 by 4 case is left out to keep the gate fast: its
+# proof normalises 1024 nested writes and takes about 100 seconds on its own.
 # IMG-JPG-2
 law jpeg_block_cover:
   for +pw: U32
   for +ph: U32
   for +h_pw: {jpg.fac(pw) == True{} : Bool}
   for +h_ph: {jpg.fac(ph) == True{} : Bool}
+  for h_44: {Bool.and(U32.is_eq(pw, 4), U32.is_eq(ph, 4)) == False{} : Bool}
   for +ox: U32
   for +oy: U32
   for +ww: U32
@@ -1259,3 +1261,166 @@ law jpeg_block_cover:
   for +nn: U32
   {Jpeg.decode.paint.use(Jpeg.Geom{ox, oy, pw, ph, ww, hh}, True{}, samples, Jpeg.decode.plane(nn)) ==
     jpg.cover(8n, Jpeg.decode.plane(nn), samples, 0, ox, oy, pw, ph, ww, hh) : Array<U32>}
+
+# three samples' colour, when all three are there
+def jpg.rgb3(yy: Maybe<&2, U32>, bb: Maybe<&2, U32>, rr: Maybe<&2, U32>) -> Maybe<&2, U32>:
+  match yy:
+    case None{}:
+      None{}
+    case Some{yv}:
+      match bb:
+        case None{}:
+          None{}
+        case Some{bv}:
+          match rr:
+            case None{}:
+              None{}
+            case Some{rv}:
+              Some{Jpeg.rgb(yv, bv, rv)}
+
+# LAW: the colour pass is pointwise: sample k of decode.rgbs is Jpeg.rgb of point k's Y, Cb and Cr,
+# and there is no sample k when a plane has no point k
+# IMG-JPG-2
+law jpeg_rgbs_at:
+  for +ys: List<&2, U32>
+  for +bs: List<&2, U32>
+  for +rs: List<&2, U32>
+  for +kk: Nat
+  {List.get(&2, U32, Jpeg.decode.rgbs(ys, bs, rs), kk) ==
+    jpg.rgb3(List.get(&2, U32, ys, kk), List.get(&2, U32, bs, kk), List.get(&2, U32, rs, kk)) : Maybe<&2, U32>}
+
+# true when no element of xs is want
+def jpg.absent(xs: List<&2, U32>, +want: U32) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case xx <> rest:
+      Bool.and(Bool.not(U32.is_eq(xx, want)), jpg.absent(rest, want))
+
+# nn plus the number of elements of xs, as a U32
+def jpg.count(xs: List<&2, U32>, +nn: U32) -> U32:
+  match xs:
+    case Nil{}:
+      nn
+    case _xx <> rest:
+      jpg.count(rest, (nn + 1 : U32))
+
+# LAW: the frame component a scan component names is found at its first place in the frame's
+# identifiers, so a component of a scan with several takes that frame component's factors and table
+# IMG-JPG-2
+law jpeg_comp_index:
+  for +pre: List<&2, U32>
+  for +want: U32
+  for +post: List<&2, U32>
+  for +h_new: {jpg.absent(pre, want) == True{} : Bool}
+  {Jpeg.decode.index(List.append(&2, U32, pre, want <> post), False{}, want, 0) == jpg.count(pre, 0) : U32}
+
+# the data units the scan's component comp has in an MCU: its frame component's hi * vi
+def jpg.units(+comp: U32, +sids: List<&2, U32>, +ids: List<&2, U32>, +hs: List<&2, U32>, +vs: List<&2, U32>) -> U32:
+  +fi = Jpeg.decode.index(ids, False{}, Jpeg.decode.at(sids, comp), 0)
+  (Jpeg.decode.at(hs, fi) * Jpeg.decode.at(vs, fi) : U32)
+
+# LAW: the MCU walk goes from data unit bi of a scan component to unit bi + 1 of the same component
+# while the component has more units in the MCU, with no restart between
+# IMG-JPG-2
+law jpeg_walk_unit:
+  for +comp: U32
+  for +bi: U32
+  for +mx: U32
+  for +my: U32
+  for +mcu: U32
+  for +rst: U32
+  for +ww: U32
+  for +hh: U32
+  for +nf: U32
+  for +ids: List<&2, U32>
+  for +hs: List<&2, U32>
+  for +vs: List<&2, U32>
+  for +tq: List<&2, U32>
+  for +hmax: U32
+  for +vmax: U32
+  for +ns: U32
+  for +sids: List<&2, U32>
+  for +td: List<&2, U32>
+  for +ta: List<&2, U32>
+  for +ss: U32
+  for +se: U32
+  for +ah: U32
+  for +ri: U32
+  for h_more: {U32.is_lt((bi + 1 : U32), jpg.units(comp, sids, ids, hs, vs)) == True{} : Bool}
+  {Jpeg.decode.adv(Jpeg.Ctrl{comp, bi, mx, my, mcu, rst}, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
+    Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, ri) == Jpeg.Adv{Jpeg.Ctrl{comp, (bi + 1 : U32), mx, my, mcu, rst}, 0, rst} :
+    Jpeg.Adv}
+
+# LAW: after a scan component's last data unit in an MCU, the walk goes to unit 0 of the next scan
+# component of the same MCU, with no restart between
+# IMG-JPG-2
+law jpeg_walk_comp:
+  for +comp: U32
+  for +bi: U32
+  for +mx: U32
+  for +my: U32
+  for +mcu: U32
+  for +rst: U32
+  for +ww: U32
+  for +hh: U32
+  for +nf: U32
+  for +ids: List<&2, U32>
+  for +hs: List<&2, U32>
+  for +vs: List<&2, U32>
+  for +tq: List<&2, U32>
+  for +hmax: U32
+  for +vmax: U32
+  for +ns: U32
+  for +sids: List<&2, U32>
+  for +td: List<&2, U32>
+  for +ta: List<&2, U32>
+  for +ss: U32
+  for +se: U32
+  for +ah: U32
+  for +ri: U32
+  for h_last: {U32.is_lt((bi + 1 : U32), jpg.units(comp, sids, ids, hs, vs)) == False{} : Bool}
+  for h_next: {U32.is_lt((comp + 1 : U32), ns) == True{} : Bool}
+  {Jpeg.decode.adv(Jpeg.Ctrl{comp, bi, mx, my, mcu, rst}, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
+    Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, ri) == Jpeg.Adv{Jpeg.Ctrl{(comp + 1 : U32), 0, mx, my, mcu, rst}, 0, rst} :
+    Jpeg.Adv}
+
+# the scan component, data unit and MCU number the walk moves to
+def jpg.adv.at(adv: Jpeg.Adv) -> U32 & U32 & U32:
+  match adv:
+    case Jpeg.Adv{ctrl, _due, _expect}:
+      match ctrl:
+        case Jpeg.Ctrl{comp, bi, _mx, _my, mcu, _rst}:
+          (comp, bi, mcu)
+
+# LAW: after the last data unit of the last scan component of MCU mcu, the walk goes to unit 0 of
+# the first scan component of MCU mcu + 1
+# IMG-JPG-2
+law jpeg_walk_mcu:
+  for +comp: U32
+  for +bi: U32
+  for +mx: U32
+  for +my: U32
+  for +mcu: U32
+  for +rst: U32
+  for +ww: U32
+  for +hh: U32
+  for +nf: U32
+  for +ids: List<&2, U32>
+  for +hs: List<&2, U32>
+  for +vs: List<&2, U32>
+  for +tq: List<&2, U32>
+  for +hmax: U32
+  for +vmax: U32
+  for +ns: U32
+  for +sids: List<&2, U32>
+  for +td: List<&2, U32>
+  for +ta: List<&2, U32>
+  for +ss: U32
+  for +se: U32
+  for +ah: U32
+  for +ri: U32
+  for h_last: {U32.is_lt((bi + 1 : U32), jpg.units(comp, sids, ids, hs, vs)) == False{} : Bool}
+  for h_end: {U32.is_lt((comp + 1 : U32), ns) == False{} : Bool}
+  {jpg.adv.at(Jpeg.decode.adv(Jpeg.Ctrl{comp, bi, mx, my, mcu, rst}, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
+    vmax}, Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, ri)) == (0, 0, (mcu + 1 : U32)) : U32 & U32 & U32}

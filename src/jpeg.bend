@@ -422,9 +422,6 @@ def decode.canon(
                 case s <> st:
                   decode.canon(p, q, cs, st, (code + 1 : U32), len, code <> ac, len <> al, s <> ay)
 
-def decode.index.keep(+hh: U32, +ii: U32) -> U32:
-  (ii + U32.and(hh, 0) : U32)
-
 def decode.index.add(eq: Bool, +ii: U32) -> U32:
   match eq:
     case True{}:
@@ -432,20 +429,23 @@ def decode.index.add(eq: Bool, +ii: U32) -> U32:
     case False{}:
       (ii + 1 : U32)
 
-def decode.index(xs: List<&2, U32>, eq: Bool, +hh: U32, +want: U32, +ii: U32) -> U32:
+# the position of want in xs, the first if it is there more than once, 0 when it is absent. eq says the
+# element before xs was want, and ii counts the elements before it. Matches with U32.is_eq, so a law reaches it.
+def decode.index(xs: List<&2, U32>, eq: Bool, +want: U32, +ii: U32) -> U32:
   match xs:
     case Nil{}:
       match eq:
         case True{}:
-          decode.index.keep(hh, ii)
+          ii
         case False{}:
-          decode.index.keep(hh, 0)
+          0
     case +n <> t:
       match eq:
         case True{}:
-          decode.index.keep(n, decode.index.keep(hh, ii))
+          +_d = decode.drop(n <> t)
+          ii
         case False{}:
-          decode.index(t, U32.is_eq(n, want), n, want, decode.index.add(U32.is_eq(n, want), decode.index.keep(hh, ii)))
+          decode.index(t, U32.is_eq(n, want), want, decode.index.add(U32.is_eq(n, want), ii))
 
 def decode.look.pref(tail: Maybe<&2, U32>, eqc: Bool, eql: Bool, +ss: U32) -> Maybe<&2, U32>:
   match tail:
@@ -839,7 +839,7 @@ def decode.block.of(bits: Bits, +comp: U32, preds: Preds, frame: Frame, scan: Sc
                     case Scan{_ns, +sids, +td, +ta, _ss, _se, _ah}:
                       decode.block.go(bs, decode.pred.get(ps, c), decode.dc.get(tabs, decode.at(td, c)),
                         decode.ac.get(tabs, decode.at(ta, c)),
-                        decode.q.get(tabs, decode.at(tq, decode.index(ids, False{}, 0, decode.at(sids, c), 0))))
+                        decode.q.get(tabs, decode.at(tq, decode.index(ids, False{}, decode.at(sids, c), 0))))
 
 def decode.rst.ok(eq: Bool, rest: List<&2, U32>) -> Bits:
   match eq:
@@ -953,7 +953,7 @@ def decode.adv.go(
   vs: List<&2, U32>,
   +ri: U32
 ) -> Adv:
-  +fi = decode.index(ids, False{}, 0, decode.at(sids, comp), 0)
+  +fi = decode.index(ids, False{}, decode.at(sids, comp), 0)
   +hi = decode.at(hs, fi)
   +vi = decode.at(vs, fi)
   decode.adv.bi(U32.is_lt((bi + 1 : U32), (hi * vi : U32)), comp, bi, mx, my, mcu, rst, ww, hmax, ns, ri)
@@ -1022,7 +1022,7 @@ def decode.geom.go(
   hs: List<&2, U32>,
   vs: List<&2, U32>
 ) -> Geom:
-  +fi = decode.index(ids, False{}, 0, decode.at(sids, comp), 0)
+  +fi = decode.index(ids, False{}, decode.at(sids, comp), 0)
   +hi = decode.at(hs, fi)
   +vi = decode.at(vs, fi)
   +pw = U32.div(hmax, decode.geom.nz(hi))
@@ -1195,29 +1195,42 @@ def decode.emit(left: Nat, got: Array<U32> & U32, +ii: U32, acc: List<&2, U32>, 
                     case True{}:
                       decode.emit(p, Array.get(U32, a, j), (j + 1 : U32), v <> ys, True{})
 
-def decode.round.s(ss: U32, +prod: U32) -> U32:
-  match ss:
-    case 0:
-      U32.shrn((prod + 32768 : U32), 16n)
-    case _:
-      decode.neg32(U32.shrn((decode.neg32(prod) + 32768 : U32), 16n))
-
-def decode.round(+prod: U32) -> U32:
-  decode.round.s(decode.sign(prod), prod)
-
 # a sample's colour bits made opaque: alpha 255 over the low 24 bits. The
 # constant is the first operand, so a law over any sample sees its alpha
 # without a case split on the sample's bits.
 def opaque(+xx: U32) -> U32:
   U32.or(4278190080, xx)
 
-# YCbCr to colour bits, (R << 16) | (G << 8) | B, per JFIF T.871
+# a channel clamped from above: 255 for a quotient past it
+def rgb.ch.hi(+qq: U32) -> U32:
+  decode.clamp.hi(U32.is_gt(qq, 255), qq)
+
+# a channel whose value, plus one half, is below zero is 0; otherwise the
+# whole millions in pos - neg
+def rgb.ch.lt(lt: Bool, +pos: U32, +neg: U32) -> U32:
+  match lt:
+    case True{}:
+      0
+    case False{}:
+      rgb.ch.hi(U32.div((pos - neg : U32), 1000000))
+
+# one channel of T.871 rounded to nearest and clamped to 0..255, from its
+# value in millionths split into what is added (pos, with the half for
+# rounding already in) and what is subtracted (neg). For inputs 0..255 both
+# stay below 2^32, so the arithmetic is exact: no fixed-point constant and one
+# rounding per channel.
+def rgb.ch(+pos: U32, +neg: U32) -> U32:
+  rgb.ch.lt(U32.is_lt(pos, neg), pos, neg)
+
+# YCbCr to colour bits, (R << 16) | (G << 8) | B, per JFIF T.871 exactly:
+# R = Y + 1.402 (Cr - 128), G = Y - 0.344136 (Cb - 128) - 0.714136 (Cr - 128),
+# B = Y + 1.772 (Cb - 128), each rounded to nearest and clamped. The 128
+# offsets are the constants 179456000 = 128 * 1402000, 135458816 =
+# 128 * (344136 + 714136) and 226816000 = 128 * 1772000.
 def rgb.bits(+yy: U32, +cb: U32, +cr: U32) -> U32:
-  +cbd = (cb - 128 : U32)
-  +crd = (cr - 128 : U32)
-  +r = decode.clamp8((yy + decode.round((crd * 91881 : U32)) : U32))
-  +g = decode.clamp8((yy - decode.round((cbd * 22553 : U32)) - decode.round((crd * 46802 : U32)) : U32))
-  +b = decode.clamp8((yy + decode.round((cbd * 116130 : U32)) : U32))
+  +r = rgb.ch((yy * 1000000 + cr * 1402000 + 500000 : U32), 179456000)
+  +g = rgb.ch((yy * 1000000 + 135458816 + 500000 : U32), (cb * 344136 + cr * 714136 : U32))
+  +b = rgb.ch((yy * 1000000 + cb * 1772000 + 500000 : U32), 226816000)
   U32.or(U32.or(U32.shln(r, 16n), U32.shln(g, 8n)), b)
 
 # YCbCr to a packed opaque sample, 0xFFRRGGBB
