@@ -6,6 +6,7 @@ import ./proof/u32.bend as U32L
 import ./main.bend as Img
 import ./src/png.bend as Png
 import ./src/jpeg.bend as Jpeg
+import ./proof/wp8-jpeg-numeric.bend as W8
 
 # U32.or with 0xFF000000 first has alpha 255, whatever the other operand:
 # the 32 bits are taken apart four at a time, and Bool.or(True, b) is True.
@@ -217,3 +218,201 @@ def sig.only.go(
 
 def Laws.sig_only(xs, h_some):
   sig.only.go(Img.sig.match(Img.png_sig(), xs, True{}), xs, {==}, h_some)
+
+# ---- wp8-jpeg-numeric ----
+
+# decode_jpeg of the state a walk ends in
+def w8.out(st: Jpeg.St) -> Maybe<&2, Img.Raster>:
+  Img.decode_jpeg.out(Jpeg.decode.finish(st))
+
+# a refused frame is none whether or not a frame was read before it
+def w8.none(
+  ok1: Bool,
+  +sc: Jpeg.Scan,
+  +tb: Jpeg.Tabs,
+  +en: List<&2, U32>,
+  +ri: U32
+) -> {Img.decode_jpeg.out(Jpeg.decode.finish.ok(ok1, False{}, Jpeg.decode.frame0(), sc, tb, en, ri)) ==
+  None{} : Maybe<&2, Img.Raster>}:
+  match ok1:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# the state a refused frame header leaves the walk in
+def w8.stop(+sc: Jpeg.Scan, +tb: Jpeg.Tabs, +en: List<&2, U32>, +ri: U32, +kd: U32) -> Jpeg.St:
+  Jpeg.St{Jpeg.Stop{}, Jpeg.decode.frame0(), sc, tb, en, ri, kd, 1}
+
+# from where the prefix leaves the walk: a segment that stops the walk with
+# the refusal flag set gives none, whatever follows it
+def w8.tail(
+  +pre: List<&2, U32>,
+  +seg: List<&2, U32>,
+  +mid: Jpeg.St,
+  +rest: List<&2, U32>,
+  +sc: Jpeg.Scan,
+  +tb: Jpeg.Tabs,
+  +en: List<&2, U32>,
+  +ri: U32,
+  +kd: U32,
+  h_walk: {Jpeg.decode.walk(pre, Jpeg.decode.st0()) == mid : Jpeg.St},
+  h_seg: {Jpeg.decode.walk(seg, mid) == Jpeg.decode.walk(rest, w8.stop(sc, tb, en, ri, kd)) : Jpeg.St}
+) -> {Img.decode_jpeg(List.append(&2, U32, pre, seg)) == None{} : Maybe<&2, Img.Raster>}:
+  +stop = {w8.stop(sc, tb, en, ri, kd) : Jpeg.St}
+  Equal.trans(Maybe<&2, Img.Raster>, w8.out(Jpeg.decode.walk(List.append(&2, U32, pre, seg), Jpeg.decode.st0())),
+    w8.out(Jpeg.decode.walk(seg, Jpeg.decode.walk(pre, Jpeg.decode.st0()))), None{},
+    Equal.cong(Jpeg.St, Maybe<&2, Img.Raster>, st => w8.out(st),
+      Jpeg.decode.walk(List.append(&2, U32, pre, seg), Jpeg.decode.st0()),
+      Jpeg.decode.walk(seg, Jpeg.decode.walk(pre, Jpeg.decode.st0())), W8.walk_app(pre, seg, Jpeg.decode.st0())),
+    Equal.trans(Maybe<&2, Img.Raster>, w8.out(Jpeg.decode.walk(seg, Jpeg.decode.walk(pre, Jpeg.decode.st0()))),
+      w8.out(Jpeg.decode.walk(seg, mid)), None{},
+      Equal.cong(Jpeg.St, Maybe<&2, Img.Raster>, st => w8.out(Jpeg.decode.walk(seg, st)),
+        Jpeg.decode.walk(pre, Jpeg.decode.st0()), mid, h_walk),
+      Equal.trans(Maybe<&2, Img.Raster>, w8.out(Jpeg.decode.walk(seg, mid)), w8.out(Jpeg.decode.walk(rest, stop)),
+        None{},
+        Equal.cong(Jpeg.St, Maybe<&2, Img.Raster>, st => w8.out(st), Jpeg.decode.walk(seg, mid),
+          Jpeg.decode.walk(rest, stop), h_seg),
+        Equal.trans(Maybe<&2, Img.Raster>, w8.out(Jpeg.decode.walk(rest, stop)), w8.out(stop), None{},
+          Equal.cong(Jpeg.St, Maybe<&2, Img.Raster>, st => w8.out(st), Jpeg.decode.walk(rest, stop), stop,
+            W8.walk_stop(rest, Jpeg.decode.frame0(), sc, tb, en, ri, kd, 1)),
+          w8.none(U32.is_eq(kd, 1), sc, tb, en, ri)))))
+
+def Laws.jpeg_refuse_factor1(
+  pre,
+  frame,
+  scan,
+  tabs,
+  ent,
+  ri,
+  kind,
+  bad,
+  h_walk,
+  yh,
+  yl,
+  xh,
+  xl,
+  c1,
+  f1,
+  q1,
+  h_fac,
+  rest
+):
+  w8.tail(pre, 255 <> 192 <> 0 <> 11 <> 8 <> yh <> yl <> xh <> xl <> 1 <> c1 <> f1 <> q1 <> rest,
+    Jpeg.St{Jpeg.Seek{}, frame, scan, tabs, ent, ri, kind, bad}, rest, scan, tabs, ent, ri, kind, h_walk,
+    Equal.cong(Bool, Jpeg.St, ok => Jpeg.decode.walk(rest, Jpeg.decode.read.sof.c(ok,
+      Bool.and(Jpeg.decode.nf.ok(1), U32.is_eq(bad, 0)), U32.is_eq(Jpeg.decode.vmax([U32.shrn(f1, 4n)], 0), 0),
+      Jpeg.decode.u16(xh, xl), Jpeg.decode.u16(yh, yl), 1, [c1], [U32.shrn(f1, 4n)], [U32.and(f1, 15)], [q1], scan,
+      tabs, ent, ri, kind)), Laws.jpg.facs(f1), False{}, h_fac))
+
+def Laws.jpeg_refuse_factor3(
+  pre,
+  frame,
+  scan,
+  tabs,
+  ent,
+  ri,
+  kind,
+  bad,
+  h_walk,
+  yh,
+  yl,
+  xh,
+  xl,
+  c1,
+  f1,
+  q1,
+  c2,
+  f2,
+  q2,
+  c3,
+  f3,
+  q3,
+  h_fac,
+  rest
+):
+  w8.tail(pre, 255 <> 192 <> 0 <> 17 <> 8 <> yh <> yl <> xh <> xl <> 3 <> c1 <> f1 <> q1 <> c2 <> f2 <> q2 <> c3 <>
+    f3 <> q3 <> rest, Jpeg.St{Jpeg.Seek{}, frame, scan, tabs, ent, ri, kind, bad}, rest, scan, tabs, ent, ri, kind,
+    h_walk,
+    Equal.cong(Bool, Jpeg.St, ok => Jpeg.decode.walk(rest, Jpeg.decode.read.sof.c(ok,
+      Bool.and(Jpeg.decode.nf.ok(3), U32.is_eq(bad, 0)),
+      U32.is_eq(Jpeg.decode.vmax([U32.shrn(f1, 4n), U32.shrn(f2, 4n), U32.shrn(f3, 4n)], 0), 0),
+      Jpeg.decode.u16(xh, xl), Jpeg.decode.u16(yh, yl), 3, [c1, c2, c3],
+      [U32.shrn(f1, 4n), U32.shrn(f2, 4n), U32.shrn(f3, 4n)], [U32.and(f1, 15), U32.and(f2, 15), U32.and(f3, 15)],
+      [q1, q2, q3], scan, tabs, ent, ri, kind)),
+      Bool.and(Bool.and(Laws.jpg.facs(f1), Laws.jpg.facs(f2)), Laws.jpg.facs(f3)), False{}, h_fac))
+
+# what jpeg_mcu_grid says for factors hi and vi
+def w8.grid.ty(
+  +hi: U32,
+  +vi: U32,
+  +mx: U32,
+  +my: U32,
+  +hmax: U32,
+  +vmax: U32,
+  +ww: U32,
+  +hh: U32
+) -> Type:
+  {Laws.jpg.blocks(U32.to_nat((hi * vi : U32)), 0, hi, vi, mx, my, hmax, vmax, ww, hh) ==
+    Laws.jpg.grid(U32.to_nat(vi), 0, hi, mx, my, hmax, vmax, U32.div(hmax, hi), U32.div(vmax, vi), ww, hh) :
+    List<&2, Jpeg.Geom>}
+
+# for one factor hi of 1, 2 or 4: every allowed vi, one concrete case each
+def w8.grid.vi(
+  +hi: U32,
+  +vi: U32,
+  +h_vi: {Laws.jpg.fac(vi) == True{} : Bool},
+  +mx: U32,
+  +my: U32,
+  +hmax: U32,
+  +vmax: U32,
+  +ww: U32,
+  +hh: U32,
+  p1: w8.grid.ty(hi, 1, mx, my, hmax, vmax, ww, hh),
+  p2: w8.grid.ty(hi, 2, mx, my, hmax, vmax, ww, hh),
+  p4: w8.grid.ty(hi, 4, mx, my, hmax, vmax, ww, hh)
+) -> w8.grid.ty(hi, vi, mx, my, hmax, vmax, ww, hh):
+  W8.fac_elim(vv => w8.grid.ty(hi, vv, mx, my, hmax, vmax, ww, hh), vi, U32.is_eq(vi, 1), {==}, h_vi, p1, p2, p4)
+
+def Laws.jpeg_mcu_grid(hi, vi, h_hi, h_vi, mx, my, hmax, vmax, ww, hh):
+  W8.fac_elim(hv => w8.grid.ty(hv, vi, mx, my, hmax, vmax, ww, hh), hi, U32.is_eq(hi, 1), {==}, h_hi,
+    w8.grid.vi(1, vi, h_vi, mx, my, hmax, vmax, ww, hh, {==}, {==}, {==}),
+    w8.grid.vi(2, vi, h_vi, mx, my, hmax, vmax, ww, hh, {==}, {==}, {==}),
+    w8.grid.vi(4, vi, h_vi, mx, my, hmax, vmax, ww, hh, {==}, {==}, {==}))
+
+# what jpeg_block_cover says for sample sizes pw and ph
+def w8.cover.ty(
+  +pw: U32,
+  +ph: U32,
+  +ox: U32,
+  +oy: U32,
+  +ww: U32,
+  +hh: U32,
+  +samples: List<&2, U32>,
+  +nn: U32
+) -> Type:
+  {Jpeg.decode.paint.use(Jpeg.Geom{ox, oy, pw, ph, ww, hh}, True{}, samples, Jpeg.decode.plane(nn)) ==
+    Laws.jpg.cover(8n, Jpeg.decode.plane(nn), samples, 0, ox, oy, pw, ph, ww, hh) : Array<U32>}
+
+# for one width pw of 1, 2 or 4: every allowed height, one concrete case each
+def w8.cover.ph(
+  +pw: U32,
+  +ph: U32,
+  +h_ph: {Laws.jpg.fac(ph) == True{} : Bool},
+  +ox: U32,
+  +oy: U32,
+  +ww: U32,
+  +hh: U32,
+  +samples: List<&2, U32>,
+  +nn: U32,
+  p1: w8.cover.ty(pw, 1, ox, oy, ww, hh, samples, nn),
+  p2: w8.cover.ty(pw, 2, ox, oy, ww, hh, samples, nn),
+  p4: w8.cover.ty(pw, 4, ox, oy, ww, hh, samples, nn)
+) -> w8.cover.ty(pw, ph, ox, oy, ww, hh, samples, nn):
+  W8.fac_elim(vv => w8.cover.ty(pw, vv, ox, oy, ww, hh, samples, nn), ph, U32.is_eq(ph, 1), {==}, h_ph, p1, p2, p4)
+
+def Laws.jpeg_block_cover(pw, ph, h_pw, h_ph, ox, oy, ww, hh, samples, nn):
+  W8.fac_elim(vv => w8.cover.ty(vv, ph, ox, oy, ww, hh, samples, nn), pw, U32.is_eq(pw, 1), {==}, h_pw,
+    w8.cover.ph(1, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, {==}),
+    w8.cover.ph(2, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, {==}),
+    w8.cover.ph(4, ph, h_ph, ox, oy, ww, hh, samples, nn, {==}, {==}, {==}))

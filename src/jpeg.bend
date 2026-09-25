@@ -80,9 +80,10 @@ type Geom is Data:
 type Cursor is Data:
   Cursor{k: U32, px: U32, py: U32}
 
-# SOF component lists while they are being read
+# SOF component lists while they are being read, and whether every component
+# so far was read whole with sampling factors the decoder places
 type Comps is Data:
-  Comps{ids: List<&2, U32>, hs: List<&2, U32>, vs: List<&2, U32>, tq: List<&2, U32>, bad: U32}
+  Comps{ids: List<&2, U32>, hs: List<&2, U32>, vs: List<&2, U32>, tq: List<&2, U32>, ok: Bool}
 
 # the eight cosine columns of the A.3.3 matrix, one list per frequency
 type Cols is Data:
@@ -1475,37 +1476,28 @@ def decode.vmax(vs: List<&2, U32>, +mm: U32) -> U32:
     case v <> t:
       decode.vmax(t, decode.max(v, mm))
 
-def decode.fac.ok(+hh: U32) -> U32:
-  match hh:
-    case 1:
-      1
-    case 2:
-      1
-    case 4:
-      1
-    case _:
-      0
+# a sampling factor the decoder places: 1, 2 or 4 (IMG-JPG-2). A Bool of
+# U32.is_eq, not a match on literals, so a law can case-split on it.
+def decode.fac.ok(+ff: U32) -> Bool:
+  Bool.or(U32.is_eq(ff, 1), Bool.or(U32.is_eq(ff, 2), U32.is_eq(ff, 4)))
 
-def decode.fac.bad(+hh: U32, +vv: U32, +bad: U32) -> U32:
-  (bad + (1 - decode.fac.ok(hh) : U32) + (1 - decode.fac.ok(vv) : U32) : U32)
+# both sampling factors of one SOF component byte, H in the high nibble and V
+# in the low nibble, are ones the decoder places
+def decode.fac.pair(+hv: U32) -> Bool:
+  Bool.and(decode.fac.ok(U32.shrn(hv, 4n)), decode.fac.ok(U32.and(hv, 15)))
 
-def decode.nf.ok(+nf: U32) -> U32:
-  match nf:
-    case 1:
-      1
-    case 3:
-      1
-    case _:
-      0
+# a component count the decoder reads: 1 (gray) or 3 (YCbCr)
+def decode.nf.ok(+nf: U32) -> Bool:
+  Bool.or(U32.is_eq(nf, 1), U32.is_eq(nf, 3))
 
 def decode.u16(+hi: U32, +lo: U32) -> U32:
   U32.or(U32.shln(hi, 8n), lo)
 
 def decode.comps.rev(cc: Comps) -> Comps:
   match cc:
-    case Comps{ids, hs, vs, tq, +bad}:
+    case Comps{ids, hs, vs, tq, ok}:
       Comps{List.reverse(&2, U32, ids), List.reverse(&2, U32, hs), List.reverse(&2, U32, vs),
-        List.reverse(&2, U32, tq), bad}
+        List.reverse(&2, U32, tq), ok}
 
 def decode.read.cs(
   left: Nat,
@@ -1514,21 +1506,21 @@ def decode.read.cs(
   hs: List<&2, U32>,
   vs: List<&2, U32>,
   tqs: List<&2, U32>,
-  +bad: U32
+  ok: Bool
 ) -> Comps:
   match left:
     case 0n:
       match xs:
         case _rest:
-          decode.comps.rev(Comps{ids, hs, vs, tqs, bad})
+          decode.comps.rev(Comps{ids, hs, vs, tqs, ok})
     case 1n+p:
       match xs:
         case id <> +hv <> tq <> rest:
           +hsamp = U32.shrn(hv, 4n)
           +vsamp = U32.and(hv, 15)
-          decode.read.cs(p, rest, id <> ids, hsamp <> hs, vsamp <> vs, tq <> tqs, decode.fac.bad(hsamp, vsamp, bad))
+          decode.read.cs(p, rest, id <> ids, hsamp <> hs, vsamp <> vs, tq <> tqs, Bool.and(ok, decode.fac.pair(hv)))
         case _:
-          Comps{[], [], [], [], 1}
+          Comps{[], [], [], [], False{}}
 
 def decode.read.sof.ok(
   good: Bool,
@@ -1561,6 +1553,31 @@ def decode.read.sof.ok(
             case _:
               St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
 
+# the components first: a factor outside 1, 2 and 4, or a short component
+# list, refuses the file before the count and the refusals so far are asked
+def decode.read.sof.c(
+  cok: Bool,
+  good: Bool,
+  zmax: Bool,
+  +ww: U32,
+  +hh: U32,
+  +nf: U32,
+  ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  tq: List<&2, U32>,
+  scan: Scan,
+  tabs: Tabs,
+  ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32
+) -> St:
+  match cok:
+    case False{}:
+      St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
+    case True{}:
+      decode.read.sof.ok(good, zmax, ww, hh, nf, ids, hs, vs, tq, scan, tabs, ent, ri, kind)
+
 def decode.read.sof.f(
   cc: Comps,
   +ww: U32,
@@ -1574,9 +1591,9 @@ def decode.read.sof.f(
   +bad: U32
 ) -> St:
   match cc:
-    case Comps{+ids, +hs, +vs, +tq, +cbad}:
-      decode.read.sof.ok(U32.is_eq((bad + cbad + (1 - decode.nf.ok(nf) : U32) : U32), 0),
-        U32.is_eq(decode.vmax(hs, 0), 0), ww, hh, nf, ids, hs, vs, tq, scan, tabs, ent, ri, kind)
+    case Comps{+ids, +hs, +vs, +tq, cok}:
+      decode.read.sof.c(cok, Bool.and(decode.nf.ok(nf), U32.is_eq(bad, 0)), U32.is_eq(decode.vmax(hs, 0), 0), ww,
+        hh, nf, ids, hs, vs, tq, scan, tabs, ent, ri, kind)
 
 def decode.read.sof(
   xs: List<&2, U32>,
@@ -1589,7 +1606,7 @@ def decode.read.sof(
 ) -> St:
   match xs:
     case 8 <> hh <> hl <> wh <> wl <> +nf <> rest:
-      decode.read.sof.f(decode.read.cs(U32.to_nat(nf), rest, [], [], [], [], 0), decode.u16(wh, wl),
+      decode.read.sof.f(decode.read.cs(U32.to_nat(nf), rest, [], [], [], [], True{}), decode.u16(wh, wl),
         decode.u16(hh, hl), nf, scan, tabs, ent, ri, kind, bad)
     case _:
       St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
