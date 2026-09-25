@@ -51,7 +51,7 @@ What a sample means, for every decoder and encoder.
 
 | ID | Requirement | Level | Status | Law |
 | :---- | :---- | :---- | :---- | :---- |
-| IMG-PNG-1 | `parse_signature(xs)` is `Some(png_sig())` exactly when `xs` begins with the eight bytes 137 80 78 71 13 10 26 10, and none otherwise. | Proved | pending | |
+| IMG-PNG-1 | `parse_signature(xs)` is `Some(png_sig())` exactly when `xs` begins with the eight bytes 137 80 78 71 13 10 26 10, and none otherwise. | Proved | pending | LAWS.bend sig_opens |
 | IMG-PNG-2 | For every well-formed raster `r` with both sides nonzero, `decode_png(encode_png(r))` is `Some(r)`. | Proved | pending | |
 | IMG-PNG-3 | `encode_png(r)` is none exactly when a side of `r` is 0, `r` is not well formed, or `w * h` is 2^32 or more. | Proved | pending | |
 | IMG-PNG-4 | When `encode_png(r)` is some, its IHDR has bit depth 8 and interlace 0, and colour type 2 exactly when every sample of `r` has alpha 255, colour type 6 otherwise. | Proved | pending | |
@@ -80,6 +80,7 @@ What a sample means, for every decoder and encoder.
 
 | ID | Proved so far | Missing |
 | :---- | :---- | :---- |
+| IMG-PNG-1 | every byte list that opens with the eight signature bytes parses as `Some(png_sig())`, whatever follows (`sig_opens`) | the converse, that every other list parses as none: the byte patterns in `parse_signature` compile to a comparison the checker does not reduce on a symbolic byte, even with its 32 bits taken apart, so the proof needs U32 equality lemmas (reflecting `U32.is_eq` to `==`, as ezjson's `weq` does) |
 | IMG-PIX-1 | `Jpeg.rgb` and `Jpeg.gray`, the two functions JPEG decode packs samples with, give alpha 255 for every input (`jpeg_rgb_opaque`, `jpeg_gray_opaque`) | that every sample `decode_jpeg` returns is one of theirs; that `gray` repeats the level in R, G and B; that every sample `decode_png` returns is `0xAARRGGBB` (IMG-PNG-9) |
 
 Every Proved row but IMG-JPG-4, IMG-PIX-2 and IMG-RAS-5 is pending; IMG-PIX-1 has the partial laws above. The rollout in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md) orders them: the behavior changes first (IMG-PIX-1 needed BC-1, which has landed; IMG-JPG-2 needed BC-2 and IMG-JPG-4 needed BC-3, which have landed), then refusals and frames (IMG-PNG-1, IMG-PNG-3, IMG-PNG-8, IMG-JPG-1, IMG-RAS-1, IMG-RAS-2), then content (IMG-PNG-5, IMG-PNG-7, IMG-PNG-6, IMG-PNG-9, IMG-PNG-4, IMG-RAS-3, IMG-RAS-4, and the headline IMG-PNG-2), and the JPEG content rows last (IMG-PIX-1, IMG-JPG-5, IMG-JPG-2, IMG-JPG-6, IMG-JPG-3).
