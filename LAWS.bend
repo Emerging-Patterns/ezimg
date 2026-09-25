@@ -1923,3 +1923,171 @@ law jpeg_mcu_grid_comp:
     ids, hs, vs, mx, my, hmax, vmax, ww, hh) == jpg.grid(U32.to_nat(jpg.fac.of(comp, sids, ids, vs)), 0,
     jpg.fac.of(comp, sids, ids, hs), mx, my, hmax, vmax, U32.div(hmax, jpg.fac.of(comp, sids, ids, hs)),
     U32.div(vmax, jpg.fac.of(comp, sids, ids, vs)), ww, hh) : List<&2, Jpeg.Geom>}
+
+# the value a read of a plane finds
+def jpg.val(pp: Array<U32> & U32) -> U32:
+  (_aa, vv) = pp
+  vv
+
+# LAW: the decoder reads a plane out point by point: sample k of the first nn points is the value
+# Array.get finds at index k, for every plane and every k below nn
+# IMG-JPG-2
+law jpeg_points_at:
+  for +nn: Nat
+  for plane: Array<U32>
+  for +kk: U32
+  for h_kk: {Nat.is_lt(U32.to_nat(kk), nn) == True{} : Bool}
+  {List.get(&2, U32, Jpeg.decode.points(nn, plane), U32.to_nat(kk)) == Some{jpg.val(Array.get(U32, plane, kk))} :
+    Maybe<&2, U32>}
+
+# jj advanced by one, kk times, in U32
+def jpg.idx(kk: Nat, +jj: U32) -> U32:
+  match kk:
+    case 0n:
+      jj
+    case 1n+pp:
+      jpg.idx(pp, (jj + 1 : U32))
+
+# where a block sits in the walk: scan component, data unit, MCU column, MCU row and MCU number (the
+# restart count left at 0)
+def jpg.pos(ctrl: Jpeg.Ctrl) -> Jpeg.Ctrl:
+  match ctrl:
+    case Jpeg.Ctrl{comp, bi, mx, my, mcu, _rst}:
+      Jpeg.Ctrl{comp, bi, mx, my, mcu, 0}
+
+# the positions of the next left blocks the decoder walks to from ctrl, each step its own decode.adv
+def jpg.trace(
+  left: Nat,
+  +ctrl: Jpeg.Ctrl,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +ri: U32
+) -> List<&2, Jpeg.Ctrl>:
+  match left:
+    case 0n:
+      []
+    case 1n+pp:
+      jpg.pos(ctrl) <> jpg.trace(pp, Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ctrl, frame, scan, ri)), frame, scan, ri)
+
+# T.81 A.2.3: data units bi onward of scan component comp in MCU (mx, my), number mcu
+def jpg.o.units(
+  left: Nat,
+  +comp: U32,
+  +bi: U32,
+  +mx: U32,
+  +my: U32,
+  +mcu: U32
+) -> List<&2, Jpeg.Ctrl>:
+  match left:
+    case 0n:
+      []
+    case 1n+pp:
+      Jpeg.Ctrl{comp, bi, mx, my, mcu, 0} <> jpg.o.units(pp, comp, (bi + 1 : U32), mx, my, mcu)
+
+# scan components comp onward of one MCU, each with its frame component's hi * vi data units
+def jpg.o.comps(
+  left: Nat,
+  +comp: U32,
+  +mx: U32,
+  +my: U32,
+  +mcu: U32,
+  +sids: List<&2, U32>,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>
+) -> List<&2, Jpeg.Ctrl>:
+  match left:
+    case 0n:
+      []
+    case 1n+pp:
+      List.append(&2, Jpeg.Ctrl, jpg.o.units(U32.to_nat(jpg.units(comp, sids, ids, hs, vs)), comp, 0,
+        mx, my, mcu), jpg.o.comps(pp, (comp + 1 : U32), mx, my, mcu, sids, ids, hs, vs))
+
+# MCUs mx onward of MCU row my, left to right, numbered from mcu, each with the scan's components in order
+def jpg.o.row(
+  left: Nat,
+  +mx: U32,
+  +my: U32,
+  +mcu: U32,
+  +ns: U32,
+  +sids: List<&2, U32>,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>
+) -> List<&2, Jpeg.Ctrl>:
+  match left:
+    case 0n:
+      []
+    case 1n+pp:
+      List.append(&2, Jpeg.Ctrl, jpg.o.comps(U32.to_nat(ns), 0, mx, my, mcu, sids, ids, hs, vs),
+        jpg.o.row(pp, (mx + 1 : U32), my, (mcu + 1 : U32), ns, sids, ids, hs, vs))
+
+# MCU rows my onward, top to bottom, mw MCUs to a row, numbered from mcu
+def jpg.o.rows(
+  left: Nat,
+  +my: U32,
+  +mcu: U32,
+  +mw: U32,
+  +ns: U32,
+  +sids: List<&2, U32>,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>
+) -> List<&2, Jpeg.Ctrl>:
+  match left:
+    case 0n:
+      []
+    case 1n+pp:
+      List.append(&2, Jpeg.Ctrl, jpg.o.row(U32.to_nat(mw), 0, my, mcu, ns, sids, ids, hs, vs),
+        jpg.o.rows(pp, (my + 1 : U32), jpg.idx(U32.to_nat(mw), mcu), mw, ns, sids, ids, hs, vs))
+
+# ok, and every scan component from comp on, left of them, has at least one data unit
+def jpg.units.ok(
+  left: Nat,
+  +comp: U32,
+  +sids: List<&2, U32>,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  ok: Bool
+) -> Bool:
+  match left:
+    case 0n:
+      ok
+    case 1n+pp:
+      jpg.units.ok(pp, (comp + 1 : U32), sids, ids, hs, vs, Bool.and(ok, U32.is_lt(0, jpg.units(comp, sids, ids, hs,
+        vs))))
+
+# LAW: from the first block of a scan, the decoder's walk (its own decode.adv at every step) visits the
+# frame's MCUs in raster order, mw = ceil(w / 8 hmax) to a row and any number of rows, and inside each MCU
+# the scan's components in order, each component's hi * vi data units in order (T.81 A.2.1 and A.2.3).
+# The U32 counters for the data unit, the component and the MCU column never wrap: each stays below the
+# count it is compared with, and the MCU row and number count up in step with the order's own.
+# IMG-JPG-2
+law jpeg_walk_frame:
+  for +ww: U32
+  for +hh: U32
+  for +nf: U32
+  for +ids: List<&2, U32>
+  for +hs: List<&2, U32>
+  for +vs: List<&2, U32>
+  for +tq: List<&2, U32>
+  for +hmax: U32
+  for +vmax: U32
+  for +ns: U32
+  for +sids: List<&2, U32>
+  for +td: List<&2, U32>
+  for +ta: List<&2, U32>
+  for +ss: U32
+  for +se: U32
+  for +ah: U32
+  for +ri: U32
+  for +rst: U32
+  for +mh: U32
+  for h_ns: {U32.is_lt(0, ns) == True{} : Bool}
+  for h_mw: {U32.is_lt(0, Jpeg.decode.ceil(ww, (hmax * 8 : U32))) == True{} : Bool}
+  for h_units: {jpg.units.ok(U32.to_nat(ns), 0, sids, ids, hs, vs, True{}) == True{} : Bool}
+  {jpg.trace(List.length(&2, Jpeg.Ctrl, jpg.o.rows(U32.to_nat(mh), 0, 0, Jpeg.decode.ceil(ww,
+    (hmax * 8 : U32)), ns, sids, ids, hs, vs)), Jpeg.Ctrl{0, 0, 0, 0, 0, rst}, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+    hmax, vmax}, Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, ri) == jpg.o.rows(U32.to_nat(mh), 0, 0,
+    Jpeg.decode.ceil(ww, (hmax * 8 : U32)), ns, sids, ids, hs, vs) : List<&2, Jpeg.Ctrl>}

@@ -2609,9 +2609,9 @@ def nf3.pk(
   match three:
     case True{}:
       +nn = U32.to_nat((ww * hh : U32))
-      +ey = Jpeg.decode.emit(nn, (yy, 0), 0, [], False{})
-      +eb = Jpeg.decode.emit(nn, (cb, 0), 0, [], False{})
-      +er = Jpeg.decode.emit(nn, (cr, 0), 0, [], False{})
+      +ey = Jpeg.decode.points(nn, yy)
+      +eb = Jpeg.decode.points(nn, cb)
+      +er = Jpeg.decode.points(nn, cr)
       (False{}, (ey, (eb, (er, rgbs.eq(ey, eb, er)))))
     case False{}:
       none.pk()
@@ -2628,7 +2628,7 @@ def nf1.pk(
 ) -> pk.Ty(pic.px(Jpeg.decode.done.nf1(one, nf, ww, hh, yy, cb, cr))):
   match one:
     case True{}:
-      +ey = Jpeg.decode.emit(U32.to_nat((ww * hh : U32)), (yy, 0), 0, [], False{})
+      +ey = Jpeg.decode.points(U32.to_nat((ww * hh : U32)), yy)
       (True{}, (ey, ([], ([], grays.eq(ey)))))
     case False{}:
       nf3.pk(U32.is_eq(nf, 3), ww, hh, yy, cb, cr)
@@ -5222,3 +5222,35 @@ def Laws.jpeg_refuse_count(
     W10.sof.seg(lh, ll, body, rest, frame, scan, tabs, ent, ri, kind, bad, h_len, h_body,
       W10.sof.cnt(Jpeg.decode.read.cs(U32.to_nat(nf), comps, [], [], [], [], True{}), Jpeg.decode.u16(xh, xl),
         Jpeg.decode.u16(yh, yl), nf, scan, tabs, ent, ri, kind, bad, h_nf)))
+
+def Laws.jpeg_points_at(nn, plane, kk, h_kk):
+  ee = W10.idx.of(kk)
+  %ee : {List.get(&2, U32, Jpeg.decode.points(nn, plane), U32.to_nat(kk)) ==
+    Some{Laws.jpg.val(Array.get(U32, plane, _))} : Maybe<&2, U32>}
+  W10.emit.at(nn, U32.to_nat(kk), plane, 0, W10.dup(plane), h_kk)
+
+def Laws.jpeg_walk_frame(
+  ww,
+  hh,
+  nf,
+  ids,
+  hs,
+  vs,
+  tq,
+  hmax,
+  vmax,
+  ns,
+  sids,
+  td,
+  ta,
+  ss,
+  se,
+  ah,
+  ri,
+  rst,
+  mh,
+  h_ns,
+  h_mw,
+  h_units
+):
+  W10.walk.frame(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, ns, sids, td, ta, ss, se, ah, ri, rst, mh, h_ns, h_mw, h_units)

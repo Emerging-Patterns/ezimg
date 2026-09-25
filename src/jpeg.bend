@@ -1220,36 +1220,23 @@ def decode.depth(+nn: U32) -> Nat:
 def decode.plane(+nn: U32) -> Array<U32>:
   Array.new(U32, decode.depth(nn), 0)
 
-def decode.emit(left: Nat, got: Array<U32> & U32, +ii: U32, acc: List<&2, U32>, fresh: Bool) -> List<&2, U32>:
+# the plane's points in order: got is the plane and the value of point ii - 1, just read, then the
+# left - 1 points from ii on. One read past the last point is made and dropped.
+def decode.emit(left: Nat, got: Array<U32> & U32, +ii: U32) -> List<&2, U32>:
   match left:
     case 0n:
-      match got:
-        case (a, +v):
-          match ii:
-            case _j:
-              match acc:
-                case ys:
-                  match fresh:
-                    case False{}:
-                      +_a = decode.sink(a)
-                      +_v = (v - v : U32)
-                      List.reverse(&2, U32, ys)
-                    case True{}:
-                      +_a = decode.sink(a)
-                      List.reverse(&2, U32, v <> ys)
+      (a, +v) = got
+      +_a = decode.sink(a)
+      +_v = (v - v : U32)
+      +_i = (ii - ii : U32)
+      []
     case 1n+p:
-      match got:
-        case (a, +v):
-          match ii:
-            case +j:
-              match acc:
-                case ys:
-                  match fresh:
-                    case False{}:
-                      +_v = (v - v : U32)
-                      decode.emit(p, Array.get(U32, a, j), (j + 1 : U32), ys, True{})
-                    case True{}:
-                      decode.emit(p, Array.get(U32, a, j), (j + 1 : U32), v <> ys, True{})
+      (a, v) = got
+      v <> decode.emit(p, Array.get(U32, a, ii), (ii + 1 : U32))
+
+# the first nn points of a plane, in order
+def decode.points(+nn: Nat, plane: Array<U32>) -> List<&2, U32>:
+  decode.emit(nn, Array.get(U32, plane, 0), 1)
 
 # a sample's colour bits made opaque: alpha 255 over the low 24 bits. The
 # constant is the first operand, so a law over any sample sees its alpha
@@ -1341,13 +1328,12 @@ def decode.done.drop(yy: Array<U32>, cb: Array<U32>, cr: Array<U32>) -> Maybe<&2
 def decode.done.gray(+ww: U32, +hh: U32, yy: Array<U32>, cb: Array<U32>, cr: Array<U32>) -> Maybe<&2, Pic>:
   +_b = decode.sink(cb)
   +_c = decode.sink(cr)
-  Some{Pic{ww, hh, decode.grays(decode.emit(U32.to_nat((ww * hh : U32)), (yy, 0), 0, [], False{}))}}
+  Some{Pic{ww, hh, decode.grays(decode.points(U32.to_nat((ww * hh : U32)), yy))}}
 
 # a colour picture: each point's Y, Cb and Cr read out in order, then packed
 def decode.done.color(+ww: U32, +hh: U32, yy: Array<U32>, cb: Array<U32>, cr: Array<U32>) -> Maybe<&2, Pic>:
   +n = U32.to_nat((ww * hh : U32))
-  Some{Pic{ww, hh, decode.rgbs(decode.emit(n, (yy, 0), 0, [], False{}), decode.emit(n, (cb, 0), 0, [], False{}),
-    decode.emit(n, (cr, 0), 0, [], False{}))}}
+  Some{Pic{ww, hh, decode.rgbs(decode.points(n, yy), decode.points(n, cb), decode.points(n, cr))}}
 
 # three components are colour; any other count is none
 def decode.done.nf3(three: Bool, +ww: U32, +hh: U32, yy: Array<U32>, cb: Array<U32>, cr: Array<U32>) -> Maybe<&2, Pic>:
