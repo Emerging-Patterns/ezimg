@@ -88,6 +88,240 @@ law sig_only:
   for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.parse_signature(xs)) == True{} : Bool}
   {xs == List.append(&2, U32, Img.png_sig(), List.drop(&2, U32, xs, 8n)) : List<&2, U32>}
 
+# ---- wp6-raster ----
+
+# is the raster well formed: its sample count is w * h, computed as a Nat
+def wf(img: Img.Raster) -> Bool:
+  match img:
+    case Img.Raster{ww, hh, px}:
+      Nat.is_eq(List.length(&2, U32, px), Nat.mul(U32.to_nat(ww), U32.to_nat(hh)))
+
+# is (x, y) a point of the raster: x < w and y < h, as Nats
+def inside(img: Img.Raster, +xx: U32, +yy: U32) -> Bool:
+  match img:
+    case Img.Raster{ww, hh, _px}:
+      Bool.and(Nat.is_lt(U32.to_nat(xx), U32.to_nat(ww)), Nat.is_lt(U32.to_nat(yy), U32.to_nat(hh)))
+
+# where (x, y) sits in the samples of a raster of width w: y * w + x, as a Nat
+def spot(ww: U32, xx: U32, yy: U32) -> Nat:
+  Nat.add(Nat.mul(U32.to_nat(yy), U32.to_nat(ww)), U32.to_nat(xx))
+
+# The laws below take w * h < 2^32 as a U32 `area` whose value is w * h: a
+# Nat is below 2^32 exactly when it is some U32's value. (A closed 2^32 in a
+# law would be expanded in unary by the checker.)
+
+# LAW: fill(w, h, c) is well formed, for every w and h with w * h < 2^32 and every c
+# IMG-RAS-1
+law fill_wf:
+  for +ww: U32
+  for +hh: U32
+  for +color: U32
+  for +area: U32
+  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(ww), U32.to_nat(hh)) : Nat}
+  {wf(Img.fill(ww, hh, color)) == True{} : Bool}
+
+# LAW: every sample of fill(w, h, c) is c, for every w, h and c
+# IMG-RAS-1
+law fill_every:
+  for +ww: U32
+  for +hh: U32
+  for +color: U32
+  for kk: Nat
+  for +vv: U32
+  for h_at: {List.get(&2, U32, Img.pixels(Img.fill(ww, hh, color)), kk) == Some{vv} : Maybe<&2, U32>}
+  {vv == color : U32}
+
+# LAW: inside the raster, get(r, x, y) is sample y * w + x, when w * h < 2^32
+# IMG-RAS-2
+law get_inside:
+  for +img: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for +area: U32
+  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(Img.width(img)), U32.to_nat(Img.height(img))) : Nat}
+  for +h_in: {inside(img, xx, yy) == True{} : Bool}
+  {Img.get(img, xx, yy) == List.get(&2, U32, Img.pixels(img), spot(Img.width(img), xx, yy)) : Maybe<&2, U32>}
+
+# LAW: inside a well-formed raster, get(r, x, y) is some, when w * h < 2^32
+# IMG-RAS-2
+law get_inside_some:
+  for +img: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for +area: U32
+  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(Img.width(img)), U32.to_nat(Img.height(img))) : Nat}
+  for h_wf: {wf(img) == True{} : Bool}
+  for +h_in: {inside(img, xx, yy) == True{} : Bool}
+  {Maybe.is_some(&2, U32, Img.get(img, xx, yy)) == True{} : Bool}
+
+# LAW: outside the raster, get(r, x, y) is none, for every raster
+# IMG-RAS-2
+law get_outside:
+  for +img: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for h_out: {inside(img, xx, yy) == False{} : Bool}
+  {Img.get(img, xx, yy) == None{} : Maybe<&2, U32>}
+
+# LAW: inside the raster, set(r, x, y, c) replaces sample y * w + x with c and
+# nothing else, when w * h < 2^32
+# IMG-RAS-2
+law set_inside:
+  for +img: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for +color: U32
+  for +area: U32
+  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(Img.width(img)), U32.to_nat(Img.height(img))) : Nat}
+  for +h_in: {inside(img, xx, yy) == True{} : Bool}
+  {Img.set(img, xx, yy, color) == Img.raster(Img.width(img), Img.height(img),
+    List.set(&2, U32, Img.pixels(img), spot(Img.width(img), xx, yy), color)) : Img.Raster}
+
+# LAW: outside the raster, set(r, x, y, c) is r, for every raster
+# IMG-RAS-2
+law set_outside:
+  for +img: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for +color: U32
+  for h_out: {inside(img, xx, yy) == False{} : Bool}
+  {Img.set(img, xx, yy, color) == img : Img.Raster}
+
+# how much of the span x .. x + c - 1 lies in 0 .. w - 1: min(c, w - x), and
+# 0 when x >= w (Nat.sub stops at 0)
+def cut(ww: U32, xx: U32, cc: U32) -> Nat:
+  Nat.min(U32.to_nat(cc), Nat.sub(U32.to_nat(ww), U32.to_nat(xx)))
+
+# one side of a crop: the intersection's side aa, or 0 when either side of
+# the intersection (aa or bb) is 0
+def side(aa: Nat, bb: Nat) -> Nat:
+  match aa bb:
+    case 0n _bb:
+      0n
+    case 1n+_pa 0n:
+      0n
+    case 1n+pa 1n+_pb:
+      1n+pa
+
+# LAW: crop's width and height are those of the rectangle's intersection with the raster, 0 by 0 when that is
+# empty, for every raster
+# IMG-RAS-3
+law crop_size:
+  for +img: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for +cw: U32
+  for +ch: U32
+  {(U32.to_nat(Img.width(Img.crop(img, xx, yy, cw, ch))), U32.to_nat(Img.height(Img.crop(img, xx, yy, cw, ch)))) ==
+    (side(cut(Img.width(img), xx, cw), cut(Img.height(img), yy, ch)),
+      side(cut(Img.height(img), yy, ch), cut(Img.width(img), xx, cw))) : Nat & Nat}
+
+# LAW: crop of a well-formed raster is well formed, when w * h < 2^32
+# IMG-RAS-3
+law crop_wf:
+  for +img: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for +cw: U32
+  for +ch: U32
+  for +area: U32
+  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(Img.width(img)), U32.to_nat(Img.height(img))) : Nat}
+  for h_wf: {wf(img) == True{} : Bool}
+  {wf(Img.crop(img, xx, yy, cw, ch)) == True{} : Bool}
+
+# LAW: the crop's sample at (i, j) is the raster's sample at (x + i, y + j), for every point (i, j) of the crop of
+# a well-formed raster, when w * h < 2^32
+# IMG-RAS-3
+law crop_at:
+  for +img: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for +cw: U32
+  for +ch: U32
+  for +area: U32
+  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(Img.width(img)), U32.to_nat(Img.height(img))) : Nat}
+  for h_wf: {wf(img) == True{} : Bool}
+  for +ii: Nat
+  for +jj: Nat
+  for hi: {Nat.is_lt(ii, U32.to_nat(Img.width(Img.crop(img, xx, yy, cw, ch)))) == True{} : Bool}
+  for hj: {Nat.is_lt(jj, U32.to_nat(Img.height(Img.crop(img, xx, yy, cw, ch)))) == True{} : Bool}
+  {List.get(&2, U32, Img.pixels(Img.crop(img, xx, yy, cw, ch)),
+    Nat.add(Nat.mul(jj, U32.to_nat(Img.width(Img.crop(img, xx, yy, cw, ch)))), ii)) ==
+    List.get(&2, U32, Img.pixels(img),
+      Nat.add(Nat.mul(Nat.add(U32.to_nat(yy), jj), U32.to_nat(Img.width(img))), Nat.add(U32.to_nat(xx), ii))) :
+    Maybe<&2, U32>}
+
+# does src, pasted at (x, y), cover the point (i, j): x <= i < x + sw and
+# y <= j < y + sh, as Nats
+def covers(+xx: U32, +yy: U32, src: Img.Raster, +ii: Nat, +jj: Nat) -> Bool:
+  match src:
+    case Img.Raster{sw, sh, _sp}:
+      Bool.and(Bool.and(Nat.is_le(U32.to_nat(xx), ii), Nat.is_lt(ii, Nat.add(U32.to_nat(xx), U32.to_nat(sw)))),
+        Bool.and(Nat.is_le(U32.to_nat(yy), jj), Nat.is_lt(jj, Nat.add(U32.to_nat(yy), U32.to_nat(sh)))))
+
+# LAW: blit(dst, src, x, y) has dst's width and height, for every dst, src and offset
+# IMG-RAS-4
+law blit_size:
+  for +dst: Img.Raster
+  for +src: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  {Img.size(Img.blit(dst, src, xx, yy)) == Img.size(dst) : U32 & U32}
+
+# LAW: blit of a well-formed src onto a well-formed dst is well formed, when dst's w * h < 2^32
+# IMG-RAS-4
+law blit_wf:
+  for +dst: Img.Raster
+  for +src: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for +area: U32
+  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(Img.width(dst)), U32.to_nat(Img.height(dst))) : Nat}
+  for h_dst: {wf(dst) == True{} : Bool}
+  for h_src: {wf(src) == True{} : Bool}
+  {wf(Img.blit(dst, src, xx, yy)) == True{} : Bool}
+
+# LAW: at every point (i, j) of dst that src covers, blit takes src's sample at (i - x, j - y), for well-formed
+# dst and src, when dst's w * h < 2^32
+# IMG-RAS-4
+law blit_in:
+  for +dst: Img.Raster
+  for +src: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for +area: U32
+  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(Img.width(dst)), U32.to_nat(Img.height(dst))) : Nat}
+  for h_dst: {wf(dst) == True{} : Bool}
+  for h_src: {wf(src) == True{} : Bool}
+  for +ii: Nat
+  for +jj: Nat
+  for +hi: {Nat.is_lt(ii, U32.to_nat(Img.width(dst))) == True{} : Bool}
+  for +hj: {Nat.is_lt(jj, U32.to_nat(Img.height(dst))) == True{} : Bool}
+  for +h_cov: {covers(xx, yy, src, ii, jj) == True{} : Bool}
+  {List.get(&2, U32, Img.pixels(Img.blit(dst, src, xx, yy)), Nat.add(Nat.mul(jj, U32.to_nat(Img.width(dst))), ii)) ==
+    List.get(&2, U32, Img.pixels(src),
+      Nat.add(Nat.mul(Nat.sub(jj, U32.to_nat(yy)), U32.to_nat(Img.width(src))), Nat.sub(ii, U32.to_nat(xx)))) :
+    Maybe<&2, U32>}
+
+# LAW: at every point (i, j) of dst that src does not cover, blit keeps dst's sample, for well-formed dst and src,
+# when dst's w * h < 2^32
+# IMG-RAS-4
+law blit_out:
+  for +dst: Img.Raster
+  for +src: Img.Raster
+  for +xx: U32
+  for +yy: U32
+  for +area: U32
+  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(Img.width(dst)), U32.to_nat(Img.height(dst))) : Nat}
+  for h_dst: {wf(dst) == True{} : Bool}
+  for h_src: {wf(src) == True{} : Bool}
+  for +ii: Nat
+  for +jj: Nat
+  for +hi: {Nat.is_lt(ii, U32.to_nat(Img.width(dst))) == True{} : Bool}
+  for +hj: {Nat.is_lt(jj, U32.to_nat(Img.height(dst))) == True{} : Bool}
+  for +h_cov: {covers(xx, yy, src, ii, jj) == False{} : Bool}
+  {List.get(&2, U32, Img.pixels(Img.blit(dst, src, xx, yy)), Nat.add(Nat.mul(jj, U32.to_nat(Img.width(dst))), ii)) ==
+    List.get(&2, U32, Img.pixels(dst), Nat.add(Nat.mul(jj, U32.to_nat(Img.width(dst))), ii)) : Maybe<&2, U32>}
 # ---- wp5-png-decode ----
 
 # the four bytes of a U32, most significant first
