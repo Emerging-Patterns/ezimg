@@ -313,14 +313,6 @@ def map(~ff: U32 -> U32, img: Raster) -> Raster:
     case Raster{+w, +h, +px}:
       Raster{w, h, map.go(~ff, px)}
 
-# an opaque U32 sample has no alpha to scale, so this is the picture
-def premultiply(img: Raster) -> Raster:
-  img
-
-# an opaque U32 sample has no alpha to divide back out, so this is the picture
-def straight(img: Raster) -> Raster:
-  img
-
 # the PNG signature when the bytes open with it, otherwise none
 def parse_signature(bytes: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match bytes:
