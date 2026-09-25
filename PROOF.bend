@@ -217,3 +217,160 @@ def sig.only.go(
 
 def Laws.sig_only(xs, h_some):
   sig.only.go(Img.sig.match(Img.png_sig(), xs, True{}), xs, {==}, h_some)
+
+# ---- wp4-png-encode ----
+
+# the alpha byte with the mask first is the top byte shifted down: the 32
+# bits taken apart, both sides are the same word
+def alpha.mask(cc: U32) -> {Png.enc.a(cc) == U32.shrn(cc, 24n) : U32}:
+  match cc:
+    case U32{w0}:
+      match w0:
+        case WCon{_b0, WCon{_b1, WCon{_b2, WCon{_b3, w4}}}}:
+          match w4:
+            case WCon{_b4, WCon{_b5, WCon{_b6, WCon{_b7, w8}}}}:
+              match w8:
+                case WCon{_b8, WCon{_b9, WCon{_b10, WCon{_b11, w12}}}}:
+                  match w12:
+                    case WCon{_b12, WCon{_b13, WCon{_b14, WCon{_b15, w16}}}}:
+                      match w16:
+                        case WCon{_b16, WCon{_b17, WCon{_b18, WCon{_b19, w20}}}}:
+                          match w20:
+                            case WCon{_b20, WCon{_b21, WCon{_b22, WCon{_b23, w24}}}}:
+                              match w24:
+                                case WCon{_b24, WCon{_b25, WCon{_b26, WCon{_b27, w28}}}}:
+                                  match w28:
+                                    case WCon{_b28, WCon{_b29, WCon{_b30, WCon{_b31, w32}}}}:
+                                      match w32:
+                                        case WNil{}:
+                                          {==}
+
+# enc.opaque with the flag z is z and every sample opaque
+def opaque.all(
+  px: List<&2, U32>,
+  zz: Bool
+) -> {Png.enc.opaque(px, zz) == Bool.and(zz, Laws.all_opaque(px)) : Bool}:
+  match px zz:
+    case Nil{} False{}:
+      {==}
+    case Nil{} True{}:
+      {==}
+    case _cc <> _tl False{}:
+      {==}
+    case +cc <> tl True{}:
+      +ea = Equal.cong(U32, Bool, uu => U32.is_eq(uu, 255), Png.enc.a(cc), U32.shrn(cc, 24n), alpha.mask(cc))
+      Equal.trans(Bool, Png.enc.opaque(tl, U32.is_eq(Png.enc.a(cc), 255)),
+        Bool.and(U32.is_eq(Png.enc.a(cc), 255), Laws.all_opaque(tl)),
+        Bool.and(Laws.opaque(cc), Laws.all_opaque(tl)),
+        opaque.all(tl, U32.is_eq(Png.enc.a(cc), 255)),
+        Equal.cong(Bool, Bool, bb => Bool.and(bb, Laws.all_opaque(tl)), U32.is_eq(Png.enc.a(cc), 255),
+          Laws.opaque(cc), ea))
+
+# out opens with the signature and an IHDR of colour type ct
+def head.ty(+ww: U32, +hh: U32, +ct: U32, out: List<&2, U32>) -> Type:
+  &rest: List<&2, U32> -> {out == List.append(&2, U32, Laws.ihdr_head(ww, hh, ct), rest) : List<&2, U32>}
+
+# one stored block or several: either way the signature and IHDR come first
+def head.seal.at(
+  zz: Bool,
+  +ww: U32,
+  +hh: U32,
+  +op: Bool,
+  +raw: List<&2, U32>,
+  +nn: U32
+) -> head.ty(ww, hh, Png.enc.ct(op), Png.enc.seal.at(zz, ww, hh, op, raw, nn)):
+  match zz:
+    case False{}:
+      (List.drop(&2, U32, Png.enc.seal.one(ww, hh, op, raw, nn), 29n), {==})
+    case True{}:
+      (List.drop(&2, U32, Png.enc.seal.wide(ww, hh, op, raw, nn), 29n), {==})
+
+# whatever the scanlines and their count, sealing puts the signature and IHDR first
+def head.seal(
+  +ww: U32,
+  +hh: U32,
+  +op: Bool,
+  got: List<&2, U32> & U32
+) -> head.ty(ww, hh, Png.enc.ct(op), Png.enc.seal(ww, hh, op, got)):
+  match got:
+    case (raw, +nn):
+      head.seal.at(U32.is_gt(nn, 65535), ww, hh, op, raw, nn)
+
+# every path paint takes puts the signature and IHDR first
+def head.paint.at(
+  zz: Bool,
+  +ww: U32,
+  +hh: U32,
+  op: Bool,
+  +px: List<&2, U32>,
+  +nn: U32
+) -> head.ty(ww, hh, Png.enc.ct(op), Png.enc.paint.at(zz, ww, hh, op, px, nn)):
+  match zz op:
+    case False{} False{}:
+      head.seal(ww, hh, False{}, Png.enc.raw(px, 0n, U32.to_nat(ww), False{}, [], 0))
+    case False{} True{}:
+      head.seal(ww, hh, True{}, Png.enc.raw(px, 0n, U32.to_nat(ww), True{}, [], 0))
+    case True{} False{}:
+      head.seal(ww, hh, False{}, Png.enc.raw(px, 0n, U32.to_nat(ww), False{}, [], 0))
+    case True{} True{}:
+      (List.drop(&2, U32, Png.enc.wide.rgb(ww, hh, px, nn), 29n), {==})
+
+# the law's form, over a Maybe
+def head.some.ty(+ww: U32, +hh: U32, +ct: U32, mm: Maybe<&2, List<&2, U32>>) -> Type:
+  &rest: List<&2, U32> -> {mm == Some{List.append(&2, U32, Laws.ihdr_head(ww, hh, ct), rest)} :
+    Maybe<&2, List<&2, U32>>}
+
+# a head of one colour type is a head of an equal one, under Some
+def head.some(
+  +ww: U32,
+  +hh: U32,
+  +ca: U32,
+  +cb: U32,
+  +out: List<&2, U32>,
+  ec: {ca == cb : U32},
+  hd: head.ty(ww, hh, ca, out)
+) -> head.some.ty(ww, hh, cb, Some{out}):
+  (rest, eo) = hd
+  +e_head = Equal.cong(U32, List<&2, U32>, cc => List.append(&2, U32, Laws.ihdr_head(ww, hh, cc), rest), ca, cb, ec)
+  (rest, Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, ll => Some{ll}, out,
+    List.append(&2, U32, Laws.ihdr_head(ww, hh, cb), rest),
+    Equal.trans(List<&2, U32>, out, List.append(&2, U32, Laws.ihdr_head(ww, hh, ca), rest),
+      List.append(&2, U32, Laws.ihdr_head(ww, hh, cb), rest), eo, e_head)))
+
+# enc.ct is the law's colour_type
+def ct.same(bb: Bool) -> {Png.enc.ct(bb) == Laws.colour_type(bb) : U32}:
+  match bb:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# the code's colour type is the law's
+def ct.law(
+  +px: List<&2, U32>
+) -> {Png.enc.ct(Png.enc.opaque(px, True{})) == Laws.colour_type(Laws.all_opaque(px)) : U32}:
+  Equal.trans(U32, Png.enc.ct(Png.enc.opaque(px, True{})), Png.enc.ct(Laws.all_opaque(px)),
+    Laws.colour_type(Laws.all_opaque(px)),
+    Equal.cong(Bool, U32, bb => Png.enc.ct(bb), Png.enc.opaque(px, True{}), Laws.all_opaque(px),
+      opaque.all(px, True{})),
+    ct.same(Laws.all_opaque(px)))
+
+# the guard passed, or h_some is false
+def head.open(
+  zz: Bool,
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>,
+  h_some: {Maybe.is_some(&2, List<&2, U32>, Png.enc.open(zz, ww, hh, px)) == True{} : Bool}
+) -> head.some.ty(ww, hh, Laws.colour_type(Laws.all_opaque(px)), Png.enc.open(zz, ww, hh, px)):
+  match zz:
+    case False{}:
+      Empty.absurd(head.some.ty(ww, hh, Laws.colour_type(Laws.all_opaque(px)), None{}), U32L.false_true(h_some))
+    case True{}:
+      +op = Png.enc.opaque(px, True{})
+      +nn = Png.enc.nbytes(op, ww, hh)
+      head.some(ww, hh, Png.enc.ct(op), Laws.colour_type(Laws.all_opaque(px)), Png.enc.paint(ww, hh, op, px),
+        ct.law(px), head.paint.at(U32.is_gt(nn, 65535), ww, hh, op, px, nn))
+
+def Laws.png_ihdr(ww, hh, px, h_some):
+  head.open(Png.enc.good(ww, hh, px), ww, hh, px, h_some)

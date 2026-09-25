@@ -87,3 +87,46 @@ law sig_only:
   for +xs: List<&2, U32>
   for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.parse_signature(xs)) == True{} : Bool}
   {xs == List.append(&2, U32, Img.png_sig(), List.drop(&2, U32, xs, 8n)) : List<&2, U32>}
+
+# ---- wp4-png-encode ----
+
+# a sample's alpha is 255: its top byte, shifted down, is 255
+def opaque(cc: U32) -> Bool:
+  U32.is_eq(U32.shrn(cc, 24n), 255)
+
+# every sample's alpha is 255
+def all_opaque(px: List<&2, U32>) -> Bool:
+  List.all(~&2, ~U32, ~opaque, px)
+
+# the colour type the PNG specification gives an 8-bit picture: 2 (RGB) when
+# every sample is opaque, 6 (RGBA) otherwise
+def colour_type(opq: Bool) -> U32:
+  match opq:
+    case True{}:
+      2
+    case False{}:
+      6
+
+# a word's four bytes, most significant first
+def be32(+nn: U32) -> List<&2, U32>:
+  [((nn >> 24n : U32) .&. 255 : U32), ((nn >> 16n : U32) .&. 255 : U32), ((nn >> 8n : U32) .&. 255 : U32),
+    (nn .&. 255 : U32)]
+
+# the signature, then IHDR's length (13), its type, and its data: width,
+# height, bit depth 8, the colour type, compression 0, filter 0, interlace 0
+def ihdr_head(+ww: U32, +hh: U32, +ct: U32) -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), List.append(&2, U32, [0, 0, 0, 13, 73, 72, 68, 82],
+    List.append(&2, U32, be32(ww), List.append(&2, U32, be32(hh), [8, ct, 0, 0, 0]))))
+
+# LAW: an encoded PNG opens with the signature and an IHDR chunk of the
+# raster's width and height, bit depth 8, compression, filter and interlace 0,
+# and colour type 2 when every sample has alpha 255, 6 otherwise
+# IMG-PNG-4
+law png_ihdr:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_png(Img.raster(ww, hh, px))) == True{} : Bool}
+  exs rest: List<&2, U32>
+  {Img.encode_png(Img.raster(ww, hh, px)) ==
+    Some{List.append(&2, U32, ihdr_head(ww, hh, colour_type(all_opaque(px))), rest)} : Maybe<&2, List<&2, U32>>}

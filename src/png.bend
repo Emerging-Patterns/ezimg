@@ -1003,9 +1003,10 @@ def enc.hi(+nn: U32) -> U32:
 def enc.be(+nn: U32) -> List<&2, U32>:
   [((nn >> 24n : U32) .&. 255 : U32), ((nn >> 16n : U32) .&. 255 : U32), enc.hi(nn), enc.byte(nn)]
 
-# alpha of a 0xAARRGGBB sample
+# alpha of a 0xAARRGGBB sample. The mask is the first operand, so once a
+# law takes the sample's bits apart, the masked byte reduces to them.
 def enc.a(+cc: U32) -> U32:
-  ((cc >> 24n : U32) .&. 255 : U32)
+  U32.and(255, U32.shrn(cc, 24n))
 
 # red of a 0xAARRGGBB sample
 def enc.r(+cc: U32) -> U32:
@@ -1500,16 +1501,18 @@ def enc.wide.rgb.go(
 
 # a colour-type-2 picture whose filtered bytes do not fit in one stored block.
 # Each filter and channel byte is consed into its stored block, with Adler-32
-# and the IDAT CRC, so the raw scanline list is not built.
+# and the IDAT CRC, so the raw scanline list is not built. The signature and
+# IHDR go in front once the rest is reversed.
 def enc.wide.rgb(+ww: U32, +hh: U32, px: List<&2, U32>, +nn: U32) -> List<&2, U32>:
   +ih = enc.chunk(tag.ihdr(), enc.ihdr(ww, hh, enc.ct(True{})))
   +ie = enc.chunk(tag.iend(), [])
-  +acc = enc.cat.go(enc.be(enc.idat.ln(nn)), enc.cat.go(ih, enc.cat.go(enc.sig(), [])))
-  enc.wide.rgb.go(enc.crc.list(enc.be(tag.idat()), 4294967295, acc), px, ww, nn, ie)
+  +acc = enc.cat.go(enc.be(enc.idat.ln(nn)), [])
+  enc.cat(enc.sig(), enc.cat(ih, enc.wide.rgb.go(enc.crc.list(enc.be(tag.idat()), 4294967295, acc), px, ww, nn, ie)))
 
-# one picture whose filtered bytes do not fit in a single stored block.
-# Signature, IHDR, the IDAT length, and the payload are consed newest-first
-# and reversed once. Adler-32 stays a separate pass over the raw bytes.
+# one picture whose filtered bytes do not fit in a single stored block. The
+# IDAT length and the payload are consed newest-first and reversed once, then
+# the signature and IHDR go in front. Adler-32 stays a separate pass over the
+# raw bytes.
 def enc.seal.wide(
   +ww: U32,
   +hh: U32,
@@ -1520,8 +1523,8 @@ def enc.seal.wide(
   +ih = enc.chunk(tag.ihdr(), enc.ihdr(ww, hh, enc.ct(op)))
   +ie = enc.chunk(tag.iend(), [])
   +sum = Inf.adler.of(raw)
-  +acc = enc.cat.go(enc.be(enc.idat.ln(nn)), enc.cat.go(ih, enc.cat.go(enc.sig(), [])))
-  enc.seal.body(enc.crc.list(enc.be(tag.idat()), 4294967295, acc), raw, nn, sum, ie)
+  +acc = enc.cat.go(enc.be(enc.idat.ln(nn)), [])
+  enc.cat(enc.sig(), enc.cat(ih, enc.seal.body(enc.crc.list(enc.be(tag.idat()), 4294967295, acc), raw, nn, sum, ie)))
 
 # signature, IHDR, IDAT, IEND when the raw bytes fit in one stored block
 def enc.seal.one(+ww: U32, +hh: U32, op: Bool, +raw: List<&2, U32>, +nn: U32) -> List<&2, U32>:
