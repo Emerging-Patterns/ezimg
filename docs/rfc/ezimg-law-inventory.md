@@ -3,11 +3,15 @@
 This is the evidence behind `docs/rfc/ezimg-spec.md`. It was read at
 `cbc4358` (release 0.2.1), with bend 2.0.25 (the release the pinned
 `bendlang/bend` flake input fetches). The proof gate was run as
-`bend ezimg/PROOF.bend`. The linter was the pinned bolt (`995adc9`,
+`bend PROOF.bend`. The linter was the pinned bolt (`995adc9`,
 v0.4.0) built from source, and bolt v1.7.0 for comparison. Probes ran
 against the repo's own bench driver (`bench/main.bend`) built natively
 from a fresh `git archive` of that commit, with Pillow 12.3.0 as the other
 implementation.
+
+Paths and line numbers below are for the `main.bend` and `src/` layout
+`ez init` lays out, which the tree moved to after this reading; the code is
+otherwise unchanged.
 
 The inventory is a progress tracker. When the rollout ends, what still
 matters goes into the RFC and this file is deleted.
@@ -32,7 +36,7 @@ marked Confirmed (run against the binary) or by reading.
 
 | Check | Result |
 | :---- | :---- |
-| `bend ezimg/PROOF.bend` | first line `All terms check.`, exit 0, 2 min 11 s |
+| `bend PROOF.bend` | first line `All terms check.`, exit 0, 2 min 11 s |
 | pinned bolt (v0.4.0) over the tree | `clean`, exit 0, 4 s |
 | bolt v1.7.0 over the same tree | 1161 errors: S004 810, S003 177, L001 89, L002 85 |
 | `nix flake check` (CI) | runs `ez test` (proofs), bolt v0.4.0, and the Pillow check; not run here (no nix), its three parts were run by hand |
@@ -56,7 +60,7 @@ There is no SPEC.md, so `trace` has nothing to check.
 
 | File | Laws | Quantified | Closed | Quantified by `{==}` | Points toward nothing |
 | :---- | ---: | ---: | ---: | ---: | ---: |
-| `ezimg/LAWS.bend` | 85 | 0 | 85 | 0 | 20 |
+| `LAWS.bend` | 85 | 0 | 85 | 0 | 20 |
 
 What ezimg proves today: that the checker computes the same value as the
 law on 85 fixed inputs. No law says anything about a second input. The
@@ -70,7 +74,7 @@ and third are false today (F-1, F-2).
 The 65 laws that point toward a requirement are useful as a map: they say
 which behavior the author meant to cover. They are not evidence for it.
 
-## Inventory: ezimg/LAWS.bend
+## Inventory: LAWS.bend
 
 Fixtures (`swatch`, `fix.*`, `enc.*`, `flat.*`, `step.*`) are defs in the
 law file, not laws, and are not listed.
@@ -200,37 +204,37 @@ each claim they make is checked here.
 
 | Claim (source) | Verdict | Evidence |
 | :---- | :---- | :---- |
-| "A picture is a Raster: a width, a height, and row-major samples" (README) | partly, Confirmed | `raster` (`main.bend:26`) accepts any list. A 2 by 2 raster with one sample is a value every helper accepts, and `blit` of a short source shrinks the destination (F-3). |
-| "opaque U32 samples" (`main.bend:9`) | fails, Confirmed | PNG decode returns alpha in the top byte (`0x80FF0000` for colour type 6), and `encode_png` reads it. |
-| `premultiply` and `straight` "leave the picture" because samples are opaque (`main.bend:246`) | fails, by reading | both are the identity (`main.bend:247`, `251`), while decoded samples carry alpha (F-5). |
-| `fill` is width times height samples (`main.bend:60`) | partly, Confirmed | `U32` product wraps: `fill(65536, 65536, 0)` has count 0. |
-| `get`, `set`, `crop`, `blit`, `map` (`main.bend:88` to `244`) | holds on well-formed rasters, by reading | index `y * w + x` stays below `w * h` once both are in range. |
+| "A picture is a Raster: a width, a height, and row-major samples" (README) | partly, Confirmed | `raster` (`main.bend:28`) accepts any list. A 2 by 2 raster with one sample is a value every helper accepts, and `blit` of a short source shrinks the destination (F-3). |
+| "opaque U32 samples" (`main.bend:11`) | fails, Confirmed | PNG decode returns alpha in the top byte (`0x80FF0000` for colour type 6), and `encode_png` reads it. |
+| `premultiply` and `straight` "leave the picture" because samples are opaque (`main.bend:248`) | fails, by reading | both are the identity (`main.bend:249`, `253`), while decoded samples carry alpha (F-5). |
+| `fill` is width times height samples (`main.bend:62`) | partly, Confirmed | `U32` product wraps: `fill(65536, 65536, 0)` has count 0. |
+| `get`, `set`, `crop`, `blit`, `map` (`main.bend:90` to `246`) | holds on well-formed rasters, by reading | index `y * w + x` stays below `w * h` once both are in range. |
 | `decode_png` "returns a raster for an 8-bit PNG" (README) | holds, Confirmed | colour types 0, 2, 3, 4, 6 at depth 8, with tRNS, split IDAT, ancillary chunks, fixed and dynamic Huffman, up to 300 by 300, all equal Pillow's RGBA. |
 | decode_png refuses what it cannot read | holds, Confirmed | depth 1, 2, 4, 16, interlace 1, bad CRC on any chunk, unknown critical chunk, trailing or missing IDAT bytes, index past the palette, missing PLTE: all none. Several of these Pillow accepts (F-6). |
-| `encode_png` "none when a side is zero or the sample count is not the area" (`main.bend:284`) | holds, Confirmed | 0 by 0, short, long, and a wrapped area (65536 by 65537 with 65536 samples) are all none. |
+| `encode_png` "none when a side is zero or the sample count is not the area" (`main.bend:286`) | holds, Confirmed | 0 by 0, short, long, and a wrapped area (65536 by 65537 with 65536 samples) are all none. |
 | PNG encode then decode "returns the picture" (README) | holds on every case run, Confirmed | 5 closed laws and the bench's 3 Pillow round trips; not proved for any other picture. |
 | `decode_jpeg`: "a baseline sequential JPEG, and none when the bytes are not one" (README) | fails, Confirmed | 4:2:2 returns a raster whose second luma block of each MCU is never painted: half the samples are `0x000000` (F-2). |
-| JPEG decode samples are "packed RGB, the same layout decode returns" (`jpeg_enc.bend:3`) | partly, Confirmed | colour decode returns `0x00RRGGBB`; gray decode returns the lone Y value, not packed (F-1). |
+| JPEG decode samples are "packed RGB, the same layout decode returns" (`src/jpeg_enc.bend:3`) | partly, Confirmed | colour decode returns `0x00RRGGBB`; gray decode returns the lone Y value, not packed (F-1). |
 | progressive SOF2 and arithmetic SOF9 "decode as none" (README) | holds, Confirmed | also SOF1 and CMYK are none. |
 | `encode_jpeg` writes a baseline 4:4:4 JPEG (README) | partly, Confirmed | a 0 by 0 raster gives 4 bytes that nothing decodes; a 2 by 1 raster with one sample gives a valid 2 by 1 file with the missing sample made up (F-4). |
 | JPEG encode then decode | holds within 3 levels per channel, Confirmed | Pillow check: PSNR 48 to 51 on 16 by 16 gradient and noise; exact on the solids in the laws. |
 
 ## What each entry point reads
 
-ezimg is a library of pure functions. No def in `ezimg/` performs IO, so
+ezimg is a library of pure functions. No def in `main.bend` or `src/` performs IO, so
 every decision is already a value a law can reach: there is no World or
 planner split to make. The only inputs are the arguments.
 
 | Entry | Reads | Notes |
 | :---- | :---- | :---- |
-| `decode_png(bytes)` | bytes | fuel for the chunk walk is its own counter (`png.bend:1175`), not a silent stop |
+| `decode_png(bytes)` | bytes | fuel for the chunk walk is its own counter (`src/png.bend:1175`), not a silent stop |
 | `encode_png(img)` | w, h, samples | |
 | `decode_jpeg(bytes)` | bytes | |
-| `encode_jpeg(img)` | w, h, samples | no quality input: every quantisation step is 1 (`jpeg_enc.bend:4`) |
+| `encode_jpeg(img)` | w, h, samples | no quality input: every quantisation step is 1 (`src/jpeg_enc.bend:4`) |
 | raster helpers | the raster, coordinates | |
 
 `bench/main.bend` is the only IO, and it is a host driver, not part of the
-package (`ez.toml` entry is `ezimg/main.bend`).
+package (`ez.toml` entry is `main.bend`).
 
 ## Findings
 
@@ -280,7 +284,7 @@ requirement depends on.
   "8-bit", so this is documented scope, not a bug.
 - **F-8. `fill` and `count` wrap** at `w * h >= 2^32`.
 - **F-9. Test scaffolding in the package.** `Jenc.spots` exists only for
-  `jpeg_enc_markers`; the marker defs in `jpeg.bend` are named only by
+  `jpeg_enc_markers`; the marker defs in `src/jpeg.bend` are named only by
   their own closed laws. Both exist to satisfy bolt v0.4.0's coverage rule.
 
 ### Behavior the code guarantees that no statement mentions

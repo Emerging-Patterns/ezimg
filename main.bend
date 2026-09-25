@@ -1,10 +1,12 @@
-# ezimg: images for Bend 2. A Raster is a width, a height, and row-major
-# samples. PNG decode reads 8-bit images. PNG encode writes colour type 2 or
-# 6. JPEG decode reads a baseline sequential frame, and encode_jpeg writes one.
+# ezimg: images for Bend 2, with PNG and baseline JPEG decode and encode
+#
+# A Raster is a width, a height, and row-major samples. PNG decode reads 8-bit
+# images. PNG encode writes colour type 2 or 6. JPEG decode reads a baseline
+# sequential frame, and encode_jpeg writes one.
 import Base
-import ./png.bend as Png
-import ./jpeg.bend as Jpeg
-import ./jpeg_enc.bend as Jenc
+import ./src/png.bend as Png
+import ./src/jpeg.bend as Jpeg
+import ./src/jpeg_enc.bend as Jenc
 
 # a picture: width, height, and opaque U32 samples in row-major order
 type Raster is Data:

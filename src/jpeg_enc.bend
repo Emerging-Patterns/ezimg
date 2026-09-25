@@ -1,4 +1,4 @@
-# ezimg: baseline JPEG encode. Sequential 8-bit Huffman (SOF0) and JFIF APP0.
+# src/jpeg_enc: baseline JPEG encode. Sequential 8-bit Huffman (SOF0) and JFIF APP0.
 # Colour is 4:4:4 YCbCr, no subsampling: one 8 by 8 block per component per MCU.
 # Samples are packed RGB, (R << 16) | (G << 8) | B, the same layout decode returns.
 # Quantisation steps are all 1, so an integer coefficient is kept whole.

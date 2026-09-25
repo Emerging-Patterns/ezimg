@@ -43,7 +43,7 @@ law, and a rollout that replaces the closed laws with those laws.
 | Sample | one `U32`. After REVIEW-1, packed `0xAARRGGBB` |
 | Closed law | a law with no `for` or `exs` binder: a unit test the checker runs |
 | Quantified law | a law with at least one binder: a statement about every value of its type |
-| Proof gate | `ez test` over `ezimg/PROOF.bend`, passing only on the exact first line `All terms check.` |
+| Proof gate | `ez test` over `PROOF.bend`, passing only on the exact first line `All terms check.` |
 | Proved | a requirement backed by quantified laws tagged with its ID, passing the gate |
 | Trusted | a requirement the gate cannot check, with a reason in the trust table |
 | Pending | a Proved row whose laws have not all landed |
@@ -57,8 +57,8 @@ decoder and encoder. It has no IO. Every decision is already a function of
 its arguments, so unlike ez and bolt there is no World to define and no
 planner to extract. Every behavior is in reach of a law as the code stands.
 
-Today the laws are 85 closed equalities in `ezimg/LAWS.bend`, each proved by
-`{==}` in `ezimg/PROOF.bend`. The README's Compliance section cites them as
+Today the laws are 85 closed equalities in `LAWS.bend`, each proved by
+`{==}` in `PROOF.bend`. The README's Compliance section cites them as
 conformance to ISO/IEC 15948 and ITU-T T.81. Each line of that section is
 true of the fixture its law uses and of nothing else. The pinned bolt
 (v0.4.0) calls the tree `clean` because it has no rule against closed laws,
@@ -134,7 +134,7 @@ marked *new*.
 | IMG-RAS-4 | For every well-formed `dst` and `src` and offset `(x, y)`, `blit(dst, src, x, y)` has `dst`'s size, takes `src`'s sample at every point of `dst` that `src` covers, and leaves every other sample of `dst` unchanged. | Proved | pending | |
 | IMG-RAS-5 | For every raster `r` and function `f`, `map(f, r)` has `r`'s size and its sample `k` is `f` of `r`'s sample `k`. | Proved | pending | |
 
-Evidence: inventory rows for `main.bend:26` to `244`. F-3 shows `blit`
+Evidence: inventory rows for `main.bend:28` to `246`. F-3 shows `blit`
 shrinking a destination when the source is malformed, which is why every
 row is stated over well-formed rasters (REVIEW-5). REVIEW-4 recommends
 deleting `premultiply` and `straight`, so they have no row. IMG-RAS-6 is
@@ -158,7 +158,7 @@ law set_frame:
 | IMG-PIX-2 | `encode_jpeg` reads only the low 24 bits of each sample: two rasters that differ only in alpha encode to the same bytes. | Proved | pending | |
 
 Evidence: F-1, Confirmed through the bench driver. Depends on BC-1.
-IMG-PIX-2 holds today by reading (`jpeg_enc.bend:802` and `1099` mask each
+IMG-PIX-2 holds today by reading (`src/jpeg_enc.bend:802` and `1099` mask each
 channel to 8 bits) and on one alpha-0 PNG run through the driver; it
 is the frame law that makes IMG-PIX-1 safe for the encoder.
 
@@ -239,7 +239,7 @@ written fresh, each tagged, in the phase that proves the row.
 
 SPEC.md uses bolt's format: tables headed
 `| ID | Requirement | Level | Status | Law |`, Law cells as
-`ezimg/LAWS.bend <law>` entries joined by `; `, a "Left to prove" section
+`LAWS.bend <law>` entries joined by `; `, a "Left to prove" section
 for pending rows with partial laws, and the trust table. Each law carries
 its row's ID on its own comment line directly above `law`. `trace` at error
 checks both directions.
@@ -281,7 +281,7 @@ BC-1, BC-3 and BC-4 are API breaks and ship together as 0.3.0.
 
 - SPEC.md has no pending rows in IMG-RAS, IMG-PIX and IMG-PNG, and IMG-PNG-2
   is proved.
-- `ezimg/LAWS.bend` has no closed law, and bolt's `closed` and `trace` are
+- `LAWS.bend` has no closed law, and bolt's `closed` and `trace` are
   at error on a bolt of v1.7.0 or newer.
 - The four confirmed bugs are fixed, and the inventory's findings are
   folded into this RFC.

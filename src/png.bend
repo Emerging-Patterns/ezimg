@@ -1,4 +1,4 @@
-# ezimg/png: PNG decode and encode (ISO/IEC 15948 / W3C PNG). Chunks, IHDR,
+# src/png: PNG decode and encode (ISO/IEC 15948 / W3C PNG). Chunks, IHDR,
 # zlib method 0, and filter method 0. Decode reads 8-bit colour types 0, 2, 3,
 # 4, and 6. Encode writes colour type 2 or 6, filter None, and a stored IDAT.
 import Base

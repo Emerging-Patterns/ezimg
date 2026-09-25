@@ -2,11 +2,11 @@
 # pixel helpers, and the PNG clauses. PROOF.bend fills them.
 import Base
 import ./main.bend as Img
-import ./crc.bend as Crc
-import ./inflate.bend as Inf
-import ./png.bend as Png
-import ./jpeg.bend as Jpeg
-import ./jpeg_enc.bend as Jenc
+import ./src/crc.bend as Crc
+import ./src/inflate.bend as Inf
+import ./src/png.bend as Png
+import ./src/jpeg.bend as Jpeg
+import ./src/jpeg_enc.bend as Jenc
 
 # a 2 by 3 picture, six samples
 def swatch() -> Img.Raster:

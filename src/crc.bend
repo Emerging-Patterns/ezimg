@@ -1,4 +1,4 @@
-# ezimg/crc: CRC-32. PNG covers the chunk type and the chunk data with the
+# src/crc: CRC-32. PNG covers the chunk type and the chunk data with the
 # ISO 3309 / ITU-T V.42 polynomial (ISO/IEC 15948 / W3C PNG).
 import Base
 
