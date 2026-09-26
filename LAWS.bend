@@ -2890,3 +2890,382 @@ law jpeg_place:
     hmax,
     vmax}, scan, xx, yy, 0), jpg.point(jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2,
     U32, ent), ri), 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0))) : Maybe<&2, U32>}
+
+# ---- wp12-jpeg-huffman ----
+
+# a bit as 1 or 0
+def jpg.bitu(bb: Bool) -> U32:
+  match bb:
+    case True{}:
+      1
+    case False{}:
+      0
+
+# a code's value: its bits, the first highest, shifted onto acc
+def jpg.num(bs: List<&2, Bool>, acc: U32) -> U32:
+  match bs:
+    case Nil{}:
+      acc
+    case bb <> rest:
+      jpg.num(rest, U32.or(U32.shl(acc), jpg.bitu(bb)))
+
+# the encoder's bit writer given codes one after another, each code a list of bits, the first highest, written
+# with encode.bits at its length and value
+def jpg.write(cs: List<&2, List<&2, Bool>>, pp: Jenc.Put) -> Jenc.Put:
+  match cs:
+    case Nil{}:
+      pp
+    case +cc <> rest:
+      jpg.write(rest, Jenc.encode.bits(pp, U32.from_nat(List.length(&2, Bool, cc)), jpg.num(cc, 0)))
+
+# both answers: the first, then the second
+def jpg.also(ok: Bool, rest: Bool) -> Bool:
+  match ok:
+    case True{}:
+      rest
+    case False{}:
+      match rest:
+        case _r:
+          False{}
+
+# every code has at most 16 bits
+def jpg.codes16(cs: List<&2, List<&2, Bool>>) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case cc <> rest:
+      jpg.also(Nat.is_le(List.length(&2, Bool, cc), 16n), jpg.codes16(rest))
+
+# the reader a read leaves
+def jpg.got.bits(got: Jpeg.Bits & U32) -> Jpeg.Bits:
+  match got:
+    case (bits, _v):
+      bits
+
+# the value a read reads
+def jpg.got.val(got: Jpeg.Bits & U32) -> U32:
+  match got:
+    case (_b, +vv):
+      vv
+
+# one more value before the values and the flag after it
+def jpg.rcons(+vv: U32, got: List<&2, U32> & U32) -> List<&2, U32> & U32:
+  match got:
+    case (vs, +ok):
+      (vv <> vs, ok)
+
+# the reader's ok flag
+def jpg.bits.ok(bits: Jpeg.Bits) -> U32:
+  match bits:
+    case Jpeg.Bits{_n, +ok, _b, _x}:
+      ok
+
+# the values the decoder's bit reader reads with decode.read.n, one code's length at a time, and its ok flag at
+# the end
+def jpg.reads(cs: List<&2, List<&2, Bool>>, +bits: Jpeg.Bits) -> List<&2, U32> & U32:
+  match cs:
+    case Nil{}:
+      ([], jpg.bits.ok(bits))
+    case +cc <> rest:
+      +nn = U32.from_nat(List.length(&2, Bool, cc))
+      jpg.rcons(jpg.got.val(Jpeg.decode.read.n(nn, bits)), jpg.reads(rest, jpg.got.bits(Jpeg.decode.read.n(nn,
+        bits))))
+
+# each code's value
+def jpg.nums(cs: List<&2, List<&2, Bool>>) -> List<&2, U32>:
+  match cs:
+    case Nil{}:
+      []
+    case cc <> rest:
+      jpg.num(cc, 0) <> jpg.nums(rest)
+
+# LAW: the bit writer against the bit reader: codes of at most 16 bits each, any number of them, written one
+# after another by the encoder's bit writer from an empty writer (so they cross byte boundaries at every
+# offset) and padded and stuffed by encode.pad, are read back by the decoder's bit reader one code's length at a
+# time, each code's value in order, the reader's ok flag still 1
+# IMG-JPG-3
+law jpeg_bits_round_trip:
+  for +cs: List<&2, List<&2, Bool>>
+  for h_len: {jpg.codes16(cs) == True{} : Bool}
+  {jpg.reads(cs, Jpeg.Bits{0, 1, 0, Jenc.encode.pad(jpg.write(cs, Jenc.encode.put0()))}) == (jpg.nums(cs), 1) :
+    List<&2, U32> & U32}
+
+# the reader after reading codes of these lengths, one at a time
+def jpg.skip(cs: List<&2, List<&2, Bool>>, +bits: Jpeg.Bits) -> Jpeg.Bits:
+  match cs:
+    case Nil{}:
+      bits
+    case +cc <> rest:
+      jpg.skip(rest, jpg.got.bits(Jpeg.decode.read.n(U32.from_nat(List.length(&2, Bool, cc)), bits)))
+
+# the writer after the encoder writes a symbol's code from its book
+def jpg.emit(got: Array<U32> & Jenc.Put) -> Jenc.Put:
+  match got:
+    case (_a, pp):
+      pp
+
+# the first answer, or else the second
+def jpg.eith(aa: Bool, bb: Bool) -> Bool:
+  match aa:
+    case True{}:
+      match bb:
+        case _b:
+          True{}
+    case False{}:
+      bb
+
+# ss is one of xs
+def jpg.memb(+ss: U32, xs: List<&2, U32>) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case +xx <> rest:
+      jpg.eith(U32.is_eq(ss, xx), jpg.memb(ss, rest))
+
+# a Huffman lookup's symbol, the codes after it read back from its reader, and its ok flag
+def jpg.hit(hit: Jpeg.Hit, post: List<&2, List<&2, Bool>>) -> U32 & (List<&2, U32> & U32) & U32:
+  match hit:
+    case Jpeg.Hit{+sym, bits, +ok}:
+      (sym, jpg.reads(post, bits), ok)
+
+# the entropy-coded bytes of codes pre, the encoder's code for symbol sy from a book, and codes post
+def jpg.sym.bytes(
+  +pre: List<&2, List<&2, Bool>>,
+  book: Array<U32>,
+  +sy: U32,
+  +post: List<&2, List<&2, Bool>>
+) -> List<&2, U32>:
+  Jenc.encode.pad(jpg.write(post, jpg.emit(Jenc.encode.emit(Jenc.encode.sym(book, sy), jpg.write(pre,
+    Jenc.encode.put0())))))
+
+# the decoder's lookup in a table, after reading codes pre back from those bytes: the symbol, codes post read back,
+# and the ok flag
+def jpg.sym.back(
+  +pre: List<&2, List<&2, Bool>>,
+  book: Array<U32>,
+  +tab: Jpeg.Huff,
+  +sy: U32,
+  +post: List<&2, List<&2, Bool>>
+) -> U32 & (List<&2, U32> & U32) & U32:
+  jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, jpg.skip(pre, Jpeg.Bits{0, 1, 0, jpg.sym.bytes(pre, book, sy,
+    post)})}, tab), post)
+
+# LAW: the Annex K luminance DC table: for every DC symbol, the code the encoder's book (encode.huff) holds for it,
+# written at any bit offset between any codes, is decoded by the decoder's Huffman lookup in the table
+# decode.canon builds (decode.look) to that symbol, the reader left exactly after the code, ok still 1
+# IMG-JPG-3
+law jpeg_huff_dc:
+  for +pre: List<&2, List<&2, Bool>>
+  for h_pre: {jpg.codes16(pre) == True{} : Bool}
+  for +sy: U32
+  for h_sy: {jpg.memb(sy, Jenc.encode.dcsyms()) == True{} : Bool}
+  for +post: List<&2, List<&2, Bool>>
+  for h_post: {jpg.codes16(post) == True{} : Bool}
+  {jpg.sym.back(pre, Jenc.encode.huff(Jenc.encode.dccounts(), Jenc.encode.dcsyms()), Jpeg.decode.canon(272n, 0n,
+    Jenc.encode.dccounts(), Jenc.encode.dcsyms(), 0, 0, [], [], []), sy, post) == (sy, (jpg.nums(post), 1), 1) :
+    U32 & (List<&2, U32> & U32) & U32}
+
+# LAW: the Annex K luminance AC table, the same: every AC symbol's code from the encoder's book decodes to the
+# symbol at any bit offset, the reader left exactly after it
+# IMG-JPG-3
+law jpeg_huff_ac:
+  for +pre: List<&2, List<&2, Bool>>
+  for h_pre: {jpg.codes16(pre) == True{} : Bool}
+  for +sy: U32
+  for h_sy: {jpg.memb(sy, Jenc.encode.acsyms()) == True{} : Bool}
+  for +post: List<&2, List<&2, Bool>>
+  for h_post: {jpg.codes16(post) == True{} : Bool}
+  {jpg.sym.back(pre, Jenc.encode.huff(Jenc.encode.accounts(), Jenc.encode.acsyms()), Jpeg.decode.canon(272n, 0n,
+    Jenc.encode.accounts(), Jenc.encode.acsyms(), 0, 0, [], [], []), sy, post) == (sy, (jpg.nums(post), 1), 1) :
+    U32 & (List<&2, U32> & U32) & U32}
+
+
+# a bit as a U32: bit 0 set to it, the rest clear
+def jpg.ubit(bb: Bool) -> U32:
+  U32{WCon{bb, Word.zero(31n)}}
+
+# the low bit of a U32
+def jpg.bit0(xx: U32) -> Bool:
+  match xx:
+    case U32{ww}:
+      match ww:
+        case WCon{b0, _t}:
+          b0
+
+# the bits the encoder's writer takes from a code of kk bits, top first: bit kk - 1 down to bit 0
+def jpg.cb(kk: Nat, +code: U32) -> List<&2, Bool>:
+  match kk:
+    case 0n:
+      []
+    case 1n+ +pp:
+      jpg.bit0(U32.shrn(code, pp)) <> jpg.cb(pp, code)
+
+# the bits of a book word (encode.huff): its length in the high half, its code in the low half
+def jpg.cbw(+ww: U32) -> List<&2, Bool>:
+  jpg.cb(U32.to_nat(U32.shrn(ww, 16n)), U32.and(ww, 65535))
+
+# the encoder's bit writer (encode.bit) fed bits one at a time
+def jpg.feed(bs: List<&2, Bool>, pp: Jenc.Put) -> Jenc.Put:
+  match bs:
+    case Nil{}:
+      pp
+    case bb <> rest:
+      jpg.feed(rest, Jenc.encode.bit(pp, jpg.ubit(bb)))
+
+# one AC token: a symbol and the magnitude bits after its code
+type JTok is Data:
+  JTok{sym: U32, ex: List<&2, Bool>}
+
+# the code the encoder's AC book (encode.huff over the Annex K AC table) holds for symbol sy, as its bits
+def jpg.acode(+sy: U32) -> List<&2, Bool>:
+  jpg.cbw(jpg.val(Array.get(U32, Jenc.encode.huff(Jenc.encode.accounts(), Jenc.encode.acsyms()), sy)))
+
+# the code the encoder's DC book holds for symbol sy, as its bits
+def jpg.dcode(+sy: U32) -> List<&2, Bool>:
+  jpg.cbw(jpg.val(Array.get(U32, Jenc.encode.huff(Jenc.encode.dccounts(), Jenc.encode.dcsyms()), sy)))
+
+# the bits of AC tokens: each symbol's code in the AC book, then its magnitude bits
+def jpg.acbits(ts: List<&2, JTok>) -> List<&2, Bool>:
+  match ts:
+    case Nil{}:
+      []
+    case JTok{+sym, ex} <> rest:
+      List.append(&2, Bool, jpg.acode(sym), List.append(&2, Bool, ex, jpg.acbits(rest)))
+
+# the decoder's AC loop (decode.ac) as tokens follow it: the next index, the lookups left, and whether the block ended
+type JAcSt is Data:
+  JAcSt{kk: U32, left: Nat, fin: Bool}
+
+# an empty list of bits
+def jpg.isnil(xs: List<&2, Bool>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case _h <> _t:
+      False{}
+
+# the token's own check, by its kind: EOB with no bits, ZRL with no bits and room for 16 zeros, or a run and a
+# nonzero size that stay inside the block, with as many magnitude bits as the size
+def jpg.acok.k(eob: Bool, zrl: Bool, +sym: U32, ex: List<&2, Bool>, +kk: U32) -> Bool:
+  match eob:
+    case True{}:
+      jpg.isnil(ex)
+    case False{}:
+      match zrl:
+        case True{}:
+          Bool.and(jpg.isnil(ex), Bool.or(U32.is_lt((kk + 16 : U32), 64), U32.is_eq((kk + 16 : U32), 64)))
+        case False{}:
+          Bool.and(Bool.not(U32.is_eq(U32.and(15, sym), 0)), Bool.and(Bool.not(U32.is_ge((kk + U32.shrn(sym, 4n) :
+            U32), 64)), Nat.is_eq(List.length(&2, Bool, ex), U32.to_nat(U32.and(15, sym)))))
+
+# the token is read in state st: the block has not ended, a lookup is left, the symbol is in the AC table
+def jpg.acok(tt: JTok, st: JAcSt) -> Bool:
+  match tt:
+    case JTok{+sym, ex}:
+      match st:
+        case JAcSt{+kk, left, fin}:
+          Bool.and(Bool.not(fin), Bool.and(Nat.is_lt(0n, left), Bool.and(jpg.memb(sym, Jenc.encode.acsyms()),
+            jpg.acok.k(U32.is_eq(sym, 0), U32.is_eq(sym, 240), sym, ex, kk))))
+
+# one less, and zero stays zero
+def jpg.npred(nn: Nat) -> Nat:
+  match nn:
+    case 0n:
+      0n
+    case 1n+pp:
+      pp
+
+# the state after a token, by its kind
+def jpg.acnx.k(eob: Bool, zrl: Bool, +sym: U32, +kk: U32, +left: Nat) -> JAcSt:
+  match eob:
+    case True{}:
+      +_s = sym
+      +_z = zrl
+      JAcSt{kk, jpg.npred(left), True{}}
+    case False{}:
+      match zrl:
+        case True{}:
+          +_s = sym
+          JAcSt{(kk + 16 : U32), jpg.npred(left), Bool.not(U32.is_lt((kk + 16 : U32), 64))}
+        case False{}:
+          +n2 = ((kk + U32.shrn(sym, 4n) : U32) + 1 : U32)
+          JAcSt{n2, jpg.npred(left), U32.is_eq(n2, 64)}
+
+# the state after a token
+def jpg.acnx(tt: JTok, st: JAcSt) -> JAcSt:
+  match tt:
+    case JTok{+sym, _ex}:
+      match st:
+        case JAcSt{+kk, +left, _fin}:
+          jpg.acnx.k(U32.is_eq(sym, 0), U32.is_eq(sym, 240), sym, kk, left)
+
+# AC tokens the decoder's loop reads in full from state st, the block ending exactly at the last
+def jpg.acwf(ts: List<&2, JTok>, +st: JAcSt) -> Bool:
+  match ts:
+    case Nil{}:
+      match st:
+        case JAcSt{_k, _l, fin}:
+          fin
+    case +tt <> rest:
+      jpg.also(jpg.acok(tt, st), jpg.acwf(rest, jpg.acnx(tt, st)))
+
+# one block's tokens: the DC symbol and its magnitude bits, then the AC tokens
+type JBlkTok is Data:
+  JBlkTok{dcs: U32, dcx: List<&2, Bool>, acs: List<&2, JTok>}
+
+# a block's bits: the DC symbol's code in the DC book, its magnitude bits, and the AC tokens' bits
+def jpg.blkbits(bt: JBlkTok) -> List<&2, Bool>:
+  match bt:
+    case JBlkTok{+dcs, dcx, acs}:
+      List.append(&2, Bool, jpg.dcode(dcs), List.append(&2, Bool, dcx, jpg.acbits(acs)))
+
+# a block the decoder reads whole: a DC symbol of the DC table with as many magnitude bits as its size, and AC
+# tokens read in full from index 1 with 63 lookups left, ending the block
+def jpg.blkwf(bt: JBlkTok) -> Bool:
+  match bt:
+    case JBlkTok{+dcs, dcx, acs}:
+      Bool.and(jpg.memb(dcs, Jenc.encode.dcsyms()), Bool.and(Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(dcs)),
+        jpg.acwf(acs, JAcSt{1, 63n, False{}})))
+
+# the bits of blocks, one after another
+def jpg.tbits(ts: List<&2, JBlkTok>) -> List<&2, Bool>:
+  match ts:
+    case Nil{}:
+      []
+    case tt <> rest:
+      List.append(&2, Bool, jpg.blkbits(tt), jpg.tbits(rest))
+
+# every block is one the decoder reads whole
+def jpg.allwf(ts: List<&2, JBlkTok>) -> Bool:
+  match ts:
+    case Nil{}:
+      True{}
+    case tt <> rest:
+      jpg.also(jpg.blkwf(tt), jpg.allwf(rest))
+
+# a decode that returned a picture
+def jpg.psome(mm: Maybe<&2, Jpeg.Pic>) -> Bool:
+  match mm:
+    case Some{_p}:
+      True{}
+    case None{}:
+      False{}
+
+# LAW: the scan side of the JPEG round trip. Take blocks the decoder reads whole: each a DC symbol of the Annex K
+# DC table with its magnitude bits, then AC tokens of the AC table (EOB, ZRL, or a run and a nonzero size with its
+# magnitude bits) that fill or end the block. Write as many of them as the encoder's frame has blocks, each symbol
+# as the code the encoder's book (encode.huff) holds for it, with the encoder's bit writer (encode.bit, then
+# encode.pad). decode.run, in the encoder's frame, scan and tables, decodes those bytes to a picture
+# IMG-JPG-3
+law jpeg_scan_some:
+  for +tt: JBlkTok
+  for +rest: List<&2, JBlkTok>
+  for +ww: U32
+  for +hh: U32
+  for h_w: {U32.is_eq(ww, 0) == False{} : Bool}
+  for h_h: {U32.is_eq(hh, 0) == False{} : Bool}
+  for h_wf: {jpg.allwf(tt <> rest) == True{} : Bool}
+  for h_n: {U32.to_nat(Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1)) == 1n+List.length(&2, JBlkTok, rest) :
+    Nat}
+  {jpg.psome(Jpeg.decode.run(jpg.enc.frame(ww, hh), jpg.enc.scan(), jpg.enc.tabs(), Jenc.encode.pad(jpg.feed(
+    jpg.tbits(tt <> rest), Jenc.encode.put0())), 0)) == True{} : Bool}

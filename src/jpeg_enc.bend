@@ -212,7 +212,7 @@ def encode.pad.n(zz: Bool, out: List<&2, U32>, +buf: U32, +nn: U32) -> List<&2, 
       out
     case False{}:
       +sh = (8 - nn : U32)
-      U32.or(U32.shln(buf, U32.to_nat(sh)), (U32.shln(1, U32.to_nat(sh)) - 1 : U32)) <> out
+      U32.or((U32.shln(1, U32.to_nat(sh)) - 1 : U32), U32.shln(buf, U32.to_nat(sh))) <> out
 
 # the entropy-coded bytes: the open byte padded with 1 bits, then every byte stuffed, in order
 def encode.pad(pp: Put) -> List<&2, U32>:

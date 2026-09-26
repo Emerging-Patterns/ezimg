@@ -20,6 +20,7 @@ import ./proof/wp9-png-roundtrip.bend as W9
 import ./src/inflate.bend as Inf
 import ./proof/wp10-jpeg-finish.bend as W10
 import ./proof/wp13-jpeg-planes.bend as W13
+import ./proof/wp12-jpeg-huffman.bend as W12
 
 # U32.or with 0xFF000000 first has alpha 255, whatever the other operand:
 # the 32 bits are taken apart four at a time, and Bool.or(True, b) is True.
@@ -6136,3 +6137,17 @@ def Laws.jpeg_place(
     0)))
   w13.fin(U32.is_eq(kind, 1), U32.is_eq(bad, 0), ent, tabs, ri, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy,
     ew, hD, hfD, hK, h_xx, h_yy)
+
+# ---- wp12-jpeg-huffman ----
+
+def Laws.jpeg_bits_round_trip(cs, h_len):
+  W12.round_trip(cs, h_len)
+
+def Laws.jpeg_huff_dc(pre, h_pre, sy, h_sy, post, h_post):
+  W12.huff_law.dc(pre, h_pre, sy, h_sy, post, h_post)
+
+def Laws.jpeg_huff_ac(pre, h_pre, sy, h_sy, post, h_post):
+  W12.huff_law.ac(pre, h_pre, sy, h_sy, post, h_post)
+
+def Laws.jpeg_scan_some(tt, rest, ww, hh, h_w, h_h, h_wf, h_n):
+  W12.scan_some(tt, rest, ww, hh, h_w, h_h, h_wf, h_n)
