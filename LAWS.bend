@@ -2478,3 +2478,93 @@ law jpeg_unstuff:
   for +ok: U32
   {jpg.read8(List.length(&2, JByte, bs), Jpeg.decode.read.n(8, Jpeg.Bits{0, ok, 0, Jenc.encode.stuff.all(
     List.reverse(&2, U32, jpg.bytes(bs)), [])})) == jpg.bytes(bs) : List<&2, U32>}
+
+# ---- wp11-png-finish ----
+
+# LAW: a well-formed raster with both sides nonzero and fewer than 2^29 samples decodes from its PNG to itself. The
+# bound is taken as a8, a U32 whose value is 8 w h: 8 w h is some U32's value exactly when w h is below 2^29 (a closed
+# 2^29 in a law would be expanded in unary)
+# IMG-PNG-2
+law png_roundtrip:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for +a8: U32
+  for h_ok: {png_ok(ww, hh, px) == True{} : Bool}
+  for h_a8: {U32.to_nat(a8) == Nat.mul(8n, Nat.mul(U32.to_nat(hh), U32.to_nat(ww))) : Nat}
+  {spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} : Maybe<&2, Img.Raster>}
+
+# an ancillary chunk (PNG section 5.4): its four-byte type, read as one number most significant byte first, and its
+# data
+type Anc is Data:
+  Anc{+typ: U32, +data: List<&2, U32>}
+
+# ancillary chunks laid out as spec.chunk, one after another, then rest
+def spec.ancs(cs: List<&2, Anc>, rest: List<&2, U32>) -> List<&2, U32>:
+  match cs:
+    case Nil{}:
+      rest
+    case Anc{+typ, +data} <> tl:
+      spec.chunk(spec.be4(typ), data, spec.ancs(tl, rest))
+
+# the ancillary bit (PNG section 5.4): bit 5 of the type's first byte is 1
+def spec.anc.bit(+typ: U32) -> Bool:
+  U32.is_eq(U32.and(U32.shrn(typ, 24n), 32), 32)
+
+# each chunk is ancillary, is not tRNS (1951551059, the bytes 116 82 78 83), and has fewer than 2^32 data bytes
+def spec.ancs.ok(cs: List<&2, Anc>) -> Type:
+  match cs:
+    case Nil{}:
+      Unit
+    case Anc{+typ, +data} <> tl:
+      {spec.anc.bit(typ) == True{} : Bool} & ({U32.is_eq(typ, 1951551059) == False{} : Bool} & (spec.fits(data) &
+        spec.ancs.ok(tl)))
+
+# a PNG file as spec.png lays it out, with ancillary chunks where PNG section 5.6 allows them: a0 after IHDR, a1 after
+# PLTE, a2 after tRNS, and a3 after the IDAT chunks, before IEND
+def spec.png.anc(
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  a0: List<&2, Anc>,
+  plte: Maybe<&2, List<&2, U32>>,
+  a1: List<&2, Anc>,
+  trns: Maybe<&2, List<&2, U32>>,
+  a2: List<&2, Anc>,
+  idats: List<&2, List<&2, U32>>,
+  a3: List<&2, Anc>
+) -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), spec.chunk([73, 72, 68, 82], spec.ihdr.data(ww, hh, cc), spec.ancs(a0,
+    spec.chunk.opt([80, 76, 84, 69], plte, spec.ancs(a1, spec.chunk.opt([116, 82, 78, 83], trns, spec.ancs(a2,
+    spec.idats(idats, spec.ancs(a3, spec.chunk([73, 69, 78, 68], [], []))))))))))
+
+# LAW: ancillary chunks where PNG section 5.6 allows them leave what decode_png makes of a file: the file png_walk
+# reads, with ancillary chunks after IHDR, PLTE, tRNS and the IDAT chunks, decodes to the raster px.of packs from the
+# unfiltered inflated IDAT data, with the IHDR colour type and the PLTE and tRNS data
+# IMG-PNG-9
+# IMG-PIX-1
+law png_walk_anc:
+  for +ww: U32
+  for +hh: U32
+  for +cc: U32
+  for +a0: List<&2, Anc>
+  for +plte: Maybe<&2, List<&2, U32>>
+  for +a1: List<&2, Anc>
+  for +trns: Maybe<&2, List<&2, U32>>
+  for +a2: List<&2, Anc>
+  for +idats: List<&2, List<&2, U32>>
+  for +a3: List<&2, Anc>
+  for h_ww: {U32.is_gt(ww, 0) == True{} : Bool}
+  for h_hh: {U32.is_gt(hh, 0) == True{} : Bool}
+  for h_cc: {spec.colour.ok(cc) == True{} : Bool}
+  for h_pl: {spec.plte.ok(cc, plte) == True{} : Bool}
+  for h_tr: {spec.trns.ok(cc, plte, trns) == True{} : Bool}
+  for h_fp: spec.fits.opt(plte)
+  for h_ft: spec.fits.opt(trns)
+  for h_fi: spec.fits.all(idats)
+  for h_a0: spec.ancs.ok(a0)
+  for h_a1: spec.ancs.ok(a1)
+  for h_a2: spec.ancs.ok(a2)
+  for h_a3: spec.ancs.ok(a3)
+  {Img.decode_png(spec.png.anc(ww, hh, cc, a0, plte, a1, trns, a2, idats, a3)) == spec.decoded(Inf.inflate(
+    List.concat(&2, U32, idats)), ww, hh, cc, spec.or.nil(plte), spec.or.nil(trns)) : Maybe<&2, Img.Raster>}
