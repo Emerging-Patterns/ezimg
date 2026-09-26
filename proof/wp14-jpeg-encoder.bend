@@ -299,66 +299,60 @@ def neg_nz(vv: U32) -> {U32.is_eq(Jpeg.decode.neg32(vv), 0) == U32.is_eq(vv, 0) 
 def true_false(ee: {True{} == False{} : Bool}) -> Empty:
   W12.false_true(Equal.sym(Bool, True{}, False{}, ee))
 
-# the sign of a U32 by its top bit
-def sign01.b(
-  tp: Bool,
-  +b0: Bool,
-  +b1: Bool,
-  +b2: Bool,
-  +b3: Bool,
-  +b4: Bool,
-  +b5: Bool,
-  +b6: Bool,
-  +b7: Bool,
-  +b8: Bool,
-  +b9: Bool,
-  +b10: Bool,
-  +b11: Bool,
-  +b12: Bool,
-  +b13: Bool,
-  +b14: Bool,
-  +b15: Bool,
-  +b16: Bool,
-  +b17: Bool,
-  +b18: Bool,
-  +b19: Bool,
-  +b20: Bool,
-  +b21: Bool,
-  +b22: Bool,
-  +b23: Bool,
-  +b24: Bool,
-  +b25: Bool,
-  +b26: Bool,
-  +b27: Bool,
-  +b28: Bool,
-  +b29: Bool,
-  +b30: Bool,
-  hh: {U32.is_eq(Jpeg.decode.sign(U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, WCon{b8,
-    WCon{b9, WCon{b10, WCon{b11, WCon{b12, WCon{b13, WCon{b14, WCon{b15, WCon{b16, WCon{b17, WCon{b18, WCon{b19,
-    WCon{b20, WCon{b21, WCon{b22, WCon{b23, WCon{b24, WCon{b25, WCon{b26, WCon{b27, WCon{b28, WCon{b29, WCon{b30,
-    WCon{tp, WNil{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}), 0) == False{} : Bool}
-) -> {Jpeg.decode.sign(U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, WCon{b8, WCon{b9,
-  WCon{b10, WCon{b11, WCon{b12, WCon{b13, WCon{b14, WCon{b15, WCon{b16, WCon{b17, WCon{b18, WCon{b19, WCon{b20,
-  WCon{b21, WCon{b22, WCon{b23, WCon{b24, WCon{b25, WCon{b26, WCon{b27, WCon{b28, WCon{b29, WCon{b30, WCon{tp,
-  WNil{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}) == 1 : U32}:
-  match tp:
-    case True{}:
-      {==}
-    case False{}:
-      Empty.absurd({Jpeg.decode.sign(U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7,
-        WCon{b8, WCon{b9, WCon{b10, WCon{b11, WCon{b12, WCon{b13, WCon{b14, WCon{b15, WCon{b16, WCon{b17, WCon{b18,
-        WCon{b19, WCon{b20, WCon{b21, WCon{b22, WCon{b23, WCon{b24, WCon{b25, WCon{b26, WCon{b27, WCon{b28, WCon{b29,
-        WCon{b30, WCon{False{}, WNil{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}) == 1 : U32}, true_false(hh))
+# the top bit of a word of nn + 1 bits
+def wtop(nn: Nat, ww: Word(1n+nn)) -> Bool:
+  match nn:
+    case 0n:
+      match ww:
+        case WCon{bb, _t}:
+          bb
+    case 1n+pp:
+      match ww:
+        case WCon{_b, tt}:
+          wtop(pp, tt)
 
-# a U32's sign that is not 0 is 1
-def sign01(vv: U32, hh: {U32.is_eq(Jpeg.decode.sign(vv), 0) == False{} : Bool}) -> {Jpeg.decode.sign(vv) == 1 : U32}:
+# the word of a U32
+def uw(vv: U32) -> Word(32n):
+  match vv:
+    case U32{ww}:
+      ww
+
+# the sign of a U32 is its top bit
+def sign_top(vv: U32) -> {Jpeg.decode.sign(vv) == U32{WCon{wtop(31n, uw(vv)), Word.zero(31n)}} : U32}:
   match vv:
     case U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, WCon{b8, WCon{b9, WCon{b10,
       WCon{b11, WCon{b12, WCon{b13, WCon{b14, WCon{b15, WCon{b16, WCon{b17, WCon{b18, WCon{b19, WCon{b20, WCon{b21,
       WCon{b22, WCon{b23, WCon{b24, WCon{b25, WCon{b26, WCon{b27, WCon{b28, WCon{b29, WCon{b30, WCon{b31,
       WNil{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}:
-      sign01.b(b31, b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18, b19, b20,
-        b21, b22, b23, b24, b25, b26, b27, b28, b29, b30, hh)
+      {==}
+
+# a sign read off its top bit that is not 0 is 1
+def sign01.t(
+  bb: Bool,
+  hh: {U32.is_eq(U32{WCon{bb, Word.zero(31n)}}, 0) == False{} : Bool}
+) -> {U32{WCon{bb, Word.zero(31n)}} == 1 : U32}:
+  match bb:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd({U32{WCon{False{}, Word.zero(31n)}} == 1 : U32}, true_false(hh))
+
+# a U32's sign that is not 0 is 1, its top bit named
+def sign01.w(
+  +vv: U32,
+  +bt: Bool,
+  +es: {Jpeg.decode.sign(vv) == U32{WCon{bt, Word.zero(31n)}} : U32},
+  hh: {U32.is_eq(Jpeg.decode.sign(vv), 0) == False{} : Bool}
+) -> {Jpeg.decode.sign(vv) == 1 : U32}:
+  Equal.trans(U32, Jpeg.decode.sign(vv), U32{WCon{bt, Word.zero(31n)}}, 1, es, sign01.t(bt, Equal.trans(Bool,
+    U32.is_eq(U32{WCon{bt, Word.zero(31n)}}, 0), U32.is_eq(Jpeg.decode.sign(vv), 0), False{}, Equal.cong(U32, Bool,
+    uu =>
+    U32.is_eq(uu, 0), U32{WCon{bt, Word.zero(31n)}}, Jpeg.decode.sign(vv), Equal.sym(U32, Jpeg.decode.sign(vv),
+    U32{WCon{bt, Word.zero(31n)}}, es)), hh)))
+
+# a U32's sign that is not 0 is 1
+def sign01(+vv: U32, hh: {U32.is_eq(Jpeg.decode.sign(vv), 0) == False{} : Bool}) -> {Jpeg.decode.sign(vv) == 1 : U32}:
+  sign01.w(vv, wtop(31n, uw(vv)), sign_top(vv), hh)
 
 # a U32 of sign 0 is its own magnitude
 def abs_pos(+vv: U32, es: {Jpeg.decode.sign(vv) == 0 : U32}) -> {Jpeg.decode.abs(vv) == vv : U32}:
@@ -415,7 +409,6 @@ def u_ngt_lt(
   +en = U32.to_nat(nn)
   e2 = Equal.sym(Nat, U32.to_nat(n1), 1n+en, e1)
   ec1 = Equal.sym(Cmp, U32.cmp(xx, n1), Nat.cmp(ex, U32.to_nat(n1)), u_cmp(xx, n1))
-  ec2 = Equal.sym(Cmp, U32.cmp(xx, nn), Nat.cmp(ex, en), u_cmp(xx, nn))
   %ec1 : {Cmp.is_lt(_) == True{} : Bool}
   %e2 : {Cmp.is_lt(Nat.cmp(ex, _)) == True{} : Bool}
   ngt_lt(ex, en, Equal.trans(Bool, Cmp.is_gt(Nat.cmp(ex, en)), Cmp.is_gt(U32.cmp(xx, nn)), False{}, Equal.cong(Cmp,
@@ -861,9 +854,9 @@ def allq.ok() -> allq.ok.ty():
   {==}
 
 # the rest of the sizes, as a size's membership step needs it
-def IncIh(+qq: U32, +cc: U32, -rest: List<&2, U32>) -> Type:
-  @hr: {Laws.jpg.memb(cc, rest) == True{} : Bool} -> @ha: {allc(qq, rest) == True{} : Bool} -> {symok(qq,
-    cc) == True{} :
+def IncIh(+_qq: U32, +_cc: U32, -rest: List<&2, U32>) -> Type:
+  @hr: {Laws.jpg.memb(_cc, rest) == True{} : Bool} -> @ha: {allc(_qq, rest) == True{} : Bool} -> {symok(_qq,
+    _cc) == True{} :
     Bool}
 
 # a size of the list, by whether it is the list's first
@@ -901,9 +894,9 @@ def inc(
       inc.b(U32.is_eq(cc, xx), qq, cc, xx, rest, {==}, hin, hall, hr => ha => inc(rest, qq, cc, hr, ha))
 
 # the rest of the nibbles, as a nibble's membership step needs it
-def InqIh(+qq: U32, +cc: U32, -rest: List<&2, U32>, -cs: List<&2, U32>) -> Type:
-  @hr: {Laws.jpg.memb(qq, rest) == True{} : Bool} -> @ha: {allq(rest, cs) == True{} : Bool} -> {symok(qq,
-    cc) == True{} :
+def InqIh(+_qq: U32, +_cc: U32, -rest: List<&2, U32>, -cs: List<&2, U32>) -> Type:
+  @hr: {Laws.jpg.memb(_qq, rest) == True{} : Bool} -> @ha: {allq(rest, cs) == True{} : Bool} -> {symok(_qq,
+    _cc) == True{} :
     Bool}
 
 # a nibble of the list, by whether it is the list's first
@@ -952,18 +945,6 @@ def symok.of(
 ) -> {symok(U32.and(15, run), cc) == True{} : Bool}:
   inq([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], U32.and(15, run), cc,
     nib16(run), hc, allq.ok())
-
-# the top bit of a word of nn + 1 bits
-def wtop(nn: Nat, ww: Word(1n+nn)) -> Bool:
-  match nn:
-    case 0n:
-      match ww:
-        case WCon{bb, _t}:
-          bb
-    case 1n+pp:
-      match ww:
-        case WCon{_b, tt}:
-          wtop(pp, tt)
 
 # a word compare not above after its low bits is not above before them
 def fin_ngt(
@@ -1016,21 +997,6 @@ def ngt_top(
       match ww cw:
         case WCon{+aa, +tt} WCon{+bb, +uu}:
           ngt_top(pp, tt, uu, hc, fin_ngt(aa, bb, Word.cmp(1n+pp, tt, uu), hh))
-
-# the word of a U32
-def uw(vv: U32) -> Word(32n):
-  match vv:
-    case U32{ww}:
-      ww
-
-# the sign of a U32 is its top bit
-def sign_top(vv: U32) -> {Jpeg.decode.sign(vv) == U32{WCon{wtop(31n, uw(vv)), Word.zero(31n)}} : U32}:
-  match vv:
-    case U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, WCon{b8, WCon{b9, WCon{b10,
-      WCon{b11, WCon{b12, WCon{b13, WCon{b14, WCon{b15, WCon{b16, WCon{b17, WCon{b18, WCon{b19, WCon{b20, WCon{b21,
-      WCon{b22, WCon{b23, WCon{b24, WCon{b25, WCon{b26, WCon{b27, WCon{b28, WCon{b29, WCon{b30, WCon{b31,
-      WNil{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}:
-      {==}
 
 # a compare that is below is not above
 def lt_ngt(tt: Cmp, hh: {Cmp.is_lt(tt) == True{} : Bool}) -> {Cmp.is_gt(tt) == False{} : Bool}:
@@ -1929,7 +1895,7 @@ def acl_nil(
   +left: Nat,
   +pp: Jenc.Put,
   +hg: {U32.is_gt(run, 0) == gz : Bool},
-  e: AclPos(kk, run, []),
+  ee: AclPos(kk, run, []),
   hl: AclLeft(run, [], left)
 ) -> AclRes([], run, kk, left, pp):
   match gz:
@@ -1939,7 +1905,7 @@ def acl_nil(
       +hr = {gt0(rn, ugt0(run, True{}, hg)) : {Nat.is_lt(0n, rn) == True{} : Bool}}
       +ez = {R.add_zero(rn) : {Nat.add(rn, 0n) == rn : Nat}}
       +e1 = {Equal.trans(Nat, Nat.add(kn, rn), Nat.add(kn, Nat.add(rn, 0n)), 64n, Equal.cong(Nat, Nat, nn => Nat.add(kn,
-        nn), rn, Nat.add(rn, 0n), Equal.sym(Nat, Nat.add(rn, 0n), rn, ez)), e) : {Nat.add(kn, rn) == 64n : Nat}}
+        nn), rn, Nat.add(rn, 0n), Equal.sym(Nat, Nat.add(rn, 0n), rn, ez)), ee) : {Nat.add(kn, rn) == 64n : Nat}}
       +hk = {Equal.trans(Bool, Nat.is_lt(kn, 64n), Nat.is_lt(kn, Nat.add(kn, rn)), True{}, Equal.cong(Nat, Bool, nn =>
         Nat.is_lt(kn, nn), 64n, Nat.add(kn, rn), Equal.sym(Nat, Nat.add(kn, rn), 64n, e1)), lt_add_pos(kn, rn, hr)) :
         {Nat.is_lt(kn, 64n) == True{} : Bool}}
@@ -1976,7 +1942,7 @@ def acl_nil(
         Equal.trans(
         Nat, Nat.add(kn, 0n), Nat.add(kn, Nat.add(rn, 0n)), 64n, Equal.cong(Nat, Nat, nn => Nat.add(kn, Nat.add(nn,
           0n)),
-        0n, rn, Equal.sym(Nat, rn, 0n, hr)), e)) : {kn == 64n : Nat}}
+        0n, rn, Equal.sym(Nat, rn, 0n, hr)), ee)) : {kn == 64n : Nat}}
       +he = {Equal.trans(Bool, U32.is_eq(kk, 64), Nat.is_eq(kn, 64n), True{}, R.u32_eq(kk, 64), Equal.trans(Bool,
         Nat.is_eq(kn, 64n), Nat.is_eq(64n, 64n), True{}, Equal.cong(Nat, Bool, nn => Nat.is_eq(nn, 64n), kn, 64n, ek),
         {==})) : {U32.is_eq(kk, 64) == True{} : Bool}}
@@ -2007,15 +1973,15 @@ def acl_zero_pos(
   +run: U32,
   +kk: U32,
   +left: Nat,
-  +e: {Nat.add(U32.to_nat(kk), Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct))) == 64n : Nat},
-  hl: {Nat.is_le(Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct)), left) == True{} : Bool}
+  +ee: {Nat.add(U32.to_nat(kk), Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct))) == 64n : Nat},
+  _hl: {Nat.is_le(Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct)), left) == True{} : Bool}
 ) -> AclPos(kk, (run + 1 : U32), ct):
   +kn = U32.to_nat(kk)
   +rn = U32.to_nat(run)
   +ll = List.length(&2, U32, ct)
   +a2 = {Equal.trans(Bool, Nat.is_le(Nat.add(rn, 1n+ll), 64n), Nat.is_le(Nat.add(rn, 1n+ll), Nat.add(kn, Nat.add(rn,
     1n+ll))), True{}, Equal.cong(Nat, Bool, nn => Nat.is_le(Nat.add(rn, 1n+ll), nn), 64n, Nat.add(kn, Nat.add(rn,
-    1n+ll)), Equal.sym(Nat, Nat.add(kn, Nat.add(rn, 1n+ll)), 64n, e)), le_add_left(kn, Nat.add(rn, 1n+ll))) :
+    1n+ll)), Equal.sym(Nat, Nat.add(kn, Nat.add(rn, 1n+ll)), 64n, ee)), le_add_left(kn, Nat.add(rn, 1n+ll))) :
     {Nat.is_le(Nat.add(rn, 1n+ll), 64n) == True{} : Bool}}
   +er = {uadd(run, 1, R.le_trans(Nat.add(rn, 1n), Nat.add(rn, 1n+ll), 64n, R.le_add_mono(rn, 1n, 1n+ll, R.le_zero(ll)),
     a2)) : {U32.to_nat((run + 1 : U32)) == Nat.add(rn, 1n) : Nat}}
@@ -2023,7 +1989,7 @@ def acl_zero_pos(
     Equal.cong(Nat, Nat, nn => Nat.add(nn, ll), U32.to_nat((run + 1 : U32)), Nat.add(rn, 1n), er), R.add_assoc(rn, 1n,
     ll)) : {Nat.add(U32.to_nat((run + 1 : U32)), ll) == Nat.add(rn, 1n+ll) : Nat}}
   Equal.trans(Nat, Nat.add(kn, Nat.add(U32.to_nat((run + 1 : U32)), ll)), Nat.add(kn, Nat.add(rn, 1n+ll)), 64n,
-    Equal.cong(Nat, Nat, nn => Nat.add(kn, nn), Nat.add(U32.to_nat((run + 1 : U32)), ll), Nat.add(rn, 1n+ll), ea), e)
+    Equal.cong(Nat, Nat, nn => Nat.add(kn, nn), Nat.add(U32.to_nat((run + 1 : U32)), ll), Nat.add(rn, 1n+ll), ea), ee)
 
 # the lookups left one coefficient on, past a zero
 def acl_zero_left(
@@ -2031,7 +1997,7 @@ def acl_zero_left(
   +run: U32,
   +kk: U32,
   +left: Nat,
-  +e: {Nat.add(U32.to_nat(kk), Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct))) == 64n : Nat},
+  +ee: {Nat.add(U32.to_nat(kk), Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct))) == 64n : Nat},
   hl: {Nat.is_le(Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct)), left) == True{} : Bool}
 ) -> AclLeft((run + 1 : U32), ct, left):
   +kn = U32.to_nat(kk)
@@ -2039,7 +2005,7 @@ def acl_zero_left(
   +ll = List.length(&2, U32, ct)
   +a2 = {Equal.trans(Bool, Nat.is_le(Nat.add(rn, 1n+ll), 64n), Nat.is_le(Nat.add(rn, 1n+ll), Nat.add(kn, Nat.add(rn,
     1n+ll))), True{}, Equal.cong(Nat, Bool, nn => Nat.is_le(Nat.add(rn, 1n+ll), nn), 64n, Nat.add(kn, Nat.add(rn,
-    1n+ll)), Equal.sym(Nat, Nat.add(kn, Nat.add(rn, 1n+ll)), 64n, e)), le_add_left(kn, Nat.add(rn, 1n+ll))) :
+    1n+ll)), Equal.sym(Nat, Nat.add(kn, Nat.add(rn, 1n+ll)), 64n, ee)), le_add_left(kn, Nat.add(rn, 1n+ll))) :
     {Nat.is_le(Nat.add(rn, 1n+ll), 64n) == True{} : Bool}}
   +er = {uadd(run, 1, R.le_trans(Nat.add(rn, 1n), Nat.add(rn, 1n+ll), 64n, R.le_add_mono(rn, 1n, 1n+ll, R.le_zero(ll)),
     a2)) : {U32.to_nat((run + 1 : U32)) == Nat.add(rn, 1n) : Nat}}
@@ -2049,6 +2015,16 @@ def acl_zero_left(
   Equal.trans(Bool, Nat.is_le(Nat.add(U32.to_nat((run + 1 : U32)), ll), left), Nat.is_le(Nat.add(rn, 1n+ll), left),
     True{}, Equal.cong(Nat, Bool, nn => Nat.is_le(nn, left), Nat.add(U32.to_nat((run + 1 : U32)), ll), Nat.add(rn,
     1n+ll), ea), hl)
+
+# the type of acl_join's parameter hs
+def acl_join.hs.ty(+_cc: U32, +_ct: List<&2, U32>, +_run: U32, +_pp: Jenc.Put, +_stk: List<&2, Laws.JTok>) -> Type:
+  {Jenc.encode.ac(_cc <> _ct, _run, (acbk(), _pp)) == Jenc.encode.ac(_ct, 0, (acbk(), Laws.jpg.feed(W12.acbits(_stk),
+    _pp))) : Array<U32> & Jenc.Put}
+
+# the type of acl_join's parameter hw
+def acl_join.hw.ty(+_kk: U32, +_left: Nat, +_stk: List<&2, Laws.JTok>, +_k2: U32, +_l2: Nat) -> Type:
+  @ts: List<&2, Laws.JTok> -> {Laws.jpg.acwf(List.append(&2, Laws.JTok, _stk, ts), Laws.JAcSt{_kk, _left,
+    U32.is_eq(_kk, 64)}) == Laws.jpg.acwf(ts, Laws.JAcSt{_k2, _l2, U32.is_eq(_k2, 64)}) : Bool}
 
 # the tokens after a nonzero coefficient, joined to the AC coder's tokens after it
 def acl_join(
@@ -2061,14 +2037,9 @@ def acl_join(
   +stk: List<&2, Laws.JTok>,
   +k2: U32,
   +l2: Nat,
-  hs: {Jenc.encode.ac(cc <> ct, run, (acbk(), pp)) == Jenc.encode.ac(ct, 0, (acbk(), Laws.jpg.feed(W12.acbits(stk),
-    pp))) : Array<U32> & Jenc.Put},
-  hw: @ts: List<&2, Laws.JTok> -> {Laws.jpg.acwf(List.append(&2, Laws.JTok, stk, ts), Laws.JAcSt{kk, left,
-    U32.is_eq(kk, 64)}) == Laws.jpg.acwf(ts, Laws.JAcSt{k2, l2, U32.is_eq(k2, 64)}) : Bool}, res: AclRes(ct,
-  0,
-  k2,
-  l2,
-  Laws.jpg.feed(W12.acbits(stk), pp))
+  hs: acl_join.hs.ty(cc, ct, run, pp, stk),
+  hw: acl_join.hw.ty(kk, left, stk, k2, l2),
+  res: AclRes(ct, 0, k2, l2, Laws.jpg.feed(W12.acbits(stk), pp))
 ) -> AclRes(cc <> ct, run, kk, left, pp):
   (+ts, eq, wf) = res
   +sb = W12.acbits(stk)
@@ -2110,7 +2081,7 @@ def acl_nz(
   +left: Nat,
   +pp: Jenc.Put,
   +hz: {U32.is_eq(cc, 0) == False{} : Bool},
-  +e: {Nat.add(U32.to_nat(kk), Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct))) == 64n : Nat},
+  +ee: {Nat.add(U32.to_nat(kk), Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct))) == 64n : Nat},
   +hl: {Nat.is_le(Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct)), left) == True{} : Bool},
   ih: AclIh(ct)
 ) -> AclRes(cc <> ct, run, kk, left, pp):
@@ -2152,7 +2123,7 @@ def acl_nz(
   +d1 = {Equal.trans(Bool, Nat.is_lt(Nat.add(kn, rn), 64n), Nat.is_lt(Nat.add(kn, rn), Nat.add(Nat.add(kn, rn), 1n+ll)),
     True{}, Equal.cong(Nat, Bool, nn => Nat.is_lt(Nat.add(kn, rn), nn), 64n, Nat.add(Nat.add(kn, rn), 1n+ll),
     Equal.sym(Nat, Nat.add(Nat.add(kn, rn), 1n+ll), 64n, Equal.trans(Nat, Nat.add(Nat.add(kn, rn), 1n+ll), Nat.add(kn,
-    Nat.add(rn, 1n+ll)), 64n, eas, e))), lt_add_pos(Nat.add(kn, rn), 1n+ll, {==})) : {Nat.is_lt(Nat.add(kn, rn), 64n)
+    Nat.add(rn, 1n+ll)), 64n, eas, ee))), lt_add_pos(Nat.add(kn, rn), 1n+ll, {==})) : {Nat.is_lt(Nat.add(kn, rn), 64n)
     == True{} : Bool}}
   +slr = {Equal.trans(Bool, Nat.is_le(sn, rn), Nat.is_le(sn, Nat.add(qn, sn)), True{}, Equal.cong(Nat, Bool, nn =>
     Nat.is_le(sn, nn), rn, Nat.add(qn, sn), en1), le_add_left(qn, sn)) : {Nat.is_le(sn, rn) == True{} : Bool}}
@@ -2206,7 +2177,7 @@ def acl_nz(
   +e2 = {Equal.trans(Nat, Nat.add(U32.to_nat(k2), ll), Nat.add(Nat.add(Nat.add(kn, rn), 1n), ll), 64n, Equal.cong(Nat,
     Nat, nn => Nat.add(nn, ll), U32.to_nat(k2), Nat.add(Nat.add(kn, rn), 1n), ek2), Equal.trans(Nat, Nat.add(Nat.add(
     Nat.add(kn, rn), 1n), ll), Nat.add(Nat.add(kn, rn), 1n+ll), 64n, R.add_assoc(Nat.add(kn, rn), 1n, ll),
-    Equal.trans(Nat, Nat.add(Nat.add(kn, rn), 1n+ll), Nat.add(kn, Nat.add(rn, 1n+ll)), 64n, eas, e))) :
+    Equal.trans(Nat, Nat.add(Nat.add(kn, rn), 1n+ll), Nat.add(kn, Nat.add(rn, 1n+ll)), 64n, eas, ee))) :
     {Nat.add(U32.to_nat(k2), ll) == 64n : Nat}}
   +hk = {R.le_lt_trans(kn, Nat.add(kn, rn), 64n, R.le_add_more(kn, kn, rn, R.le_refl(kn)), d1) : {Nat.is_lt(kn, 64n) ==
     True{} : Bool}}
@@ -2253,16 +2224,16 @@ def acl_cons(
   +left: Nat,
   +pp: Jenc.Put,
   +hz: {U32.is_eq(cc, 0) == zero : Bool},
-  +e: {Nat.add(U32.to_nat(kk), Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct))) == 64n : Nat},
+  +ee: {Nat.add(U32.to_nat(kk), Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct))) == 64n : Nat},
   +hl: {Nat.is_le(Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct)), left) == True{} : Bool},
   ih: AclIh(ct)
 ) -> AclRes(cc <> ct, run, kk, left, pp):
   match zero:
     case True{}:
-      acl_zero(cc, ct, run, kk, left, pp, hz, ih((run + 1 : U32), kk, left, pp, acl_zero_pos(ct, run, kk, left, e, hl),
-        acl_zero_left(ct, run, kk, left, e, hl)))
+      acl_zero(cc, ct, run, kk, left, pp, hz, ih((run + 1 : U32), kk, left, pp, acl_zero_pos(ct, run, kk, left, ee, hl),
+        acl_zero_left(ct, run, kk, left, ee, hl)))
     case False{}:
-      acl_nz(cc, ct, run, kk, left, pp, hz, e, hl, ih)
+      acl_nz(cc, ct, run, kk, left, pp, hz, ee, hl, ih)
 
 # the AC coder over coefficients from a state that keeps the invariant writes tokens the decoder's loop reads in full
 def acl(
@@ -2271,14 +2242,15 @@ def acl(
   +kk: U32,
   +left: Nat,
   +pp: Jenc.Put,
-  e: AclPos(kk, run, zz),
+  ee: AclPos(kk, run, zz),
   hl: AclLeft(run, zz, left)
 ) -> AclRes(zz, run, kk, left, pp):
   match zz:
     case Nil{}:
-      acl_nil(U32.is_gt(run, 0), run, kk, left, pp, {==}, e, hl)
+      acl_nil(U32.is_gt(run, 0), run, kk, left, pp, {==}, ee, hl)
     case +cc <> +ct:
-      acl_cons(U32.is_eq(cc, 0), cc, ct, run, kk, left, pp, {==}, e, hl, r2 => k2 => l2 => p2 => e2 => h2 => acl(ct, r2,
+      acl_cons(U32.is_eq(cc, 0), cc, ct, run, kk, left, pp, {==}, ee, hl, r2 => k2 => l2 => p2 => e2 => h2 => acl(ct,
+        r2,
         k2, l2, p2, e2, h2))
 
 # the encoder's books, written out
@@ -2293,6 +2265,11 @@ def BlkOut(+pred: U32, +pp: Jenc.Put, -zz: List<&2, U32>) -> Type:
     pp)) : Jenc.Book & U32 & Jenc.Put} -> &_h: {U32.is_lt(dd, 2048) == True{} : Bool} -> {Laws.jpg.blkwf(bt) == True{} :
     Bool}
 
+# the type of blk_fin's parameter edc
+def blk_fin.edc.ty(+_dc0: U32, +_pred: U32, +_pp: Jenc.Put, +_dcs: U32, +_dcx: List<&2, Bool>) -> Type:
+  {Jenc.encode.dcdiff(dcbk(), _pp, Jenc.encode.dcbias(_dc0), _pred) == (dcbk(), Laws.jpg.feed(List.append(&2, Bool,
+    W12.code.dc(_dcs), _dcx), _pp)) : Array<U32> & Jenc.Put}
+
 # the block's AC part coded after its DC token
 def blk_fin(
   +dc0: U32,
@@ -2301,8 +2278,7 @@ def blk_fin(
   +pp: Jenc.Put,
   +dcs: U32,
   +dcx: List<&2, Bool>,
-  edc: {Jenc.encode.dcdiff(dcbk(), pp, Jenc.encode.dcbias(dc0), pred) == (dcbk(), Laws.jpg.feed(List.append(&2, Bool,
-    W12.code.dc(dcs), dcx), pp)) : Array<U32> & Jenc.Put},
+  edc: blk_fin.edc.ty(dc0, pred, pp, dcs, dcx),
   hm: {Laws.jpg.memb(dcs, Jenc.encode.dcsyms()) == True{} : Bool},
   hl: {Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(dcs)) == True{} : Bool},
   ares: AclRes(rest, 0, 1, 63n, Laws.jpg.feed(List.append(&2, Bool, W12.code.dc(dcs), dcx), pp))
@@ -2418,8 +2394,8 @@ def app_nil_u(xs: List<&2, U32>) -> {List.append(&2, U32, xs, []) == xs : List<&
       Equal.cong(List<&2, U32>, List<&2, U32>, ws => hh <> ws, List.append(&2, U32, tt, []), tt, app_nil_u(tt))
 
 # the values after acc and pre, for the rest of the indexes
-def VaccIh(-gt: List<&2, U32>, +acc: List<&2, U32>) -> Type:
-  @a2: Array<U32> -> @p2: List<&2, U32> -> {vals(gt, (a2, List.append(&2, U32, acc, p2))) == List.append(&2, U32, acc,
+def VaccIh(-gt: List<&2, U32>, +_acc: List<&2, U32>) -> Type:
+  @a2: Array<U32> -> @p2: List<&2, U32> -> {vals(gt, (a2, List.append(&2, U32, _acc, p2))) == List.append(&2, U32, _acc,
     vals(gt, (a2, p2))) : List<&2, U32>}
 
 # one read joins acc and pre, whatever it returned
@@ -2819,6 +2795,10 @@ def lenz(
   %ee : {List.length(&2, U32, vals(Jpeg.decode.zig(), (_, []))) == 64n : Nat}
   vlen(Jpeg.decode.zig(), bb)
 
+# a block of values, once they are known to be 64
+def Blk64(+_pred: U32, +_pp: Jenc.Put, +_xs: List<&2, U32>) -> Type:
+  @hl: {List.length(&2, U32, _xs) == 64n : Nat} -> BlkOut(_pred, _pp, _xs)
+
 # the block of the values an array holds at the zigzag, once they are known to be 64, from a copy of it
 def blkh(
   -aa: Array<U32>,
@@ -2827,10 +2807,8 @@ def blkh(
   +pp: Jenc.Put,
   +pred: U32,
   hp: {U32.is_lt(pred, 2048) == True{} : Bool}
-) -> @hl: {List.length(&2, U32, vals(Jpeg.decode.zig(), (aa, []))) == 64n : Nat} -> BlkOut(pred, pp,
-  vals( Jpeg.decode.zig(), (aa, []))):
-  %ee : @hl: {List.length(&2, U32, vals(Jpeg.decode.zig(), (_, []))) == 64n : Nat} -> BlkOut(pred, pp, vals(
-    Jpeg.decode.zig(), (_, [])))
+) -> Blk64(pred, pp, vals(Jpeg.decode.zig(), (aa, []))):
+  %ee : Blk64(pred, pp, vals(Jpeg.decode.zig(), (_, [])))
   hl => blk(vals(Jpeg.decode.zig(), (bb, [])), pred, pp, hl, hp)
 
 # the block of the values an array holds at the zigzag, the array one of two copies
@@ -2850,13 +2828,17 @@ def ScanOut(-aa: Array<U32>, +pp: Jenc.Put, +pred: U32) -> Type:
     Laws.jpg.feed(W12.blkbits(bt), pp)) : Jenc.Book & U32 & Jenc.Put} -> &_h: {U32.is_lt(dd, 2048) == True{} : Bool} ->
     {Laws.jpg.blkwf(bt) == True{} : Bool}
 
+# the type of scan_fin's parameter es
+def scan_fin.es.ty(_aa: Array<U32>, +_pp: Jenc.Put, +_pred: U32) -> Type:
+  {Jenc.encode.scan(book(), _pp, _pred, _aa, Jpeg.decode.zig()) == Jenc.encode.block.go(book(), _pp, _pred,
+    vals(Jpeg.decode.zig(), (_aa, []))) : Jenc.Book & U32 & Jenc.Put}
+
 # the scan's block, moved along the scan's equation
 def scan_fin(
   -aa: Array<U32>,
   +pp: Jenc.Put,
   +pred: U32,
-  es: {Jenc.encode.scan(book(), pp, pred, aa, Jpeg.decode.zig()) == Jenc.encode.block.go(book(), pp, pred,
-    vals(Jpeg.decode.zig(), (aa, []))) : Jenc.Book & U32 & Jenc.Put},
+  es: scan_fin.es.ty(aa, pp, pred),
   bo: BlkOut(pred, pp, vals(Jpeg.decode.zig(), (aa, [])))
 ) -> ScanOut(aa, pp, pred):
   (bt, +dd, eb, hd, hw) = bo
@@ -2941,6 +2923,30 @@ def McuOut(-tt: Jenc.Tile, +bit: Jenc.Put, +py: U32, +pb: U32, +pr: U32) -> Type
       Bool} ->
     {Laws.jpg.blkwf(t3) == True{} : Bool}
 
+# the type of mcu3's parameter e1
+def mcu3.e1.ty(_ys: Array<U32>, +_fy: Bool, +_bit: Jenc.Put, +_py: U32, +_t1: Laws.JBlkTok, +_d1: U32) -> Type:
+  {Jenc.encode.chan.go(_fy, _ys, book(), _bit, _py, kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (book(), _d1,
+    Laws.jpg.feed(W12.blkbits(_t1), _bit)) : Jenc.Book & U32 & Jenc.Put}
+
+# the type of mcu3's parameter e2
+def mcu3.e2.ty(
+  _bs: Array<U32>,
+  +_fb: Bool,
+  +_bit: Jenc.Put,
+  +_pb: U32,
+  +_t1: Laws.JBlkTok,
+  +_t2: Laws.JBlkTok,
+  +_d2: U32
+) -> Type:
+  {Jenc.encode.chan.go(_fb, _bs, book(), Laws.jpg.feed(W12.blkbits(_t1), _bit), _pb, kern(), Jpeg.decode.zig(),
+    Jenc.encode.quant()) == (book(), _d2, Laws.jpg.feed(W12.blkbits(_t2), Laws.jpg.feed(W12.blkbits(_t1),
+    _bit))) : Jenc.Book & U32 & Jenc.Put}
+
+# the type of mcu3's parameter c3
+def mcu3.c3.ty(_rs: Array<U32>, +_fr: Bool, +_bit: Jenc.Put, +_pr: U32, +_t1: Laws.JBlkTok, +_t2: Laws.JBlkTok) -> Type:
+  ChOut(_fr, _rs, Laws.jpg.feed(W12.blkbits(_t2), Laws.jpg.feed(W12.blkbits(_t1), _bit)), _pr, kern(),
+    Jenc.encode.quant())
+
 # the MCU's Cr block, after its Y and Cb blocks
 def mcu3(
   pix: Array<U32>,
@@ -2956,19 +2962,15 @@ def mcu3(
   +pr: U32,
   +t1: Laws.JBlkTok,
   +d1: U32,
-  e1: {Jenc.encode.chan.go(fy, ys, book(), bit, py, kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (book(), d1,
-    Laws.jpg.feed(W12.blkbits(t1), bit)) : Jenc.Book & U32 & Jenc.Put},
+  e1: mcu3.e1.ty(ys, fy, bit, py, t1, d1),
   h1: {U32.is_lt(d1, 2048) == True{} : Bool},
   w1: {Laws.jpg.blkwf(t1) == True{} : Bool},
   +t2: Laws.JBlkTok,
   +d2: U32,
-  e2: {Jenc.encode.chan.go(fb, bs, book(), Laws.jpg.feed(W12.blkbits(t1), bit), pb, kern(), Jpeg.decode.zig(),
-    Jenc.encode.quant()) == (book(), d2, Laws.jpg.feed(W12.blkbits(t2), Laws.jpg.feed(W12.blkbits(t1),
-    bit))) : Jenc.Book & U32 & Jenc.Put},
+  e2: mcu3.e2.ty(bs, fb, bit, pb, t1, t2, d2),
   h2: {U32.is_lt(d2, 2048) == True{} : Bool},
   w2: {Laws.jpg.blkwf(t2) == True{} : Bool},
-  c3: ChOut(fr, rs, Laws.jpg.feed(W12.blkbits(t2), Laws.jpg.feed(W12.blkbits(t1), bit)), pr, kern(),
-    Jenc.encode.quant())
+  c3: mcu3.c3.ty(rs, fr, bit, pr, t1, t2)
 ) -> McuOut(Jenc.Tile{pix, ys, bs, rs, fy, fb, fr}, bit, py, pb, pr):
   (+t3, +d3, e3, h3, w3) = c3
   +kn = kern()
@@ -2991,6 +2993,11 @@ def mcu3(
     Jenc.Put, gg => Jenc.encode.step.end(Jenc.encode.chan.pair(gg, pix), d1, d2), Jenc.encode.chan.go(fr, rs, book(),
     p2, pr, kn, zg, qs), (book(), d3, p3), e3))), h1, h2, h3, w1, w2, w3)
 
+# the type of mcu2's parameter e1
+def mcu2.e1.ty(_ys: Array<U32>, +_fy: Bool, +_bit: Jenc.Put, +_py: U32, +_t1: Laws.JBlkTok, +_d1: U32) -> Type:
+  {Jenc.encode.chan.go(_fy, _ys, book(), _bit, _py, kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (book(), _d1,
+    Laws.jpg.feed(W12.blkbits(_t1), _bit)) : Jenc.Book & U32 & Jenc.Put}
+
 # the MCU's Cb and Cr blocks, after its Y block
 def mcu2(
   pix: Array<U32>,
@@ -3007,8 +3014,7 @@ def mcu2(
   hr: {U32.is_lt(pr, 2048) == True{} : Bool},
   +t1: Laws.JBlkTok,
   +d1: U32,
-  e1: {Jenc.encode.chan.go(fy, ys, book(), bit, py, kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (book(), d1,
-    Laws.jpg.feed(W12.blkbits(t1), bit)) : Jenc.Book & U32 & Jenc.Put},
+  e1: mcu2.e1.ty(ys, fy, bit, py, t1, d1),
   h1: {U32.is_lt(d1, 2048) == True{} : Bool},
   w1: {Laws.jpg.blkwf(t1) == True{} : Bool},
   c2: ChOut(fb, bs, Laws.jpg.feed(W12.blkbits(t1), bit), pb, kern(), Jenc.encode.quant())
@@ -3084,10 +3090,10 @@ def McusOut(
     {Laws.jpg.allwf(ts) == True{} : Bool}
 
 # the rest of the MCU loop, from any state
-def McusIh(+nn: Nat, +mw: U32, +ww: U32, +hh: U32) -> Type:
+def McusIh(+_nn: Nat, +_mw: U32, +_ww: U32, +_hh: U32) -> Type:
   @a2: Array<U32> -> @q1: U32 -> @q2: U32 -> @q3: U32 -> @p2: Jenc.Put -> @x2: U32 -> @y2: U32 -> @h1: {U32.is_lt(q1,
     2048) == True{} : Bool} -> @h2: {U32.is_lt(q2, 2048) == True{} : Bool} -> @h3: {U32.is_lt(q3, 2048) == True{} :
-    Bool} -> McusOut(nn, a2, q1, q2, q3, p2, x2, y2, mw, ww, hh)
+    Bool} -> McusOut(_nn, a2, q1, q2, q3, p2, x2, y2, _mw, _ww, _hh)
 
 # three blocks, then the rest's blocks, fed to the writer
 def feed_tri(
@@ -3116,6 +3122,49 @@ def feed_tri(
       Laws.jpg.feed(b2,
     Laws.jpg.feed(b1, bit))))))
 
+# the type of mcus_fin's parameter ee
+def mcus_fin.ee.ty(
+  _aa: Array<U32>,
+  +_py: U32,
+  +_pb: U32,
+  +_pr: U32,
+  +_bit: Jenc.Put,
+  +_mx: U32,
+  +_my: U32,
+  +_ww: U32,
+  +_hh: U32,
+  +_t1: Laws.JBlkTok,
+  +_t2: Laws.JBlkTok,
+  +_t3: Laws.JBlkTok,
+  _a2: Array<U32>,
+  +_d1: U32,
+  +_d2: U32,
+  +_d3: U32
+) -> Type:
+  {Jenc.encode.step.tile(Jenc.encode.tile(_aa, _ww, _hh, (_mx * 8 : U32), (_my * 8 : U32)), book(), _bit, _py, _pb,
+    _pr, kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (_a2, book(), _d1, _d2, _d3, feed3b(_t1, _t2, _t3,
+    _bit)) : Array<U32> & Jenc.Book & U32 & U32 & U32 & Jenc.Put}
+
+# the type of mcus_fin's parameter rest
+def mcus_fin.rest.ty(
+  +_nn: Nat,
+  +_bit: Jenc.Put,
+  +_mx: U32,
+  +_my: U32,
+  +_mw: U32,
+  +_ww: U32,
+  +_hh: U32,
+  +_t1: Laws.JBlkTok,
+  +_t2: Laws.JBlkTok,
+  +_t3: Laws.JBlkTok,
+  _a2: Array<U32>,
+  +_d1: U32,
+  +_d2: U32,
+  +_d3: U32
+) -> Type:
+  McusOut(_nn, _a2, _d1, _d2, _d3, feed3b(_t1, _t2, _t3, _bit), Jenc.encode.nx(U32.is_lt((_mx + 1 : U32), _mw), _mx),
+    Jenc.encode.ny(U32.is_lt((_mx + 1 : U32), _mw), _my), _mw, _ww, _hh)
+
 # the MCU loop after one MCU, its rest named
 def mcus_fin(
   +nn: Nat,
@@ -3136,14 +3185,11 @@ def mcus_fin(
   +d1: U32,
   +d2: U32,
   +d3: U32,
-  e: {Jenc.encode.step.tile(Jenc.encode.tile(aa, ww, hh, (mx * 8 : U32), (my * 8 : U32)), book(), bit, py, pb, pr,
-    kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (a2, book(), d1, d2, d3, feed3b(t1, t2, t3,
-    bit)) : Array<U32> & Jenc.Book & U32 & U32 & U32 & Jenc.Put},
+  ee: mcus_fin.ee.ty(aa, py, pb, pr, bit, mx, my, ww, hh, t1, t2, t3, a2, d1, d2, d3),
   w1: {Laws.jpg.blkwf(t1) == True{} : Bool},
   w2: {Laws.jpg.blkwf(t2) == True{} : Bool},
   w3: {Laws.jpg.blkwf(t3) == True{} : Bool},
-  rest: McusOut(nn, a2, d1, d2, d3, feed3b(t1, t2, t3, bit), Jenc.encode.nx(U32.is_lt((mx + 1 : U32), mw), mx),
-    Jenc.encode.ny(U32.is_lt((mx + 1 : U32), mw), my), mw, ww, hh)
+  rest: mcus_fin.rest.ty(nn, bit, mx, my, mw, ww, hh, t1, t2, t3, a2, d1, d2, d3)
 ) -> McusOut(1n+nn, aa, py, pb, pr, bit, mx, my, mw, ww, hh):
   (+ts, er, el, ew) = rest
   +mo = U32.is_lt((mx + 1 : U32), mw)
@@ -3155,7 +3201,7 @@ def mcus_fin(
     Laws.jpg.feed(W12.tbits(t1 <> t2 <> t3 <> ts), bit), Equal.cong(Array<U32> & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
     Jenc.Put, gg => Jenc.encode.mcus(nn, gg, Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx),
     Jenc.encode.step.y(aa, book(), bit, py, pb, pr, (mx * 8 : U32), (my * 8 : U32), ww, hh, cx), (a2, book(), d1,
-    d2, d3, p3), e), Equal.trans(Jenc.Put, Jenc.encode.mcus(nn, (a2, book(), d1, d2, d3, p3), Jenc.encode.nx(mo, mx),
+    d2, d3, p3), ee), Equal.trans(Jenc.Put, Jenc.encode.mcus(nn, (a2, book(), d1, d2, d3, p3), Jenc.encode.nx(mo, mx),
     Jenc.encode.ny(mo, my), mw, ww, hh, cx), Laws.jpg.feed(W12.tbits(ts), p3),
       Laws.jpg.feed(W12.tbits(t1 <> t2 <> t3 <> ts), bit), er,
     feed_tri(t1, t2, t3, ts, bit))), Equal.cong(Nat, Nat, kk => 1n+(1n+(1n+kk)), List.length(&2, Laws.JBlkTok, ts),
@@ -3508,6 +3554,24 @@ def SolOut(-aa: Array<U32>, +bit: Jenc.Put) -> Type:
       bit) : Jenc.Put} -> &_w1: {Laws.jpg.blkwf(t1) == True{} : Bool} -> &_w2: {Laws.jpg.blkwf(t2) == True{} :
     Bool} -> {Laws.jpg.blkwf(t3) == True{} : Bool}
 
+# the type of sol3's parameter e1
+def sol3.e1.ty(_aa: Array<U32>, +_bit: Jenc.Put, +_t1: Laws.JBlkTok, _a1: Array<U32>, +_d1: U32) -> Type:
+  {Jenc.encode.block.use(book(), _bit, 1024, srows(_aa, 0), kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (_a1,
+    book(), _d1, Laws.jpg.feed(W12.blkbits(_t1), _bit)) : Array<U32> & Jenc.Book & U32 & Jenc.Put}
+
+# the type of sol3's parameter e2
+def sol3.e2.ty(
+  +_bit: Jenc.Put,
+  +_t1: Laws.JBlkTok,
+  _a1: Array<U32>,
+  +_t2: Laws.JBlkTok,
+  _a2: Array<U32>,
+  +_d2: U32
+) -> Type:
+  {Jenc.encode.block.use(book(), Laws.jpg.feed(W12.blkbits(_t1), _bit), 1024, srows(_a1, 1), kern(),
+    Jpeg.decode.zig(), Jenc.encode.quant()) == (_a2, book(), _d2, Laws.jpg.feed(W12.blkbits(_t2),
+    Laws.jpg.feed(W12.blkbits(_t1), _bit))) : Array<U32> & Jenc.Book & U32 & Jenc.Put}
+
 # the solid path's Cr block, after its Y and Cb blocks
 def sol3(
   -aa: Array<U32>,
@@ -3515,15 +3579,12 @@ def sol3(
   +t1: Laws.JBlkTok,
   -a1: Array<U32>,
   +d1: U32,
-  e1: {Jenc.encode.block.use(book(), bit, 1024, srows(aa, 0), kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (a1,
-    book(), d1, Laws.jpg.feed(W12.blkbits(t1), bit)) : Array<U32> & Jenc.Book & U32 & Jenc.Put},
+  e1: sol3.e1.ty(aa, bit, t1, a1, d1),
   w1: {Laws.jpg.blkwf(t1) == True{} : Bool},
   +t2: Laws.JBlkTok,
   -a2: Array<U32>,
   +d2: U32,
-  e2: {Jenc.encode.block.use(book(), Laws.jpg.feed(W12.blkbits(t1), bit), 1024, srows(a1, 1), kern(),
-    Jpeg.decode.zig(), Jenc.encode.quant()) == (a2, book(), d2, Laws.jpg.feed(W12.blkbits(t2),
-    Laws.jpg.feed(W12.blkbits(t1), bit))) : Array<U32> & Jenc.Book & U32 & Jenc.Put},
+  e2: sol3.e2.ty(bit, t1, a1, t2, a2, d2),
   w2: {Laws.jpg.blkwf(t2) == True{} : Bool},
   b3: BUseOut(srows(a2, 2), Laws.jpg.feed(W12.blkbits(t2), Laws.jpg.feed(W12.blkbits(t1), bit)), 1024)
 ) -> SolOut(aa, bit):
@@ -3545,6 +3606,11 @@ def sol3(
     U32 & Jenc.Put, Jenc.Put, gg => Jenc.encode.solid.end(gg), Jenc.encode.block.use(book(), p2, 1024, srows(a2, 2),
     kn, zg, qs), (a3, book(), d3, p3), e3))), w1, w2, w3)
 
+# the type of sol2's parameter e1
+def sol2.e1.ty(_aa: Array<U32>, +_bit: Jenc.Put, +_t1: Laws.JBlkTok, _a1: Array<U32>, +_d1: U32) -> Type:
+  {Jenc.encode.block.use(book(), _bit, 1024, srows(_aa, 0), kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (_a1,
+    book(), _d1, Laws.jpg.feed(W12.blkbits(_t1), _bit)) : Array<U32> & Jenc.Book & U32 & Jenc.Put}
+
 # the solid path's Cb and Cr blocks, after its Y block
 def sol2(
   -aa: Array<U32>,
@@ -3552,8 +3618,7 @@ def sol2(
   +t1: Laws.JBlkTok,
   -a1: Array<U32>,
   +d1: U32,
-  e1: {Jenc.encode.block.use(book(), bit, 1024, srows(aa, 0), kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (a1,
-    book(), d1, Laws.jpg.feed(W12.blkbits(t1), bit)) : Array<U32> & Jenc.Book & U32 & Jenc.Put},
+  e1: sol2.e1.ty(aa, bit, t1, a1, d1),
   w1: {Laws.jpg.blkwf(t1) == True{} : Bool},
   b2: BUseOut(srows(a1, 1), Laws.jpg.feed(W12.blkbits(t1), bit), 1024)
 ) -> SolOut(aa, bit):
@@ -3611,6 +3676,10 @@ def tbits_app(
         List.append(&2, Bool, W12.tbits(rest), W12.tbits(ys))), W12.app_assoc(W12.blkbits(tt), W12.tbits(rest),
         W12.tbits(ys))))
 
+# a list of blocks, n MCUs' worth, each read whole
+def ZOut(+_zs: List<&2, Laws.JBlkTok>, +_nn: Nat) -> Type:
+  &_l: {List.length(&2, Laws.JBlkTok, _zs) == tri(_nn) : Nat} -> {Laws.jpg.allwf(_zs) == True{} : Bool}
+
 # a path's entropy-coded bytes: blocks the decoder reads whole, three per MCU, fed to the writer and padded
 def PathOut(-bytes: List<&2, U32>, +nn: Nat) -> Type:
   &ts: List<&2, Laws.JBlkTok> -> &_e: {bytes == Jenc.encode.pad(Laws.jpg.feed(W12.tbits(ts),
@@ -3621,8 +3690,7 @@ def PathOut(-bytes: List<&2, U32>, +nn: Nat) -> Type:
 def neutral_fin(
   +ww: U32,
   +hh: U32,
-  rr: &_l: {List.length(&2, Laws.JBlkTok, ztoks(U32.to_nat(mcun(ww, hh)))) == tri(U32.to_nat(mcun(ww,
-    hh))) : Nat} -> {Laws.jpg.allwf(ztoks(U32.to_nat(mcun(ww, hh)))) == True{} : Bool}
+  rr: ZOut(ztoks(U32.to_nat(mcun(ww, hh))), U32.to_nat(mcun(ww, hh)))
 ) -> PathOut(Jenc.encode.neutral(ww, hh), U32.to_nat(mcun(ww, hh))):
   (el, ew) = rr
   +nn = U32.to_nat(mcun(ww, hh))
@@ -3639,14 +3707,18 @@ def neutral_fin(
 def neutral_ok(+ww: U32, +hh: U32) -> PathOut(Jenc.encode.neutral(ww, hh), U32.to_nat(mcun(ww, hh))):
   neutral_fin(ww, hh, zwf(U32.to_nat(mcun(ww, hh))))
 
+# the type of go_fin's parameter rr
+def go_fin.rr.ty(+_ww: U32, +_hh: U32, +_px: List<&2, U32>) -> Type:
+  McusOut(U32.to_nat(mcun(_ww, _hh)), Jenc.encode.pix.load(U32.to_nat((_ww * _hh : U32)), _px,
+    Jpeg.decode.plane((_ww * _hh : U32)), 0), 1024, 1024, 1024, Jenc.encode.put0(), 0, 0, U32.div((_ww + 7 : U32), 8),
+    _ww, _hh)
+
 # the go path, its MCU loop's blocks named
 def go_fin(
   +ww: U32,
   +hh: U32,
   +px: List<&2, U32>,
-  rr: McusOut(U32.to_nat(mcun(ww, hh)), Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px,
-    Jpeg.decode.plane((ww * hh : U32)), 0), 1024, 1024, 1024, Jenc.encode.put0(), 0, 0, U32.div((ww + 7 : U32), 8),
-    ww, hh)
+  rr: go_fin.rr.ty(ww, hh, px)
 ) -> PathOut(Jenc.encode.go(ww, hh, px), U32.to_nat(mcun(ww, hh))):
   (+ts, er, el, ew) = rr
   +nn = U32.to_nat(mcun(ww, hh))
@@ -3690,20 +3762,20 @@ def solid_fin(
   +hh: U32,
   +color: U32,
   so: SolOut(Array.set(U32, Jpeg.decode.plane(1), 0, color), Jenc.encode.put0()),
-  rr: &_l: {List.length(&2, Laws.JBlkTok, ztoks(U32.to_nat((mcun(ww, hh) - 1 : U32)))) == tri(U32.to_nat((mcun(ww,
-    hh) - 1 : U32))) : Nat} -> {Laws.jpg.allwf(ztoks(U32.to_nat((mcun(ww, hh) - 1 : U32)))) == True{} : Bool}
+  rr: ZOut(ztoks(U32.to_nat((mcun(ww, hh) - 1 : U32))), U32.to_nat((mcun(ww, hh) - 1 : U32)))
 ) -> PathOut(Jenc.encode.solid(ww, hh, color), 1n+U32.to_nat((mcun(ww, hh) - 1 : U32))):
   (+t1, +t2, +t3, es, w1, w2, w3) = so
   (el, ew) = rr
   +kk = U32.to_nat((mcun(ww, hh) - 1 : U32))
   +ws = {W12.WS{[], []} : W12.WS}
   +xb = W12.tbits(t1 <> t2 <> t3 <> [])
-  +zt = W12.tbits(ztoks(kk))
+  +zk = ztoks(kk)
+  +zt = W12.tbits(zk)
   +w1s = W12.wm(xb, ws)
   +hs = {wm_short(xb, ws, {==}) : {W12.wshort(w1s) == True{} : Bool}}
   +p0 = Jenc.encode.put0()
   +cx = Jenc.encode.ctx()
-  +ts = {t1 <> t2 <> t3 <> ztoks(kk) : List<&2, Laws.JBlkTok>}
+  +ts = {t1 <> t2 <> t3 <> zk : List<&2, Laws.JBlkTok>}
   (ts, Equal.cong(Jenc.Put, List<&2, U32>, pp => Jenc.encode.pad(pp), Jenc.encode.neutral.mcus(kk, Jenc.encode.solid.y(
     Array.set(U32, Jpeg.decode.plane(1), 0, color), Jenc.encode.book(Jenc.encode.dccounts(), Jenc.encode.dcsyms(),
       Jenc.encode.accounts(), Jenc.encode.acsyms()),
@@ -3737,20 +3809,20 @@ def solid_fin(
     List.append(&2, Bool, xb, zt), ws)), W12.wfeed(List.append(&2, Bool, xb, zt), ws, {==})), Equal.cong(List<&2, Bool>,
     Jenc.Put, bs => Laws.jpg.feed(bs, p0), List.append(&2, Bool, xb, zt), W12.tbits(ts), Equal.sym(List<&2, Bool>,
       W12.tbits(ts),
-    List.append(&2, Bool, xb, zt), tbits_app(t1 <> t2 <> t3 <> [], ztoks(kk))))))))), Equal.cong(Nat, Nat, nn =>
-    1n+(1n+(1n+nn)), List.length(&2, Laws.JBlkTok, ztoks(kk)), tri(kk), el), Equal.trans(Bool,
+    List.append(&2, Bool, xb, zt), tbits_app(t1 <> t2 <> t3 <> [], zk)))))))), Equal.cong(Nat, Nat, nn =>
+    1n+(1n+(1n+nn)), List.length(&2, Laws.JBlkTok, zk), tri(kk), el), Equal.trans(Bool,
       Laws.jpg.also(Laws.jpg.blkwf(t1),
-    Laws.jpg.also(Laws.jpg.blkwf(t2), Laws.jpg.also(Laws.jpg.blkwf(t3), Laws.jpg.allwf(ztoks(kk))))),
+    Laws.jpg.also(Laws.jpg.blkwf(t2), Laws.jpg.also(Laws.jpg.blkwf(t3), Laws.jpg.allwf(zk)))),
       Laws.jpg.also(Laws.jpg.blkwf(t2), Laws.jpg.also(Laws.jpg.blkwf(t3),
-    Laws.jpg.allwf(ztoks(kk)))), True{}, also_t(Laws.jpg.blkwf(t1), Laws.jpg.also(Laws.jpg.blkwf(t2),
+    Laws.jpg.allwf(zk))), True{}, also_t(Laws.jpg.blkwf(t1), Laws.jpg.also(Laws.jpg.blkwf(t2),
       Laws.jpg.also(Laws.jpg.blkwf(t3), Laws.jpg.allwf(
-    ztoks(kk)))), w1), Equal.trans(Bool, Laws.jpg.also(Laws.jpg.blkwf(t2), Laws.jpg.also(Laws.jpg.blkwf(t3),
-      Laws.jpg.allwf(ztoks(kk)))),
-    Laws.jpg.also(Laws.jpg.blkwf(t3), Laws.jpg.allwf(ztoks(kk))), True{}, also_t(Laws.jpg.blkwf(t2),
+    zk))), w1), Equal.trans(Bool, Laws.jpg.also(Laws.jpg.blkwf(t2), Laws.jpg.also(Laws.jpg.blkwf(t3),
+      Laws.jpg.allwf(zk))),
+    Laws.jpg.also(Laws.jpg.blkwf(t3), Laws.jpg.allwf(zk)), True{}, also_t(Laws.jpg.blkwf(t2),
       Laws.jpg.also(Laws.jpg.blkwf(t3), Laws.jpg.allwf(
-    ztoks(kk))), w2), Equal.trans(Bool, Laws.jpg.also(Laws.jpg.blkwf(t3), Laws.jpg.allwf(ztoks(kk))),
-      Laws.jpg.allwf(ztoks(kk)), True{},
-    also_t(Laws.jpg.blkwf(t3), Laws.jpg.allwf(ztoks(kk)), w3), ew))))
+    zk)), w2), Equal.trans(Bool, Laws.jpg.also(Laws.jpg.blkwf(t3), Laws.jpg.allwf(zk)),
+      Laws.jpg.allwf(zk), True{},
+    also_t(Laws.jpg.blkwf(t3), Laws.jpg.allwf(zk), w3), ew))))
 
 # the solid path
 def solid_ok(
@@ -3980,6 +4052,11 @@ def lt_dbl(
     case True{}:
       lt_dbl1(rr, nn, hh)
 
+# the type of divg's parameter eh
+def divg.eh.ty(+_pp: Nat, +_a0: Bool, +_hi: Word(_pp), +_qq: Word(_pp), +_rn: Nat) -> Type:
+  {Word.to_nat(1n+_pp, WCon{_a0, _hi}) == Nat.add(Nat.add(R.bit(_a0), Nat.double(_rn)),
+    Nat.double(eight(Word.to_nat(_pp, _qq)))) : Nat}
+
 # the long division's shifted remainder, the new quotient bit decided by g
 def divg(
   gg: Bool,
@@ -3991,20 +4068,23 @@ def divg(
   +rn: Nat,
   +hg: {U32.is_ge(U32{ss}, 8) == gg : Bool},
   +es: {Word.to_nat(32n, ss) == Nat.add(R.bit(a0), Nat.double(rn)) : Nat},
-  +eh: {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(Nat.add(R.bit(a0), Nat.double(rn)),
-    Nat.double(eight(Word.to_nat(pp, qq)))) : Nat},
+  eh0: divg.eh.ty(pp, a0, hi, qq, rn),
   +hr: {Nat.is_lt(rn, 8n) == True{} : Bool}
 ) -> &_e: {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(U32.to_nat(dr(1n+pp, U32.divmod.go.fin(pp, qq, U32{ss}, 8,
   gg))), eight(Word.to_nat(1n+pp, dq(1n+pp, U32.divmod.go.fin(pp, qq, U32{ss}, 8,
   gg))))) : Nat} -> {U32.is_lt(dr(1n+pp, U32.divmod.go.fin(pp, qq, U32{ss}, 8, gg)), 8) == True{} : Bool}:
   match gg:
     case False{}:
+      +eh = {eh0 : {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(Nat.add(R.bit(a0), Nat.double(rn)),
+        Nat.double(eight(Word.to_nat(pp, qq)))) : Nat}}
       +sn = Word.to_nat(32n, ss)
       (Equal.trans(Nat, Word.to_nat(1n+pp, WCon{a0, hi}), Nat.add(Nat.add(R.bit(a0), Nat.double(rn)), Nat.double(eight(
         Word.to_nat(pp, qq)))), Nat.add(sn, Nat.double(eight(Word.to_nat(pp, qq)))), eh, Equal.cong(Nat, Nat, xx =>
         Nat.add(xx, Nat.double(eight(Word.to_nat(pp, qq)))), Nat.add(R.bit(a0), Nat.double(rn)), sn, Equal.sym(Nat, sn,
         Nat.add(R.bit(a0), Nat.double(rn)), es))), nge_lt(U32.cmp(U32{ss}, 8), hg))
     case True{}:
+      +eh = {eh0 : {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(Nat.add(R.bit(a0), Nat.double(rn)),
+        Nat.double(eight(Word.to_nat(pp, qq)))) : Nat}}
       +sn = Word.to_nat(32n, ss)
       +dd = Nat.double(eight(Word.to_nat(pp, qq)))
       +h8 = {Equal.trans(Bool, Nat.is_le(8n, sn), Cmp.is_ge(Nat.cmp(sn, 8n)), True{}, Equal.sym(Bool,
@@ -4057,7 +4137,7 @@ def divstep.r(
   -hi: Word(pp),
   +qq: Word(pp),
   +rw: Word(32n),
-  e: {Word.to_nat(pp, hi) == Nat.add(Word.to_nat(32n, rw), eight(Word.to_nat(pp, qq))) : Nat},
+  ee: {Word.to_nat(pp, hi) == Nat.add(Word.to_nat(32n, rw), eight(Word.to_nat(pp, qq))) : Nat},
   +hl: {U32.is_lt(U32{rw}, 8) == True{} : Bool}
 ) -> DivR(pp, WCon{a0, hi}, U32.divmod.go.rec(pp, a0, 8, (qq, U32{rw}))):
   +ss = snd.bw(32n, Word.shl.out(32n, a0, rw))
@@ -4073,7 +4153,7 @@ def divstep.r(
     Nat.add(Nat.add(R.bit(a0), Nat.double(rn)), Nat.double(eight(qn))), R.to_nat_con(pp, a0, hi), Equal.trans(Nat,
     Nat.add(R.bit(a0), Nat.double(Word.to_nat(pp, hi))), Nat.add(R.bit(a0), Nat.double(Nat.add(rn, eight(qn)))),
     Nat.add(Nat.add(R.bit(a0), Nat.double(rn)), Nat.double(eight(qn))), Equal.cong(Nat, Nat, xx => Nat.add(R.bit(a0),
-    Nat.double(xx)), Word.to_nat(pp, hi), Nat.add(rn, eight(qn)), e), Equal.trans(Nat, Nat.add(R.bit(a0),
+    Nat.double(xx)), Word.to_nat(pp, hi), Nat.add(rn, eight(qn)), ee), Equal.trans(Nat, Nat.add(R.bit(a0),
     Nat.double(Nat.add(rn, eight(qn)))), Nat.add(R.bit(a0), Nat.add(Nat.double(rn), Nat.double(eight(qn)))),
     Nat.add(Nat.add(R.bit(a0), Nat.double(rn)), Nat.double(eight(qn))), Equal.cong(Nat, Nat, xx => Nat.add(R.bit(a0),
     xx), Nat.double(Nat.add(rn, eight(qn))), Nat.add(Nat.double(rn), Nat.double(eight(qn))), R.double_dist(rn,
@@ -4091,14 +4171,18 @@ def divstep.r(
       hf)), divg(gg, pp, a0, hi,
     qq, ss, rn, {==}, es, eh, ult_n(U32{rw}, 8, hl)))
 
+# the type of divstep's parameter inv
+def divstep.inv.ty(+_pp: Nat, +_hi: Word(_pp), _qr: Word(_pp) & U32) -> Type:
+  &_e: {Word.to_nat(_pp, _hi) == Nat.add(U32.to_nat(dr(_pp, _qr)), eight(Word.to_nat(_pp, dq(_pp,
+    _qr)))) : Nat} -> {U32.is_lt(dr(_pp, _qr), 8) == True{} : Bool}
+
 # one step of the long division by 8, whatever the division of the higher bits returned
 def divstep(
   +pp: Nat,
   +a0: Bool,
   -hi: Word(pp),
   qr: Word(pp) & U32,
-  inv: &_e: {Word.to_nat(pp, hi) == Nat.add( U32.to_nat(dr(pp, qr)), eight(Word.to_nat(pp, dq(pp,
-    qr)))) : Nat} -> {U32.is_lt(dr(pp, qr), 8) == True{} : Bool}
+  inv: divstep.inv.ty(pp, hi, qr)
 ) -> DivR(pp, WCon{a0, hi}, U32.divmod.go.rec(pp, a0, 8, qr)):
   match qr:
     case (+qq, rr):
@@ -4653,15 +4737,18 @@ def MwOut(+ww: U32) -> Type:
   &_e: {U32.to_nat((ww + 7 : U32)) == Nat.add(U32.to_nat(ww), 7n) : Nat} -> &_f: Fits(14n, U32.to_nat(U32.div((ww +
     7 : U32), 8))) -> {Nat.is_lt(0n, U32.to_nat(U32.div((ww + 7 : U32), 8))) == True{} : Bool}
 
+# the type of mw_fin's parameter dv
+def mw_fin.dv.ty(+_ww: U32) -> Type:
+  &rr: U32 -> &_e: {U32.to_nat((_ww + 7 : U32)) == Nat.add(U32.to_nat(rr), eight(U32.to_nat(U32.div((_ww + 7 : U32),
+    8)))) : Nat} -> {U32.is_lt(rr, 8) == True{} : Bool}
+
 # a side's MCU count, its division named
 def mw_fin(
   +ww: U32,
   fw: Fits(16n, U32.to_nat(ww)),
   +e7: {U32.to_nat((ww + 7 : U32)) == Nat.add(U32.to_nat(ww), 7n) : Nat},
   +h8: {Nat.is_le(8n, Nat.add(U32.to_nat(ww), 7n)) == True{} : Bool},
-  dv: &rr: U32 -> &_e: {U32.to_nat((ww + 7 : U32)) == Nat.add(U32.to_nat(rr), eight(U32.to_nat(U32.div((ww + 7 : U32),
-    8)))) : Nat} -> {U32.is_lt(rr,
-  8) == True{} : Bool}
+  dv: mw_fin.dv.ty(ww)
 ) -> MwOut(ww):
   (+rr, +ed, hr) = dv
   +xx = U32.to_nat((ww + 7 : U32))
@@ -4806,6 +4893,13 @@ def pos_mul(
     case 1n+ +pp:
       R.lt_le_trans(0n, bb, Nat.add(bb, Nat.mul(pp, bb)), hb, R.le_add_more(bb, bb, Nat.mul(pp, bb), R.le_refl(bb)))
 
+# the type of count_fin's parameter pr
+def count_fin.pr.ty(+_ww: U32, +_hh: U32) -> Type:
+  &_p: {U32.to_nat(mcun(_ww, _hh)) == Nat.mul(U32.to_nat(U32.div((_ww + 7 : U32), 8)),
+    U32.to_nat(U32.div((_hh + 7 : U32), 8))) : Nat} -> {U32.to_nat((mcun(_ww,
+    _hh) * 3 : U32)) == Nat.mul(Nat.mul(U32.to_nat(U32.div((_ww + 7 : U32), 8)), U32.to_nat(U32.div((_hh + 7 : U32),
+    8))), 3n) : Nat}
+
 # the counts, the products named
 def count_fin(
   +ww: U32,
@@ -4814,10 +4908,7 @@ def count_fin(
   +ch: {((hh + 8 : U32) - 1 : U32) == (hh + 7 : U32) : U32},
   +pw: {Nat.is_lt(0n, U32.to_nat(U32.div((ww + 7 : U32), 8))) == True{} : Bool},
   +ph: {Nat.is_lt(0n, U32.to_nat(U32.div((hh + 7 : U32), 8))) == True{} : Bool},
-  pr: &_p: {U32.to_nat(mcun(ww, hh)) == Nat.mul(U32.to_nat(U32.div((ww + 7 : U32), 8)),
-    U32.to_nat(U32.div((hh + 7 : U32), 8))) : Nat} -> {U32.to_nat((mcun(ww,
-    hh) * 3 : U32)) == Nat.mul(Nat.mul(U32.to_nat(U32.div((ww + 7 : U32), 8)), U32.to_nat(U32.div((hh + 7 : U32),
-    8))), 3n) : Nat}
+  pr: count_fin.pr.ty(ww, hh)
 ) -> CountOut(ww, hh):
   (em0, e30) = pr
   +mw = U32.div((ww + 7 : U32), 8)
@@ -4909,6 +5000,10 @@ def tri_pos(nn: Nat, hp: {Nat.is_lt(0n, nn) == True{} : Bool}, ee: {0n == tri(nn
     case 1n+pp:
       zero_ne(1n+(1n+tri(pp)), ee)
 
+# the type of some_ts's parameter ea
+def some_ts.ea.ty(+_ts: List<&2, Laws.JBlkTok>, +_ww: U32, +_hh: U32, +_px: List<&2, U32>) -> Type:
+  {Jenc.encode.arm(_ww, _hh, _px) == Jenc.encode.pad(Laws.jpg.feed(W12.tbits(_ts), Jenc.encode.put0())) : List<&2, U32>}
+
 # the entropy-coded bytes' blocks, at least one, decode to a picture
 def some_ts(
   ts: List<&2, Laws.JBlkTok>,
@@ -4918,8 +5013,7 @@ def some_ts(
   +hw0: {U32.is_eq(ww, 0) == False{} : Bool},
   +hh0: {U32.is_eq(hh, 0) == False{} : Bool},
   +mn: Nat,
-  ea: {Jenc.encode.arm(ww, hh, px) == Jenc.encode.pad(Laws.jpg.feed(W12.tbits(ts), Jenc.encode.put0())) : List<&2,
-    U32>},
+  ea: some_ts.ea.ty(ts, ww, hh, px),
   el: {List.length(&2, Laws.JBlkTok, ts) == tri(mn) : Nat},
   ew: {Laws.jpg.allwf(ts) == True{} : Bool},
   en: {U32.to_nat(Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1)) == tri(mn) : Nat},
@@ -4978,6 +5072,12 @@ def some_cnt(
   (en, hp, hn) = co
   some_path(ww, hh, px, hw0, hh0, en, hp, arm_ok(ww, hh, px, hn))
 
+# the type of some_ok's parameter ers
+def some_ok.ers.ty(+_ww: U32, +_hh: U32, +_px: List<&2, U32>) -> Type:
+  {Laws.jpg.back(Img.encode_jpeg(Img.Raster{_ww, _hh,
+    _px})) == Img.decode_jpeg.out(Jpeg.decode.run(Laws.jpg.enc.frame(_ww, _hh), Laws.jpg.enc.scan(),
+    Laws.jpg.enc.tabs(), Jenc.encode.arm(_ww, _hh, Img.colours(_px)), 0)) : Maybe<&2, Img.Raster>}
+
 # decode_jpeg of encode_jpeg's bytes, for a well-formed raster with both sides from 1 to 65535, is some raster
 def some_ok(
   +ww: U32,
@@ -4986,9 +5086,7 @@ def some_ok(
   +h_good: {Png.enc.good(ww, hh, px) == True{} : Bool},
   +h_w: {U32.is_le(ww, 65535) == True{} : Bool},
   +h_h: {U32.is_le(hh, 65535) == True{} : Bool},
-  ers: {Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh,
-    px})) == Img.decode_jpeg.out(Jpeg.decode.run( Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(),
-    Laws.jpg.enc.tabs(), Jenc.encode.arm(ww, hh, Img.colours(px)), 0)) : Maybe<&2, Img.Raster>}
+  ers: some_ok.ers.ty(ww, hh, px)
 ) -> {Maybe.is_some(&2, Img.Raster, Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px}))) == True{} : Bool}:
   +gw = U32.is_gt(ww, 0)
   +gh = U32.is_gt(hh, 0)
@@ -5004,4 +5102,3 @@ def some_ok(
   %es : {Maybe.is_some(&2, Img.Raster, _) == True{} : Bool}
   psome_some(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(), Jenc.encode.arm(ww,
     hh, cp), 0), some_cnt(ww, hh, cp, hw0, hh0, count_ok(ww, hh, hw0, hh0, h_w, h_h)))
-
