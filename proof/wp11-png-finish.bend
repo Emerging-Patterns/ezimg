@@ -56,8 +56,11 @@ def pos.at(
         Equal.cong(Nat, Bool, xx => Nat.is_le(1n+kk, xx), U32.to_nat(uu), 0n, e0)), hh)))
 
 # a U32 at least a successor is not zero
-def pos(+uu: U32, +kk: Nat, hh: {Nat.is_le(1n+kk, U32.to_nat(uu)) == True{} : Bool}) -> {U32.is_zero(uu) == False{} :
-  Bool}:
+def pos(
+  +uu: U32,
+  +kk: Nat,
+  hh: {Nat.is_le(1n+kk, U32.to_nat(uu)) == True{} : Bool}
+) -> {U32.is_zero(uu) == False{} : Bool}:
   pos.at(U32.is_zero(uu), uu, kk, {==}, hh)
 
 # a U32 neither 0 nor 1 less one is not zero, once is_zero's answer is named
@@ -134,8 +137,7 @@ def crcl(
   xs: List<&2, U32>,
   +cc: U32,
   +acc: List<&2, U32>
-) -> {Png.enc.crc.list(xs, cc, acc) == (Crc.crc.fold(xs, cc), List.reverse.go(&2, U32, xs, acc)) : U32 & List<&2,
-  U32>}:
+) -> {Png.enc.crc.list(xs, cc, acc) == (Crc.crc.fold(xs, cc), List.reverse.go(&2, U32, xs, acc)) : U32 & List<&2, U32>}:
   match xs:
     case Nil{}:
       {==}
@@ -281,8 +283,12 @@ def capm(zz: Bool, +left: U32, +mx: U32) -> U32:
       mx
 
 # enc.cap.at is capm at 65535
-def cap.m(zz: Bool, +left: U32, +mx: U32, +emx: {mx == 65535 : U32}) -> {Png.enc.cap.at(zz, left) == capm(zz, left, mx) :
-  U32}:
+def cap.m(
+  zz: Bool,
+  +left: U32,
+  +mx: U32,
+  +emx: {mx == 65535 : U32}
+) -> {Png.enc.cap.at(zz, left) == capm(zz, left, mx) : U32}:
   match zz:
     case True{}:
       {==}
@@ -379,10 +385,10 @@ def hdr(
   zz: Bool,
   +left: U32,
   +rest: List<&2, U32>
-) -> {Png.enc.bf.at(zz) <> Png.enc.byte(Png.enc.cap.at(zz, left)) <> Png.enc.hi(Png.enc.cap.at(zz, left)) <>
-  Png.enc.byte((Png.enc.cap.at(zz, left) .^. 65535 : U32)) <> Png.enc.hi((Png.enc.cap.at(zz, left) .^. 65535 : U32))
-  <> rest == List.append(&2, U32, Png.enc.head(zz, Png.enc.cap.at(zz, left), (Png.enc.cap.at(zz, left) .^. 65535 :
-  U32)), rest) : List<&2, U32>}:
+) -> {Png.enc.bf.at(zz) <> Png.enc.byte(Png.enc.cap.at(zz, left)) <> Png.enc.hi(Png.enc.cap.at(zz,
+  left)) <> Png.enc.byte((Png.enc.cap.at(zz, left) .^. 65535 : U32)) <> Png.enc.hi((Png.enc.cap.at(zz,
+  left) .^. 65535 : U32)) <> rest == List.append(&2, U32, Png.enc.head(zz, Png.enc.cap.at(zz, left),
+  (Png.enc.cap.at(zz, left) .^. 65535 : U32)), rest) : List<&2, U32>}:
   match zz:
     case True{}:
       {==}
@@ -459,57 +465,73 @@ def edge.no(
 # a new block's bytes as bs writes them for length u and BFINAL v: the
 # header, the first byte, then the rest of the walk
 def open.bs(
-  +h: U32,
-  +t: List<&2, U32>,
+  +hd: U32,
+  +tl: List<&2, U32>,
   +l2: U32,
   +uu: U32,
   +vv: U32
 ) -> List<&2, U32>:
   +nlen = (uu .^. 65535 : U32)
   +room2 = (uu - 1 : U32)
-  vv <> Png.enc.byte(uu) <> Png.enc.hi(uu) <> Png.enc.byte(nlen) <> Png.enc.hi(nlen) <> h <> bs(t, U32.is_zero(room2),
+  vv <> Png.enc.byte(uu) <> Png.enc.hi(uu) <> Png.enc.byte(nlen) <> Png.enc.hi(nlen) <> hd <> bs(tl, U32.is_zero(room2),
     U32.is_eq(room2, 1), room2, l2, Png.enc.cap(l2), Png.enc.bf(l2))
 
-# a new block from left bytes, h then t: bs's bytes are enc.feed's from a
-# block holding h alone
+# a new block's header for left bytes, as enc.feed opens it
+def hd1(+left: U32) -> List<&2, U32>:
+  Png.enc.head(U32.is_le(left, 65535), Png.enc.cap(left), (Png.enc.cap(left) .^. 65535 : U32))
+
+# bs after a new block's first byte, for left bytes
+def bs1(+tl: List<&2, U32>, +left: U32) -> List<&2, U32>:
+  +room = (Png.enc.cap(left) - 1 : U32)
+  bs(tl, U32.is_zero(room), U32.is_eq(room, 1), room, (left - 1 : U32), Png.enc.cap((left - 1 : U32)),
+    Png.enc.bf((left - 1 : U32)))
+
+# enc.feed after a new block's first byte hd
+def fd1(+tl: List<&2, U32>, +mx: U32, +hd: U32) -> List<&2, U32>:
+  Png.enc.feed(tl, U32.is_zero((mx - 1 : U32)), (mx - 1 : U32), mx, [hd])
+
+# a new block from left bytes, hd then tl: bs's bytes are enc.feed's from a
+# block holding hd alone
 def open.feed(
-  +h: U32,
-  +t: List<&2, U32>,
+  +hd: U32,
+  +tl: List<&2, U32>,
   +left: U32,
   +mx: U32,
-  +ih: {List.append(&2, U32, Png.enc.head(U32.is_le(left, 65535), Png.enc.cap(left), (Png.enc.cap(left) .^. 65535 :
-    U32)), h <> bs(t, U32.is_zero((Png.enc.cap(left) - 1 : U32)), U32.is_eq((Png.enc.cap(left) - 1 : U32), 1),
-    (Png.enc.cap(left) - 1 : U32), (left - 1 : U32), Png.enc.cap((left - 1 : U32)), Png.enc.bf((left - 1 : U32)))) ==
-    Png.enc.feed(t, U32.is_zero((mx - 1 : U32)), (mx - 1 : U32), mx, [h]) : List<&2, U32>}
-) -> {open.bs(h, t, (left - 1 : U32), Png.enc.cap(left), Png.enc.bf(left)) == Png.enc.feed(t, U32.is_zero((mx - 1 :
-  U32)), (mx - 1 : U32), mx, [h]) : List<&2, U32>}:
+  +ih: {List.append(&2, U32, hd1(left), hd <> bs1(tl, left)) == fd1(tl, mx, hd) : List<&2, U32>}
+) -> {open.bs(hd, tl, (left - 1 : U32), Png.enc.cap(left), Png.enc.bf(left)) == Png.enc.feed(tl,
+  U32.is_zero((mx - 1 : U32)), (mx - 1 : U32), mx, [hd]) : List<&2, U32>}:
   +zz = U32.is_le(left, 65535)
   +cp = Png.enc.cap(left)
   +l2 = (left - 1 : U32)
-  +q = bs(t, U32.is_zero((cp - 1 : U32)), U32.is_eq((cp - 1 : U32), 1), (cp - 1 : U32), l2, Png.enc.cap(l2),
+  +q = bs(tl, U32.is_zero((cp - 1 : U32)), U32.is_eq((cp - 1 : U32), 1), (cp - 1 : U32), l2, Png.enc.cap(l2),
     Png.enc.bf(l2))
-  Equal.trans(List<&2, U32>, open.bs(h, t, l2, cp, Png.enc.bf(left)), List.append(&2, U32, Png.enc.head(zz, cp, (cp .^.
-    65535 : U32)), h <> q), Png.enc.feed(t, U32.is_zero((mx - 1 : U32)), (mx - 1 : U32), mx, [h]),
-    hdr(zz, left, h <> q), ih)
+  Equal.trans(List<&2, U32>, open.bs(hd, tl, l2, cp, Png.enc.bf(left)), List.append(&2, U32, Png.enc.head(zz, cp,
+    (cp .^.
+    65535 : U32)), hd <> q), Png.enc.feed(tl, U32.is_zero((mx - 1 : U32)), (mx - 1 : U32), mx, [hd]),
+    hdr(zz, left, hd <> q), ih)
 
-# the facts a new block's walk starts from, for sim: the feed holds h, with
-# mx - 1 bytes of room; bs has cap(left) - 1 left in the block
-def open.ih(
-  +h: U32,
-  +t: List<&2, U32>,
-  +left: U32,
-  +mx: U32,
-  +emx: {mx == 65535 : U32},
-  +hn: {U32.to_nat(left) == 1n+List.length(&2, U32, t) : Nat},
-  sim_t: @zn: Bool -> @zl: Bool -> @zf: Bool -> @fin: Bool -> @rf: U32 -> @rp: U32 -> @plen: U32 -> @pbf: U32 ->
+# the simulation's hypothesis for the rest of a block opened by hd
+def open.ih.ty(+hd: U32, +tl: List<&2, U32>, +left: U32, +mx: U32) -> Type:
+  @zn: Bool -> @zl: Bool -> @zf: Bool -> @fin: Bool -> @rf: U32 -> @rp: U32 -> @plen: U32 -> @pbf: U32 ->
     @ll: U32 -> {zn == U32.is_zero(rp) : Bool} -> {zl == U32.is_eq(rp, 1) : Bool} -> {zf == U32.is_zero(rf) : Bool} ->
     {Nat.add(1n, U32.to_nat(rf)) == U32.to_nat(mx) : Nat} -> {U32.to_nat(ll) == Nat.add(1n, U32.to_nat(rp)) : Nat}
     -> {Nat.is_le(U32.to_nat(rp), U32.to_nat(rf)) == True{} : Bool} -> {U32.to_nat((left - 1 : U32)) ==
-    List.length(&2, U32, t) : Nat} -> fin.ok(fin, rp, rf, List.length(&2, U32, t)) -> at.edge(rp, (left - 1 : U32),
-    plen, pbf) -> sim.ty(t, zn, zl, zf, fin, [h], rf, rp, (left - 1 : U32), plen, pbf, ll, mx)
-) -> {open.bs(h, t, (left - 1 : U32), Png.enc.cap(left), Png.enc.bf(left)) == Png.enc.feed(t, U32.is_zero((mx - 1 :
-  U32)), (mx - 1 : U32), mx, [h]) : List<&2, U32>}:
-  +nt = List.length(&2, U32, t)
+    List.length(&2, U32, tl) : Nat} -> fin.ok(fin, rp, rf, List.length(&2, U32, tl)) -> at.edge(rp, (left - 1 : U32),
+    plen, pbf) -> sim.ty(tl, zn, zl, zf, fin, [hd], rf, rp, (left - 1 : U32), plen, pbf, ll, mx)
+
+# the facts a new block's walk starts from, for sim: the feed holds hd, with
+# mx - 1 bytes of room; bs has cap(left) - 1 left in the block
+def open.ih(
+  +hd: U32,
+  +tl: List<&2, U32>,
+  +left: U32,
+  +mx: U32,
+  +emx: {mx == 65535 : U32},
+  +hn: {U32.to_nat(left) == 1n+List.length(&2, U32, tl) : Nat},
+  sim_t: open.ih.ty(hd, tl, left, mx)
+) -> {open.bs(hd, tl, (left - 1 : U32), Png.enc.cap(left), Png.enc.bf(left)) == Png.enc.feed(tl,
+  U32.is_zero((mx - 1 : U32)), (mx - 1 : U32), mx, [hd]) : List<&2, U32>}:
+  +nt = List.length(&2, U32, tl)
   +zz = U32.is_le(left, 65535)
   +cp = Png.enc.cap(left)
   +cm = capm(zz, left, mx)
@@ -529,14 +551,14 @@ def open.ih(
     e_cm), cap.le(zz, left, mx, nt, nzm, ezm, hn)) : {Nat.is_le(U32.to_nat(c1), U32.to_nat(m1)) == True{} : Bool}}
   +hn2 = {Wp1.u32_pred(left, nt, hn) : {U32.to_nat(l2) == nt : Nat}}
   hf2 = {fo.cm(zz, left, mx, nt, emx, cap.fo(zz, left, mx, nt, nzm, ezm, hn)) : fin.ok(zz, c1, m1, nt)}
-  open.feed(h, t, left, mx, sim_t(U32.is_zero(c1), U32.is_eq(c1, 1), U32.is_zero(m1), zz, m1, c1, Png.enc.cap(l2),
+  open.feed(hd, tl, left, mx, sim_t(U32.is_zero(c1), U32.is_eq(c1, 1), U32.is_zero(m1), zz, m1, c1, Png.enc.cap(l2),
     Png.enc.bf(l2), cp, {==}, {==}, {==}, ha2, hl2, hle2, hn2, hf2, _ez => ({==}, {==})))
 
 # a block boundary with bytes left: the full block closes and a new one opens
 def sim.edge(
   fin: Bool,
-  +h: U32,
-  +t: List<&2, U32>,
+  +hd: U32,
+  +tl: List<&2, U32>,
   +acc: List<&2, U32>,
   +rf: U32,
   +rp: U32,
@@ -550,17 +572,16 @@ def sim.edge(
   +ha: {Nat.add(List.length(&2, U32, acc), U32.to_nat(rf)) == U32.to_nat(mx) : Nat},
   +hl: {U32.to_nat(ll) == Nat.add(List.length(&2, U32, acc), U32.to_nat(rp)) : Nat},
   +e0: {U32.to_nat(rp) == 0n : Nat},
-  +e_ob: {open.bs(h, t, (left - 1 : U32), Png.enc.cap(left), Png.enc.bf(left)) == Png.enc.feed(t, U32.is_zero((mx -
-    1 : U32)), (mx - 1 : U32), mx, [h]) : List<&2, U32>},
-  hf: fin.ok(fin, rp, rf, 1n+List.length(&2, U32, t)),
+  +e_ob: {open.bs(hd, tl, (left - 1 : U32), Png.enc.cap(left), Png.enc.bf(left)) == fd1(tl, mx, hd) : List<&2, U32>},
+  hf: fin.ok(fin, rp, rf, 1n+List.length(&2, U32, tl)),
   pe: {plen == Png.enc.cap(left) : U32} & {pbf == Png.enc.bf(left) : U32}
-) -> {List.append(&2, U32, Png.enc.head(fin, ll, (ll .^. 65535 : U32)), List.reverse.go(&2, U32, acc, open.bs(h, t,
-  (left - 1 : U32), plen, pbf))) == Png.enc.feed(h <> t, zf, rf, mx, acc) : List<&2, U32>}:
+) -> {List.append(&2, U32, Png.enc.head(fin, ll, (ll .^. 65535 : U32)), List.reverse.go(&2, U32, acc, open.bs(hd, tl,
+  (left - 1 : U32), plen, pbf))) == Png.enc.feed(hd <> tl, zf, rf, mx, acc) : List<&2, U32>}:
   match fin:
     case True{}:
       Empty.absurd({List.append(&2, U32, Png.enc.head(True{}, ll, (ll .^. 65535 : U32)), List.reverse.go(&2, U32, acc,
-        open.bs(h, t, (left - 1 : U32), plen, pbf))) == Png.enc.feed(h <> t, zf, rf, mx, acc) : List<&2, U32>},
-        Wp1.zero_succ(List.length(&2, U32, t), Equal.trans(Nat, 0n, U32.to_nat(rp), 1n+List.length(&2, U32, t),
+        open.bs(hd, tl, (left - 1 : U32), plen, pbf))) == Png.enc.feed(hd <> tl, zf, rf, mx, acc) : List<&2, U32>},
+        Wp1.zero_succ(List.length(&2, U32, tl), Equal.trans(Nat, 0n, U32.to_nat(rp), 1n+List.length(&2, U32, tl),
         Equal.sym(Nat, U32.to_nat(rp), 0n, e0), hf)))
     case False{}:
       (e_rr, _h_lt) = hf
@@ -572,45 +593,47 @@ def sim.edge(
       +e_rf0 = {Equal.trans(Nat, U32.to_nat(rf), U32.to_nat(rp), 0n, Equal.sym(Nat, U32.to_nat(rp), U32.to_nat(rf),
         e_rr), e0) : {U32.to_nat(rf) == 0n : Nat}}
       +e_zf = {Equal.trans(Bool, zf, U32.is_zero(rf), True{}, hzf, zero.is(rf, e_rf0)) : {zf == True{} : Bool}}
-      +ff = Png.enc.feed(t, U32.is_zero((mx - 1 : U32)), (mx - 1 : U32), mx, [h])
+      +ff = Png.enc.feed(tl, U32.is_zero((mx - 1 : U32)), (mx - 1 : U32), mx, [hd])
       +hd0 = Png.enc.head(False{}, ll, (ll .^. 65535 : U32))
       +hl0 = {Equal.trans(Nat, U32.to_nat(ll), Nat.add(na, 0n), na, Equal.trans(Nat, U32.to_nat(ll), Nat.add(na,
         U32.to_nat(rp)), Nat.add(na, 0n), hl, Equal.cong(Nat, Nat, kk => Nat.add(na, kk), U32.to_nat(rp), 0n, e0)),
         R.add_zero(na)) : {U32.to_nat(ll) == na : Nat}}
       +e_len = {len.blk(acc, rf, ll, mx, ha, hl0) : {Png.enc.len(ra, 0) == ll : U32}}
-      +e_bs = {Equal.trans(List<&2, U32>, open.bs(h, t, l2, plen, pbf), open.bs(h, t, l2, cp, Png.enc.bf(left)), ff,
-        Equal.trans(List<&2, U32>, open.bs(h, t, l2, plen, pbf), open.bs(h, t, l2, cp, pbf), open.bs(h, t, l2, cp,
-          Png.enc.bf(left)), Equal.cong(U32, List<&2, U32>, uu => open.bs(h, t, l2, uu, pbf), plen, cp, e_plen),
-          Equal.cong(U32, List<&2, U32>, uu => open.bs(h, t, l2, cp, uu), pbf, Png.enc.bf(left), e_pbf)),
-        e_ob) : {open.bs(h, t, l2, plen, pbf) == ff : List<&2, U32>}}
-      Equal.trans(List<&2, U32>, List.append(&2, U32, hd0, List.reverse.go(&2, U32, acc, open.bs(h, t, l2, plen, pbf))),
-        List.append(&2, U32, List.append(&2, U32, hd0, ra), ff), Png.enc.feed(h <> t, zf, rf, mx, acc),
-        Equal.trans(List<&2, U32>, List.append(&2, U32, hd0, List.reverse.go(&2, U32, acc, open.bs(h, t, l2, plen,
+      +e_bs = {Equal.trans(List<&2, U32>, open.bs(hd, tl, l2, plen, pbf), open.bs(hd, tl, l2, cp, Png.enc.bf(left)), ff,
+        Equal.trans(List<&2, U32>, open.bs(hd, tl, l2, plen, pbf), open.bs(hd, tl, l2, cp, pbf), open.bs(hd, tl, l2, cp,
+          Png.enc.bf(left)), Equal.cong(U32, List<&2, U32>, uu => open.bs(hd, tl, l2, uu, pbf), plen, cp, e_plen),
+          Equal.cong(U32, List<&2, U32>, uu => open.bs(hd, tl, l2, cp, uu), pbf, Png.enc.bf(left), e_pbf)),
+        e_ob) : {open.bs(hd, tl, l2, plen, pbf) == ff : List<&2, U32>}}
+      Equal.trans(List<&2, U32>, List.append(&2, U32, hd0, List.reverse.go(&2, U32, acc, open.bs(hd, tl, l2, plen,
+        pbf))),
+        List.append(&2, U32, List.append(&2, U32, hd0, ra), ff), Png.enc.feed(hd <> tl, zf, rf, mx, acc),
+        Equal.trans(List<&2, U32>, List.append(&2, U32, hd0, List.reverse.go(&2, U32, acc, open.bs(hd, tl, l2, plen,
           pbf))), List.append(&2, U32, hd0, List.append(&2, U32, ra, ff)), List.append(&2, U32, List.append(&2, U32,
           hd0, ra), ff),
-          Equal.trans(List<&2, U32>, List.append(&2, U32, hd0, List.reverse.go(&2, U32, acc, open.bs(h, t, l2, plen,
+          Equal.trans(List<&2, U32>, List.append(&2, U32, hd0, List.reverse.go(&2, U32, acc, open.bs(hd, tl, l2, plen,
             pbf))), List.append(&2, U32, hd0, List.reverse.go(&2, U32, acc, ff)), List.append(&2, U32, hd0,
             List.append(&2, U32, ra, ff)),
             Equal.cong(List<&2, U32>, List<&2, U32>, ys => List.append(&2, U32, hd0, List.reverse.go(&2, U32, acc,
-              ys)), open.bs(h, t, l2, plen, pbf), ff, e_bs),
+              ys)), open.bs(hd, tl, l2, plen, pbf), ff, e_bs),
             Equal.cong(List<&2, U32>, List<&2, U32>, ys => List.append(&2, U32, hd0, ys), List.reverse.go(&2, U32, acc,
               ff), List.append(&2, U32, ra, ff), W9.revgo_acc(acc, [], ff))),
           Equal.sym(List<&2, U32>, List.append(&2, U32, List.append(&2, U32, hd0, ra), ff), List.append(&2, U32, hd0,
             List.append(&2, U32, ra, ff)), Wp2.app_assoc(hd0, ra, ff))),
-        Equal.trans(List<&2, U32>, List.append(&2, U32, List.append(&2, U32, hd0, ra), ff), Png.enc.feed(h <> t, True{},
-          rf, mx, acc), Png.enc.feed(h <> t, zf, rf, mx, acc),
+        Equal.trans(List<&2, U32>, List.append(&2, U32, List.append(&2, U32, hd0, ra), ff), Png.enc.feed(hd <> tl,
+          True{},
+          rf, mx, acc), Png.enc.feed(hd <> tl, zf, rf, mx, acc),
           Equal.trans(List<&2, U32>, List.append(&2, U32, List.append(&2, U32, hd0, ra), ff), List.append(&2, U32,
-            Png.enc.cat(hd0, ra), ff), Png.enc.feed(h <> t, True{}, rf, mx, acc),
+            Png.enc.cat(hd0, ra), ff), Png.enc.feed(hd <> tl, True{}, rf, mx, acc),
             Equal.cong(List<&2, U32>, List<&2, U32>, ys => List.append(&2, U32, ys, ff), List.append(&2, U32, hd0, ra),
               Png.enc.cat(hd0, ra), Equal.sym(List<&2, U32>, Png.enc.cat(hd0, ra), List.append(&2, U32, hd0, ra),
               Wp2.cat_app(hd0, ra))),
             Equal.trans(List<&2, U32>, List.append(&2, U32, Png.enc.cat(hd0, ra), ff), Png.enc.cat(Png.enc.cat(hd0,
-              ra), ff), Png.enc.feed(h <> t, True{}, rf, mx, acc),
+              ra), ff), Png.enc.feed(hd <> tl, True{}, rf, mx, acc),
               Equal.sym(List<&2, U32>, Png.enc.cat(Png.enc.cat(hd0, ra), ff), List.append(&2, U32, Png.enc.cat(hd0,
                 ra), ff), Wp2.cat_app(Png.enc.cat(hd0, ra), ff)),
               Equal.cong(U32, List<&2, U32>, uu => Png.enc.cat(Png.enc.cat(Png.enc.head(False{}, uu, (uu .^. 65535 :
                 U32)), ra), ff), ll, Png.enc.len(ra, 0), Equal.sym(U32, Png.enc.len(ra, 0), ll, e_len)))),
-          Equal.cong(Bool, List<&2, U32>, zb => Png.enc.feed(h <> t, zb, rf, mx, acc), True{}, zf, Equal.sym(Bool,
+          Equal.cong(Bool, List<&2, U32>, zb => Png.enc.feed(hd <> tl, zb, rf, mx, acc), True{}, zf, Equal.sym(Bool,
             zf, True{}, e_zf))))
 
 # bs against enc.feed: the open block (acc, newest first, with rf bytes of
@@ -712,17 +735,18 @@ def sim(
 # the first block: bs from the start writes enc.feed's blocks for every
 # non-empty list of left bytes
 def sim.start(
-  +h: U32,
-  +t: List<&2, U32>,
+  +hd: U32,
+  +tl: List<&2, U32>,
   +left: U32,
   +mx: U32,
   +emx: {mx == 65535 : U32},
-  +hn: {U32.to_nat(left) == 1n+List.length(&2, U32, t) : Nat}
-) -> {bs(h <> t, True{}, False{}, 0, left, Png.enc.cap(left), Png.enc.bf(left)) == Png.enc.feed(h <> t, False{}, mx,
-  mx, []) : List<&2, U32>}:
+  +hn: {U32.to_nat(left) == 1n+List.length(&2, U32, tl) : Nat}
+) -> {bs(hd <> tl, True{}, False{}, 0, left, Png.enc.cap(left), Png.enc.bf(left)) == Png.enc.feed(hd <> tl, False{},
+  mx, mx, []) : List<&2, U32>}:
   +l2 = (left - 1 : U32)
-  open.ih(h, t, left, mx, emx, hn, zn => zl => zb => fb => rf3 => rp3 => pl3 => pb3 => ll3 => a1 => a2 => a3 => a4 =>
-    a5 => a6 => a7 => a8 => a9 => sim(t, zn, zl, zb, fb, [h], rf3, rp3, l2, pl3, pb3, ll3, mx, emx, a1, a2, a3, a4, a5,
+  open.ih(hd, tl, left, mx, emx, hn, zn => zl => zb => fb => rf3 => rp3 => pl3 => pb3 => ll3 => a1 => a2 => a3 => a4 =>
+    a5 => a6 => a7 => a8 => a9 => sim(tl, zn, zl, zb, fb, [hd], rf3, rp3, l2, pl3, pb3, ll3, mx, emx, a1, a2, a3, a4,
+      a5,
     a6, a7, a8, a9))
 
 # enc.blocks at 65535 for a list longer than one block is bs from the start
@@ -744,7 +768,8 @@ def sim.blocks(
       Equal.trans(List<&2, U32>, Png.enc.blocks(65535, h <> t), Png.enc.blocks.fit(False{}, 65535, nn, h <> t), bb,
         Equal.cong(Bool, List<&2, U32>, zb => Png.enc.blocks.fit(zb, 65535, nn, h <> t), U32.is_le(nn, 65535), False{},
           hbig),
-        Equal.trans(List<&2, U32>, Png.enc.feed(h <> t, False{}, 65535, 65535, []), Png.enc.feed(h <> t, False{}, mx, mx,
+        Equal.trans(List<&2, U32>, Png.enc.feed(h <> t, False{}, 65535, 65535, []), Png.enc.feed(h <> t, False{}, mx,
+          mx,
           []), bb, Equal.cong(U32, List<&2, U32>, uu => Png.enc.feed(h <> t, False{}, uu, uu, []), 65535, mx,
           Equal.sym(U32, mx, 65535, emx)), Equal.sym(List<&2, U32>, bb, Png.enc.feed(h <> t, False{}, mx, mx, []),
           sim.start(h, t, nn, mx, emx, hn))))
@@ -809,8 +834,11 @@ def sho(
           sho.step(pp, cc, bb, tt, Word.shl.out(pp, bb, tt), sho(pp, bb, tt, st, h2))
 
 # at least in Cmp is at most the other way
-def ge.le(aa: Nat, bb: Nat, +hh: {Cmp.is_ge(Nat.cmp(aa, bb)) == True{} : Bool}) -> {Nat.is_le(bb, aa) == True{} :
-  Bool}:
+def ge.le(
+  aa: Nat,
+  bb: Nat,
+  +hh: {Cmp.is_ge(Nat.cmp(aa, bb)) == True{} : Bool}
+) -> {Nat.is_le(bb, aa) == True{} : Bool}:
   match aa bb:
     case 0n 0n:
       {==}
@@ -822,8 +850,11 @@ def ge.le(aa: Nat, bb: Nat, +hh: {Cmp.is_ge(Nat.cmp(aa, bb)) == True{} : Bool}) 
       ge.le(ap, bp, hh)
 
 # not at least in Cmp is below
-def nge.lt(aa: Nat, bb: Nat, +hh: {Cmp.is_ge(Nat.cmp(aa, bb)) == False{} : Bool}) -> {Nat.is_lt(aa, bb) == True{} :
-  Bool}:
+def nge.lt(
+  aa: Nat,
+  bb: Nat,
+  +hh: {Cmp.is_ge(Nat.cmp(aa, bb)) == False{} : Bool}
+) -> {Nat.is_lt(aa, bb) == True{} : Bool}:
   match aa bb:
     case 0n 0n:
       Empty.absurd({Nat.is_lt(0n, 0n) == True{} : Bool}, U32L.false_true(Equal.sym(Bool, True{}, False{}, hh)))
@@ -1155,6 +1186,10 @@ def cy(nn: Nat, aw: Word(nn), bw: Word(nn), cc: Bool) -> Bool:
         case WCon{True{}, at} WCon{True{}, bt} True{}:
           cy(pp, at, bt, True{})
 
+# two words' values added
+def wsum(+pp: Nat, +at: Word(pp), +bt: Word(pp)) -> Nat:
+  Nat.add(Word.to_nat(pp, at), Word.to_nat(pp, bt))
+
 # one bit of cfa: this bit's sum and carry, then the bits above
 def cfa.arm(
   +pp: Nat,
@@ -1166,8 +1201,7 @@ def cfa.arm(
   +ss: Bool,
   +kk: Bool,
   +e_bits: {Nat.add(R.bit(cc), Nat.add(R.bit(ab), R.bit(bb))) == Nat.add(R.bit(ss), Nat.double(R.bit(kk))) : Nat},
-  +er: {Word.to_nat(pp, Word.adc(pp, at, bt, False{}, kk)) == Nat.add(R.bit(kk), Nat.add(Word.to_nat(pp, at),
-    Word.to_nat(pp, bt))) : Nat}
+  +er: {Word.to_nat(pp, Word.adc(pp, at, bt, False{}, kk)) == Nat.add(R.bit(kk), wsum(pp, at, bt)) : Nat}
 ) -> {Word.to_nat(1n+pp, WCon{ss, Word.adc(pp, at, bt, False{}, kk)}) == Nat.add(R.bit(cc), Nat.add(Word.to_nat(1n+pp,
   WCon{ab, at}), Word.to_nat(1n+pp, WCon{bb, bt}))) : Nat}:
   +na = Word.to_nat(pp, at)
@@ -1237,20 +1271,27 @@ def cy32(uu: U32, vv: U32) -> Bool:
       cy(32n, xw, yw, False{})
 
 # a U32 add with no carry out is the sum
-def add.cf(uu: U32, vv: U32, +hh: {cy32(uu, vv) == False{} : Bool}) -> {U32.to_nat(U32.add(uu, vv)) ==
-  Nat.add(U32.to_nat(uu), U32.to_nat(vv)) : Nat}:
+def add.cf(
+  uu: U32,
+  vv: U32,
+  +hh: {cy32(uu, vv) == False{} : Bool}
+) -> {U32.to_nat(U32.add(uu, vv)) == Nat.add(U32.to_nat(uu), U32.to_nat(vv)) : Nat}:
   match uu vv:
     case U32{+xw} U32{+yw}:
       cfa(32n, xw, yw, False{}, hh)
 
 # the block size doubled is a U32's value
-def mx.dbl(+mx: U32, +emx: {mx == 65535 : U32}) -> {U32.to_nat(U32.add(mx, mx)) == Nat.add(U32.to_nat(mx),
-  U32.to_nat(mx)) : Nat}:
+def mx.dbl(
+  +mx: U32,
+  +emx: {mx == 65535 : U32}
+) -> {U32.to_nat(U32.add(mx, mx)) == Nat.add(U32.to_nat(mx), U32.to_nat(mx)) : Nat}:
   add.cf(mx, mx, Equal.cong(U32, Bool, uu => cy32(uu, uu), mx, 65535, emx))
 
 # the block size is at least 2
-def mx.two(+mx: U32, +emx: {mx == 65535 : U32}) -> {U32.to_nat(mx) == 2n+U32.to_nat(((mx - 1 : U32) - 1 : U32)) :
-  Nat}:
+def mx.two(
+  +mx: U32,
+  +emx: {mx == 65535 : U32}
+) -> {U32.to_nat(mx) == 2n+U32.to_nat(((mx - 1 : U32) - 1 : U32)) : Nat}:
   +m1 = (mx - 1 : U32)
   +nz1 = {Equal.cong(U32, Bool, uu => U32.is_zero((uu - 1 : U32)), mx, 65535, emx) : {U32.is_zero(m1) == False{} :
     Bool}}
@@ -1266,8 +1307,11 @@ def kok(+xn: Nat, kk: Nat, +mn: Nat) -> Type:
       {Nat.is_lt(Nat.mul(kp, mn), xn) == True{} : Bool} & {Nat.is_le(xn, Nat.mul(1n+kp, mn)) == True{} : Bool}
 
 # x below x + y when y is above 0
-def lt.more(+xx: Nat, +yy: Nat, +hh: {Nat.is_lt(0n, yy) == True{} : Bool}) -> {Nat.is_lt(xx, Nat.add(xx, yy)) == True{} :
-  Bool}:
+def lt.more(
+  +xx: Nat,
+  +yy: Nat,
+  +hh: {Nat.is_lt(0n, yy) == True{} : Bool}
+) -> {Nat.is_lt(xx, Nat.add(xx, yy)) == True{} : Bool}:
   R.lt_rw_l(Nat.add(xx, 0n), xx, Nat.add(xx, yy), R.add_zero(xx), R.lt_add_mono(xx, 0n, yy, hh))
 
 # q blocks exactly: ceil(q m / m) is q
@@ -1305,8 +1349,11 @@ def nb.rem(
     rn), Nat.add(qm, mn), Nat.mul(1n+qn, mn), R.add_comm(qm, mn), R.le_add_mono(qm, rn, mn, R.lt_le(rn, mn, hr)))))
 
 # x at most x times m for m above 0
-def le.mul(+xx: Nat, +mn: Nat, +hm: {Nat.is_lt(0n, mn) == True{} : Bool}) -> {Nat.is_le(xx, Nat.mul(xx, mn)) == True{} :
-  Bool}:
+def le.mul(
+  +xx: Nat,
+  +mn: Nat,
+  +hm: {Nat.is_lt(0n, mn) == True{} : Bool}
+) -> {Nat.is_le(xx, Nat.mul(xx, mn)) == True{} : Bool}:
   +h1 = {Equal.trans(Bool, Nat.is_le(1n, mn), Nat.is_lt(0n, mn), True{}, Equal.sym(Bool, Nat.is_lt(0n, mn),
     Nat.is_le(1n, mn), R.lt_le_succ(0n, mn)), hm) : {Nat.is_le(1n, mn) == True{} : Bool}}
   R.le_rw_l(Nat.mul(1n, xx), xx, Nat.mul(xx, mn), R.add_zero(xx), R.le_rw_r(Nat.mul(1n, xx), Nat.mul(mn, xx),
@@ -1321,14 +1368,17 @@ def nblk.eq(+nn: U32, +mx: U32, +emx: {mx == 65535 : U32}) -> {Png.enc.nblk(nn) 
   Equal.cong(U32, U32, uu => Png.enc.nblk.at(U32.is_zero(U32.mod(nn, uu)), U32.div(nn, uu)), 65535, mx, Equal.sym(U32,
     mx, 65535, emx))
 
+# n's quotient by m times m, plus the remainder
+def dq(+nn: U32, +mx: U32) -> Nat:
+  Nat.add(Nat.mul(U32.to_nat(U32.div(nn, mx)), U32.to_nat(mx)), U32.to_nat(U32.mod(nn, mx)))
+
 # nblk.m, once whether the remainder is zero is named
 def nb.at(
   zz: Bool,
   +nn: U32,
   +mx: U32,
   +ez: {U32.is_zero(U32.mod(nn, mx)) == zz : Bool},
-  +e_n: {U32.to_nat(nn) == Nat.add(Nat.mul(U32.to_nat(U32.div(nn, mx)), U32.to_nat(mx)), U32.to_nat(U32.mod(nn,
-    mx))) : Nat},
+  +e_n: {U32.to_nat(nn) == dq(nn, mx) : Nat},
   +l_r: {Nat.is_lt(U32.to_nat(U32.mod(nn, mx)), U32.to_nat(mx)) == True{} : Bool},
   +hm: {Nat.is_lt(0n, U32.to_nat(mx)) == True{} : Bool}
 ) -> kok(U32.to_nat(nn), U32.to_nat(Png.enc.nblk.at(zz, U32.div(nn, mx))), U32.to_nat(mx)):
@@ -1375,8 +1425,11 @@ def nb.go(
   nb.at(U32.is_zero(U32.mod(nn, mx)), nn, mx, {==}, e_n, l_r, hm)
 
 # enc.nblk(n) blocks of 65535 bytes hold n bytes, the last one not empty
-def nb.k(+nn: U32, +mx: U32, +emx: {mx == 65535 : U32}) -> kok(U32.to_nat(nn), U32.to_nat(Png.enc.nblk(nn)),
-  U32.to_nat(mx)):
+def nb.k(
+  +nn: U32,
+  +mx: U32,
+  +emx: {mx == 65535 : U32}
+) -> kok(U32.to_nat(nn), U32.to_nat(Png.enc.nblk(nn)), U32.to_nat(mx)):
   +mn = U32.to_nat(mx)
   +hm = {Equal.trans(Bool, Nat.is_lt(0n, mn), Nat.is_lt(0n, 2n+U32.to_nat(((mx - 1 : U32) - 1 : U32))), True{},
     Equal.cong(Nat, Bool, kk => Nat.is_lt(0n, kk), mn, 2n+U32.to_nat(((mx - 1 : U32) - 1 : U32)), mx.two(mx, emx)),
@@ -1518,23 +1571,27 @@ def cnt.ty(
   {List.length(&2, U32, bs(xs, znew, zlast, rp, left, plen, pbf)) == Nat.add(List.length(&2, U32, xs), Nat.mul(kk,
     5n)) : Nat}
 
+# bs after a block's first byte, with plen bytes in the block and l2 left after it
+def bs2(+tl: List<&2, U32>, +plen: U32, +l2: U32) -> List<&2, U32>:
+  bs(tl, U32.is_zero((plen - 1 : U32)), U32.is_eq((plen - 1 : U32), 1), (plen - 1 : U32), l2, Png.enc.cap(l2),
+    Png.enc.bf(l2))
+
 # the header, the first byte and the rest of a new block: six more bytes
 def cnt.open(
-  +h: U32,
-  +t: List<&2, U32>,
+  +hd: U32,
+  +tl: List<&2, U32>,
   +l2: U32,
   +plen: U32,
   +pbf: U32,
   +kp: Nat,
-  +ih: {List.length(&2, U32, bs(t, U32.is_zero((plen - 1 : U32)), U32.is_eq((plen - 1 : U32), 1), (plen - 1 : U32),
-    l2, Png.enc.cap(l2), Png.enc.bf(l2))) == Nat.add(List.length(&2, U32, t), Nat.mul(kp, 5n)) : Nat}
-) -> {List.length(&2, U32, open.bs(h, t, l2, plen, pbf)) == Nat.add(1n+List.length(&2, U32, t), Nat.mul(1n+kp, 5n)) :
-  Nat}:
-  +nt = List.length(&2, U32, t)
+  +ih: {List.length(&2, U32, bs2(tl, plen, l2)) == Nat.add(List.length(&2, U32, tl), Nat.mul(kp, 5n)) : Nat}
+) -> {List.length(&2, U32, open.bs(hd, tl, l2, plen, pbf)) == Nat.add(1n+List.length(&2, U32, tl), Nat.mul(1n+kp,
+  5n)) : Nat}:
+  +nt = List.length(&2, U32, tl)
   +k5 = Nat.mul(kp, 5n)
-  Equal.trans(Nat, 6n+List.length(&2, U32, bs(t, U32.is_zero((plen - 1 : U32)), U32.is_eq((plen - 1 : U32), 1),
+  Equal.trans(Nat, 6n+List.length(&2, U32, bs(tl, U32.is_zero((plen - 1 : U32)), U32.is_eq((plen - 1 : U32), 1),
     (plen - 1 : U32), l2, Png.enc.cap(l2), Png.enc.bf(l2))), 6n+Nat.add(nt, k5), 1n+Nat.add(nt, 5n+k5),
-    Equal.cong(Nat, Nat, xx => 6n+xx, List.length(&2, U32, bs(t, U32.is_zero((plen - 1 : U32)), U32.is_eq((plen - 1 :
+    Equal.cong(Nat, Nat, xx => 6n+xx, List.length(&2, U32, bs(tl, U32.is_zero((plen - 1 : U32)), U32.is_eq((plen - 1 :
     U32), 1), (plen - 1 : U32), l2, Png.enc.cap(l2), Png.enc.bf(l2))), Nat.add(nt, k5), ih),
     Equal.cong(Nat, Nat, xx => 1n+xx, 5n+Nat.add(nt, k5), Nat.add(nt, 5n+k5), Equal.sym(Nat, Nat.add(nt, 5n+k5),
     5n+Nat.add(nt, k5), R.add_swap(nt, 5n, k5))))
@@ -1544,29 +1601,32 @@ def kok.rw(+xa: Nat, +xb: Nat, +kk: Nat, +mn: Nat, +ee: {xa == xb : Nat}, hk: ko
   %ee : kok(_, kk, mn)
   hk
 
+# the count's hypothesis for the rest of a block opened with plen bytes
+def cnt.edge.ty(-tl: List<&2, U32>, -left: U32, -plen: U32, -kp: Nat, -mx: U32) -> Type:
+  @xn: Nat -> {Nat.add(U32.to_nat((plen - 1 : U32)), xn) == List.length(&2, U32, tl) : Nat} -> kok(xn, kp,
+    U32.to_nat(mx)) -> cnt.ty(tl, U32.is_zero((plen - 1 : U32)), U32.is_eq((plen - 1 : U32), 1), (plen - 1 : U32),
+    (left - 1 : U32), Png.enc.cap((left - 1 : U32)), Png.enc.bf((left - 1 : U32)), kp)
+
 # a new block with kp + 1 blocks to go: the header and the first byte, then
 # the rest of the walk, with kp blocks after this one
 def cnt.edge(
-  +h: U32,
-  +t: List<&2, U32>,
+  +hd: U32,
+  +tl: List<&2, U32>,
   +left: U32,
   +plen: U32,
   +pbf: U32,
   +mx: U32,
   +emx: {mx == 65535 : U32},
   +kp: Nat,
-  +hn: {U32.to_nat(left) == 1n+List.length(&2, U32, t) : Nat},
-  +h_lt: {Nat.is_lt(Nat.mul(kp, U32.to_nat(mx)), 1n+List.length(&2, U32, t)) == True{} : Bool},
-  +h_le: {Nat.is_le(1n+List.length(&2, U32, t), Nat.add(U32.to_nat(mx), Nat.mul(kp, U32.to_nat(mx)))) == True{} :
-    Bool},
+  +hn: {U32.to_nat(left) == 1n+List.length(&2, U32, tl) : Nat},
+  +h_lt: {Nat.is_lt(Nat.mul(kp, U32.to_nat(mx)), 1n+List.length(&2, U32, tl)) == True{} : Bool},
+  +h_le: {Nat.is_le(1n+List.length(&2, U32, tl), Nat.mul(1n+kp, U32.to_nat(mx))) == True{} : Bool},
   pe: {plen == Png.enc.cap(left) : U32} & {pbf == Png.enc.bf(left) : U32},
-  cnt_t: @xn: Nat -> {Nat.add(U32.to_nat((plen - 1 : U32)), xn) == List.length(&2, U32, t) : Nat} -> kok(xn, kp,
-    U32.to_nat(mx)) -> cnt.ty(t, U32.is_zero((plen - 1 : U32)), U32.is_eq((plen - 1 : U32), 1), (plen - 1 : U32),
-    (left - 1 : U32), Png.enc.cap((left - 1 : U32)), Png.enc.bf((left - 1 : U32)), kp)
-) -> {List.length(&2, U32, open.bs(h, t, (left - 1 : U32), plen, pbf)) == Nat.add(1n+List.length(&2, U32, t),
+  cnt_t: cnt.edge.ty(tl, left, plen, kp, mx)
+) -> {List.length(&2, U32, open.bs(hd, tl, (left - 1 : U32), plen, pbf)) == Nat.add(1n+List.length(&2, U32, tl),
   Nat.mul(1n+kp, 5n)) : Nat}:
   (+e_plen, _e_pbf) = pe
-  +nt = List.length(&2, U32, t)
+  +nt = List.length(&2, U32, tl)
   +zz = U32.is_le(left, 65535)
   +cm = capm(zz, left, mx)
   +mn = U32.to_nat(mx)
@@ -1582,7 +1642,7 @@ def cnt.edge(
   hk2 = kok.rw(Nat.sub(nt, U32.to_nat((cm - 1 : U32))), x2, kp, mn, Equal.cong(Nat, Nat, kk => Nat.sub(nt, kk),
     U32.to_nat((cm - 1 : U32)), c2, Equal.sym(Nat, c2, U32.to_nat((cm - 1 : U32)), e_c)), ks.k(zz, kp, left, mx, nt,
     nzm, ezm, hn, h_lt, h_le))
-  cnt.open(h, t, (left - 1 : U32), plen, pbf, kp, cnt_t(x2, hx2, hk2))
+  cnt.open(hd, tl, (left - 1 : U32), plen, pbf, kp, cnt_t(x2, hx2, hk2))
 
 # bs from a state: its bytes, and a header for each of the kk blocks it opens,
 # xn the bytes after the open block (rp of them still in it)
@@ -1640,7 +1700,8 @@ def cnt(
         case 0n:
           +nt = List.length(&2, U32, t)
           +e0 = {zero.val(rp, hzn) : {U32.to_nat(rp) == 0n : Nat}}
-          +e_xn = {Equal.trans(Nat, xn, Nat.add(U32.to_nat(rp), xn), 1n+nt, Equal.cong(Nat, Nat, kk2 => Nat.add(kk2, xn),
+          +e_xn = {Equal.trans(Nat, xn, Nat.add(U32.to_nat(rp), xn), 1n+nt, Equal.cong(Nat, Nat, kk2 => Nat.add(kk2,
+            xn),
             0n, U32.to_nat(rp), Equal.sym(Nat, U32.to_nat(rp), 0n, e0)), hx) : {xn == 1n+nt : Nat}}
           Empty.absurd(cnt.ty(h <> t, True{}, _zl, rp, left, plen, pbf, 0n), Wp1.zero_succ(nt, Equal.trans(Nat, 0n, xn,
             1n+nt, Equal.sym(Nat, xn, 0n, hk), e_xn)))
@@ -1650,7 +1711,8 @@ def cnt(
           +l2 = (left - 1 : U32)
           +mn = U32.to_nat(mx)
           +e0 = {zero.val(rp, hzn) : {U32.to_nat(rp) == 0n : Nat}}
-          +e_xn = {Equal.trans(Nat, xn, Nat.add(U32.to_nat(rp), xn), 1n+nt, Equal.cong(Nat, Nat, kk2 => Nat.add(kk2, xn),
+          +e_xn = {Equal.trans(Nat, xn, Nat.add(U32.to_nat(rp), xn), 1n+nt, Equal.cong(Nat, Nat, kk2 => Nat.add(kk2,
+            xn),
             0n, U32.to_nat(rp), Equal.sym(Nat, U32.to_nat(rp), 0n, e0)), hx) : {xn == 1n+nt : Nat}}
           +ez = {Equal.sym(Bool, True{}, U32.is_zero(rp), hzn) : {U32.is_zero(rp) == True{} : Bool}}
           +hn2 = {Wp1.u32_pred(left, nt, hn) : {U32.to_nat(l2) == nt : Nat}}
@@ -1674,7 +1736,8 @@ def cnt.blocks(
   +bb = bs(xs, True{}, False{}, 0, nn, Png.enc.cap(nn), Png.enc.bf(nn))
   Equal.trans(Nat, List.length(&2, U32, Png.enc.blocks(65535, xs)), List.length(&2, U32, bb), Nat.add(List.length(&2,
     U32, xs), Nat.mul(kk, 5n)), Equal.cong(List<&2, U32>, Nat, ys => List.length(&2, U32, ys), Png.enc.blocks(65535,
-    xs), bb, sim.blocks(xs, mx, emx, hn, hbig)), cnt(xs, True{}, False{}, kk, 0, nn, Png.enc.cap(nn), Png.enc.bf(nn), mx,
+    xs), bb, sim.blocks(xs, mx, emx, hn, hbig)), cnt(xs, True{}, False{}, kk, 0, nn, Png.enc.cap(nn), Png.enc.bf(nn),
+      mx,
     List.length(&2, U32, xs), emx, {==}, {==}, hn, {==}, kok.rw(U32.to_nat(nn), List.length(&2, U32, xs), kk,
     U32.to_nat(mx), hn, nb.k(nn, mx, emx)), _ez => ({==}, {==})))
 
@@ -1702,8 +1765,8 @@ def fr.app(
   +ys: List<&2, U32>,
   +cc: U32,
   +acc: List<&2, U32>
-) -> {fr(ys, Crc.crc.fold(xs, cc), List.reverse.go(&2, U32, xs, acc)) == fr(List.append(&2, U32, xs, ys), cc, acc) :
-  U32 & List<&2, U32>}:
+) -> {fr(ys, Crc.crc.fold(xs, cc), List.reverse.go(&2, U32, xs, acc)) == fr(List.append(&2, U32, xs, ys), cc,
+  acc) : U32 & List<&2, U32>}:
   +f2 = Crc.crc.fold(ys, Crc.crc.fold(xs, cc))
   +fa = Crc.crc.fold(List.append(&2, U32, xs, ys), cc)
   +r2 = List.reverse.go(&2, U32, ys, List.reverse.go(&2, U32, xs, acc))
@@ -1744,10 +1807,10 @@ def tail.eq(
   +ll: U32,
   +tt: List<&2, U32>,
   +ie: List<&2, U32>
-) -> {List.reverse(&2, U32, Png.enc.cat.go(ie, Png.enc.cat.go(Png.enc.be((Crc.crc.fold(tt, 4294967295) .^.
-  4294967295 : U32)), List.reverse.go(&2, U32, tt, Png.enc.cat.go(Png.enc.be(ll), []))))) == List.append(&2, U32,
-  Png.enc.be(ll), List.append(&2, U32, tt, List.append(&2, U32, Png.enc.be((Crc.crc.fold(tt, 4294967295) .^.
-  4294967295 : U32)), ie))) : List<&2, U32>}:
+) -> {List.reverse(&2, U32, Png.enc.cat.go(ie, Png.enc.cat.go(Png.enc.be((Crc.crc.fold(tt,
+  4294967295) .^. 4294967295 : U32)), List.reverse.go(&2, U32, tt, Png.enc.cat.go(Png.enc.be(ll), []))))) ==
+  List.append(&2, U32, Png.enc.be(ll), List.append(&2, U32, tt, List.append(&2, U32, Png.enc.be((Crc.crc.fold(tt,
+  4294967295) .^. 4294967295 : U32)), ie))) : List<&2, U32>}:
   +bl = Png.enc.be(ll)
   +ee = Png.enc.be((Crc.crc.fold(tt, 4294967295) .^. 4294967295 : U32))
   +a0 = List.reverse.go(&2, U32, bl, [])
@@ -1792,8 +1855,8 @@ def t0(+bb: List<&2, U32>) -> List<&2, U32>:
 def body.eq(
   +bb: List<&2, U32>,
   +sum: U32
-) -> {Png.enc.cat(Png.enc.be(Png.tag.idat()), zb(bb, sum)) == List.append(&2, U32, t0(bb), Png.enc.be(sum)) :
-  List<&2, U32>}:
+) -> {Png.enc.cat(Png.enc.be(Png.tag.idat()), zb(bb, sum)) == List.append(&2, U32, t0(bb), Png.enc.be(sum)) : List<&2,
+  U32>}:
   +bi = Png.enc.be(Png.tag.idat())
   +bs2 = Png.enc.be(sum)
   +zz = List.append(&2, U32, [120, 1], List.append(&2, U32, bb, bs2))
@@ -1965,7 +2028,8 @@ def zlib.len(
   +xx = Nat.add(List.length(&2, U32, raw), Nat.mul(U32.to_nat(Png.enc.nblk(Png.enc.len(raw, 0))), 5n))
   +ap = List.append(&2, U32, [120, 1], List.append(&2, U32, bl, be_s))
   Equal.trans(Nat, List.length(&2, U32, Laws.zlib.stored(65535, raw)), List.length(&2, U32, ap), Nat.add(xx, 6n),
-    Equal.cong(List<&2, U32>, Nat, ys => List.length(&2, U32, ys), Laws.zlib.stored(65535, raw), ap, Equal.trans(List<&2,
+    Equal.cong(List<&2, U32>, Nat, ys => List.length(&2, U32, ys), Laws.zlib.stored(65535, raw), ap,
+      Equal.trans(List<&2,
     U32>, Laws.zlib.stored(65535, raw), List.append(&2, U32, [120, 1], Png.enc.cat(bl, be_s)), ap, Wp2.cat_app([120, 1],
     Png.enc.cat(bl, be_s)), Equal.cong(List<&2, U32>, List<&2, U32>, ys => List.append(&2, U32, [120, 1], ys),
     Png.enc.cat(bl, be_s), List.append(&2, U32, bl, be_s), Wp2.cat_app(bl, be_s)))),
@@ -1976,6 +2040,14 @@ def zlib.len(
         Nat, kk => 2n+Nat.add(kk, 4n), List.length(&2, U32, bl), xx, cnt.blocks(raw, mx, emx, hn, hbig)),
         add.six(xx))))
 
+# the IDAT data's length for n raw bytes in k blocks: n + 5 k + 6
+def kzn(+nr: Nat, +nn: U32) -> Nat:
+  Nat.add(Nat.add(nr, Nat.mul(U32.to_nat(Png.enc.nblk(nn)), 5n)), 6n)
+
+# the IDAT data's length for the raw bytes xs
+def kzs(+xs: List<&2, U32>) -> Nat:
+  kzn(List.length(&2, U32, xs), Png.enc.len(xs, 0))
+
 # the IDAT length the encoder writes is the zlib stream's, when the stream is
 # at most some U32's value long
 def idat.len(
@@ -1985,8 +2057,7 @@ def idat.len(
   +emx: {mx == 65535 : U32},
   +hn: {U32.to_nat(Png.enc.len(raw, 0)) == List.length(&2, U32, raw) : Nat},
   +hbig: {U32.is_le(Png.enc.len(raw, 0), 65535) == False{} : Bool},
-  +h_tu: {Nat.is_le(Nat.add(Nat.add(List.length(&2, U32, raw), Nat.mul(U32.to_nat(Png.enc.nblk(Png.enc.len(raw, 0))),
-    5n)), 6n), U32.to_nat(tu)) == True{} : Bool}
+  +h_tu: {Nat.is_le(kzs(raw), U32.to_nat(tu)) == True{} : Bool}
 ) -> {Png.enc.idat.ln(Png.enc.len(raw, 0)) == Png.enc.len(Laws.zlib.stored(65535, raw), 0) : U32}:
   +nn = Png.enc.len(raw, 0)
   +kb = Png.enc.nblk(nn)
@@ -1997,12 +2068,14 @@ def idat.len(
   +h_x = {R.le_add_r(xx, 6n, tn, h_tu) : {Nat.is_le(xx, tn) == True{} : Bool}}
   +h_k = {R.le_add_l(n0, k5, tn, h_x) : {Nat.is_le(k5, tn) == True{} : Bool}}
   +e_m = {R.u32_mul_below(kb, 5, tu, h_k) : {U32.to_nat((kb * 5 : U32)) == k5 : Nat}}
-  +h_a = {R.le_rw_l(xx, Nat.add(U32.to_nat(nn), U32.to_nat((kb * 5 : U32))), tn, Equal.trans(Nat, xx, Nat.add(U32.to_nat(nn),
+  +h_a = {R.le_rw_l(xx, Nat.add(U32.to_nat(nn), U32.to_nat((kb * 5 : U32))), tn, Equal.trans(Nat, xx,
+    Nat.add(U32.to_nat(nn),
     k5), Nat.add(U32.to_nat(nn), U32.to_nat((kb * 5 : U32))), Equal.cong(Nat, Nat, kk => Nat.add(kk, k5), n0,
     U32.to_nat(nn), Equal.sym(Nat, U32.to_nat(nn), n0, hn)), Equal.cong(Nat, Nat, kk => Nat.add(U32.to_nat(nn), kk), k5,
     U32.to_nat((kb * 5 : U32)), Equal.sym(Nat, U32.to_nat((kb * 5 : U32)), k5, e_m))), h_x) :
     {Nat.is_le(Nat.add(U32.to_nat(nn), U32.to_nat((kb * 5 : U32))), tn) == True{} : Bool}}
-  +e_a = {Equal.trans(Nat, U32.to_nat((nn + (kb * 5 : U32) : U32)), Nat.add(U32.to_nat(nn), U32.to_nat((kb * 5 : U32))), xx,
+  +e_a = {Equal.trans(Nat, U32.to_nat((nn + (kb * 5 : U32) : U32)), Nat.add(U32.to_nat(nn),
+    U32.to_nat((kb * 5 : U32))), xx,
     R.u32_add_below(nn, (kb * 5 : U32), tu, h_a), Equal.trans(Nat, Nat.add(U32.to_nat(nn), U32.to_nat((kb * 5 : U32))),
     Nat.add(n0, U32.to_nat((kb * 5 : U32))), xx, Equal.cong(Nat, Nat, kk => Nat.add(kk, U32.to_nat((kb * 5 : U32))),
     U32.to_nat(nn), n0, hn), Equal.cong(Nat, Nat, kk => Nat.add(n0, kk), U32.to_nat((kb * 5 : U32)), k5, e_m))) :
@@ -2019,7 +2092,8 @@ def idat.len(
   +e_zl = {len.of(zz, tu, R.le_rw_l(Nat.add(xx, 6n), List.length(&2, U32, zz), tn, Equal.sym(Nat, List.length(&2, U32,
     zz), Nat.add(xx, 6n), e_z), h_tu)) : {U32.to_nat(Png.enc.len(zz, 0)) == List.length(&2, U32, zz) : Nat}}
   u32.same(Png.enc.idat.ln(nn), Png.enc.len(zz, 0), Equal.trans(Nat, U32.to_nat(Png.enc.idat.ln(nn)), Nat.add(xx, 6n),
-    U32.to_nat(Png.enc.len(zz, 0)), e_i, Equal.sym(Nat, U32.to_nat(Png.enc.len(zz, 0)), Nat.add(xx, 6n), Equal.trans(Nat,
+    U32.to_nat(Png.enc.len(zz, 0)), e_i, Equal.sym(Nat, U32.to_nat(Png.enc.len(zz, 0)), Nat.add(xx, 6n),
+      Equal.trans(Nat,
     U32.to_nat(Png.enc.len(zz, 0)), List.length(&2, U32, zz), Nat.add(xx, 6n), e_zl, e_z))))
 
 # ---- H. enc.rgb.go against bs ----
@@ -2118,15 +2192,33 @@ def nil.r(
   +aa: U32,
   +bb: U32,
   +hh: {List.length(&2, U32, xs) == 0n : Nat}
-) -> {Png.enc.rgb.fin(cc, acc, aa, bb) == (fr(bs(xs, z1, z2, r1, l1, n1, f1), cc, acc), afold(xs, aa, bb)) : (U32 &
-  List<&2, U32>) & U32}:
+) -> {Png.enc.rgb.fin(cc, acc, aa, bb) == (fr(bs(xs, z1, z2, r1, l1, n1, f1), cc, acc), afold(xs, aa,
+  bb)) : (U32 & List<&2, U32>) & U32}:
   match xs:
     case Nil{}:
       {==}
     case _x <> t:
-      Empty.absurd({Png.enc.rgb.fin(cc, acc, aa, bb) == (fr(bs(_x <> t, z1, z2, r1, l1, n1, f1), cc, acc), afold(_x <> t,
-        aa, bb)) : (U32 & List<&2, U32>) & U32}, Wp1.zero_succ(List.length(&2, U32, t), Equal.sym(Nat, 1n+List.length(&2,
+      Empty.absurd({Png.enc.rgb.fin(cc, acc, aa, bb) == (fr(bs(_x <> t, z1, z2, r1, l1, n1, f1), cc, acc),
+        afold(_x <> t,
+        aa, bb)) : (U32 & List<&2, U32>) & U32}, Wp1.zero_succ(List.length(&2, U32, t), Equal.sym(Nat,
+          1n+List.length(&2,
         U32, t), 0n, hh)))
+
+# the walk's hypothesis for the bytes after xb
+def step.ty(
+  -xb: U32,
+  -rr: List<&2, U32>,
+  -need: U32,
+  -pl: U32,
+  -cc: U32,
+  -acc: List<&2, U32>,
+  -aa: U32,
+  -bb: U32,
+  -gg: (U32 & List<&2, U32>) & U32
+) -> Type:
+  @xx: U32 -> @yy: U32 -> at.edge((need - 1 : U32), (pl - 1 : U32), xx, yy) -> {gg == (fr(bs(rr, U32.is_zero((need -
+    1 : U32)), U32.is_eq((need - 1 : U32), 1), (need - 1 : U32), (pl - 1 : U32), xx, yy), Crc.crc.byte(cc, xb),
+    xb <> acc), afold(rr, Png.enc.add(aa, xb), Png.enc.add(bb, Png.enc.add(aa, xb)))) : (U32 & List<&2, U32>) & U32}
 
 # one raw byte: bs writes it, and the block goes on or closes
 def step(
@@ -2144,11 +2236,9 @@ def step(
   -gg: (U32 & List<&2, U32>) & U32,
   +ez1: {U32.is_eq(need, 1) == z1 : Bool},
   +nz: {U32.is_zero(need) == False{} : Bool},
-  ih: @xx: U32 -> @yy: U32 -> at.edge((need - 1 : U32), (pl - 1 : U32), xx, yy) -> {gg == (fr(bs(rr, U32.is_zero((need -
-    1 : U32)), U32.is_eq((need - 1 : U32), 1), (need - 1 : U32), (pl - 1 : U32), xx, yy), Crc.crc.byte(cc, xb),
-    xb <> acc), afold(rr, Png.enc.add(aa, xb), Png.enc.add(bb, Png.enc.add(aa, xb)))) : (U32 & List<&2, U32>) & U32}
-) -> {gg == (fr(bs(xb <> rr, False{}, U32.is_eq(need, 1), need, pl, plen, pbf), cc, acc), afold(xb <> rr, aa, bb)) :
-  (U32 & List<&2, U32>) & U32}:
+  ih: step.ty(xb, rr, need, pl, cc, acc, aa, bb, gg)
+) -> {gg == (fr(bs(xb <> rr, False{}, U32.is_eq(need, 1), need, pl, plen, pbf), cc, acc), afold(xb <> rr, aa,
+  bb)) : (U32 & List<&2, U32>) & U32}:
   match z1:
     case True{}:
       +n1 = (need - 1 : U32)
@@ -2183,6 +2273,31 @@ def step(
         Equal.cong(Bool, (U32 & List<&2, U32>) & U32, zb => (fr(bs(rr, zb, U32.is_eq(n1, 1), n1, p1, plen, pbf), c1,
           xb <> acc), afold(rr, a2, b2)), U32.is_zero(n1), False{}, nz1))
 
+# the walk's hypothesis for the bytes after xb, with the fuel and counts
+def rg.byte.ty(
+  -pp: Nat,
+  -xb: U32,
+  -r2: List<&2, U32>,
+  -need: U32,
+  -pl: U32,
+  -cc: U32,
+  -acc: List<&2, U32>,
+  -aa: U32,
+  -bb: U32,
+  -left: U32,
+  -len: U32,
+  -kk: Nat,
+  -xn: Nat,
+  -gg: (U32 & List<&2, U32>) & U32
+) -> Type:
+  @xx: U32 -> @yy: U32 -> at.edge((need - 1 : U32), (pl - 1 : U32), xx, yy) -> {Nat.add(U32.to_nat((need - 1 : U32)),
+    xn) == List.length(&2, U32, r2) : Nat} -> {Nat.is_le(Nat.add(Nat.add(List.length(&2, U32, r2), 1n),
+    Nat.double(kk)), 1n+pp) == True{} : Bool} -> {U32.to_nat((pl - 1 : U32)) == List.length(&2, U32, r2) : Nat} ->
+    {Nat.add(U32.to_nat(len), List.length(&2, U32, r2)) == Nat.add(U32.to_nat(left), U32.to_nat((need - 1 : U32))) :
+    Nat} -> {gg == (fr(bs(r2, U32.is_zero((need - 1 : U32)), U32.is_eq((need - 1 : U32), 1), (need - 1 : U32), (pl - 1 :
+    U32), xx, yy), Crc.crc.byte(cc, xb), xb <> acc), afold(r2, Png.enc.add(aa, xb), Png.enc.add(bb, Png.enc.add(aa,
+    xb)))) : (U32 & List<&2, U32>) & U32}
+
 # a raw byte in a block, from the rg state: the facts for the state after it,
 # then step, then rg.val read with the byte in front
 def rg.byte(
@@ -2209,13 +2324,7 @@ def rg.byte(
   +hw: {Nat.is_le(Nat.add(Nat.add(List.length(&2, U32, rr), 1n), Nat.double(kk)), 2n+pp) == True{} : Bool},
   +e_pl: {U32.to_nat(pl) == List.length(&2, U32, rr) : Nat},
   +e_ll: {Nat.add(U32.to_nat(len), List.length(&2, U32, rr)) == Nat.add(U32.to_nat(left), U32.to_nat(need)) : Nat},
-  ih: @xx: U32 -> @yy: U32 -> at.edge((need - 1 : U32), (pl - 1 : U32), xx, yy) -> {Nat.add(U32.to_nat((need - 1 : U32)),
-    xn) == List.length(&2, U32, r2) : Nat} -> {Nat.is_le(Nat.add(Nat.add(List.length(&2, U32, r2), 1n),
-    Nat.double(kk)), 1n+pp) == True{} : Bool} -> {U32.to_nat((pl - 1 : U32)) == List.length(&2, U32, r2) : Nat} ->
-    {Nat.add(U32.to_nat(len), List.length(&2, U32, r2)) == Nat.add(U32.to_nat(left), U32.to_nat((need - 1 : U32))) :
-    Nat} -> {gg == (fr(bs(r2, U32.is_zero((need - 1 : U32)), U32.is_eq((need - 1 : U32), 1), (need - 1 : U32), (pl - 1 :
-    U32), xx, yy), Crc.crc.byte(cc, xb), xb <> acc), afold(r2, Png.enc.add(aa, xb), Png.enc.add(bb, Png.enc.add(aa,
-    xb)))) : (U32 & List<&2, U32>) & U32}
+  ih: rg.byte.ty(pp, xb, r2, need, pl, cc, acc, aa, bb, left, len, kk, xn, gg)
 ) -> {gg == rg.val(False{}, rr, cc, acc, aa, bb, left, need, pl, plen, pbf) : (U32 & List<&2, U32>) & U32}:
   +n1 = (need - 1 : U32)
   +nr = List.length(&2, U32, r2)
@@ -2225,7 +2334,8 @@ def rg.byte(
     rr) == 1n+nr : Nat}}
   +hx2 = {Wp1.succ_inj(Nat.add(U32.to_nat(n1), xn), nr, Equal.trans(Nat, 1n+Nat.add(U32.to_nat(n1), xn),
     Nat.add(U32.to_nat(need), xn), 1n+nr, Equal.cong(Nat, Nat, kz => Nat.add(kz, xn), 1n+U32.to_nat(n1),
-    U32.to_nat(need), Equal.sym(Nat, U32.to_nat(need), 1n+U32.to_nat(n1), e_n)), Equal.trans(Nat, Nat.add(U32.to_nat(need),
+    U32.to_nat(need), Equal.sym(Nat, U32.to_nat(need), 1n+U32.to_nat(n1),
+      e_n)), Equal.trans(Nat, Nat.add(U32.to_nat(need),
     xn), List.length(&2, U32, rr), 1n+nr, hx, e_len))) : {Nat.add(U32.to_nat(n1), xn) == nr : Nat}}
   +hw2 = {Equal.trans(Bool, Nat.is_le(Nat.add(Nat.add(1n+nr, 1n), Nat.double(kk)), 2n+pp), Nat.is_le(Nat.add(Nat.add(
     List.length(&2, U32, rr), 1n), Nat.double(kk)), 2n+pp), True{}, Equal.cong(Nat, Bool, kz =>
@@ -2239,7 +2349,8 @@ def rg.byte(
     Equal.sym(Nat, Nat.add(U32.to_nat(len), 1n+nr), 1n+Nat.add(U32.to_nat(len), nr), R.add_succ(U32.to_nat(len), nr)),
     Equal.trans(Nat, Nat.add(U32.to_nat(len), 1n+nr), Nat.add(U32.to_nat(left), 1n+U32.to_nat(n1)),
     1n+Nat.add(U32.to_nat(left), U32.to_nat(n1)), Equal.trans(Nat, Nat.add(U32.to_nat(len), 1n+nr),
-    Nat.add(U32.to_nat(len), List.length(&2, U32, rr)), Nat.add(U32.to_nat(left), 1n+U32.to_nat(n1)), Equal.cong(Nat, Nat,
+    Nat.add(U32.to_nat(len), List.length(&2, U32, rr)), Nat.add(U32.to_nat(left), 1n+U32.to_nat(n1)), Equal.cong(Nat,
+      Nat,
     kz => Nat.add(U32.to_nat(len), kz), 1n+nr, List.length(&2, U32, rr), Equal.sym(Nat, List.length(&2, U32, rr), 1n+nr,
     e_len)), Equal.trans(Nat, Nat.add(U32.to_nat(len), List.length(&2, U32, rr)), Nat.add(U32.to_nat(left),
     U32.to_nat(need)), Nat.add(U32.to_nat(left), 1n+U32.to_nat(n1)), e_ll, Equal.cong(Nat, Nat, kz =>
@@ -2269,13 +2380,13 @@ def hd5(+left: U32) -> List<&2, U32>:
 # the block's whole length in hand, once whether that length is 1 is named
 def spl.at(
   z1: Bool,
-  +h: U32,
-  +t: List<&2, U32>,
+  +hd: U32,
+  +tl: List<&2, U32>,
   +left: U32,
   +ez1: {U32.is_eq(Png.enc.cap(left), 1) == z1 : Bool},
   +nzc: {U32.is_zero(Png.enc.cap(left)) == False{} : Bool}
-) -> {open.bs(h, t, (left - 1 : U32), Png.enc.cap(left), Png.enc.bf(left)) == List.append(&2, U32, hd5(left), bs(h <> t,
-  False{}, U32.is_eq(Png.enc.cap(left), 1), Png.enc.cap(left), left, Png.enc.cap((left - 1 : U32)),
+) -> {open.bs(hd, tl, (left - 1 : U32), Png.enc.cap(left), Png.enc.bf(left)) == List.append(&2, U32, hd5(left),
+  bs(hd <> tl, False{}, U32.is_eq(Png.enc.cap(left), 1), Png.enc.cap(left), left, Png.enc.cap((left - 1 : U32)),
   Png.enc.bf((left - 1 : U32)))) : List<&2, U32>}:
   match z1:
     case True{}:
@@ -2283,18 +2394,22 @@ def spl.at(
       +l1 = (left - 1 : U32)
       +e1 = {one.val(cp, Equal.sym(Bool, U32.is_eq(cp, 1), True{}, ez1)) : {U32.to_nat(cp) == 1n : Nat}}
       +e0 = {u32.same((cp - 1 : U32), 0, Wp1.u32_pred(cp, 0n, e1)) : {(cp - 1 : U32) == 0 : U32}}
-      %Equal.sym(Bool, U32.is_eq(cp, 1), True{}, ez1) : {open.bs(h, t, l1, cp, Png.enc.bf(left)) == List.append(&2, U32,
-        hd5(left), bs(h <> t, False{}, _, cp, left, Png.enc.cap(l1), Png.enc.bf(l1))) : List<&2, U32>}
-      Equal.cong(U32, List<&2, U32>, uu => List.append(&2, U32, hd5(left), h <> bs(t, U32.is_zero(uu), U32.is_eq(uu, 1),
+      %Equal.sym(Bool, U32.is_eq(cp, 1), True{}, ez1) : {open.bs(hd, tl, l1, cp, Png.enc.bf(left)) == List.append(&2,
+        U32,
+        hd5(left), bs(hd <> tl, False{}, _, cp, left, Png.enc.cap(l1), Png.enc.bf(l1))) : List<&2, U32>}
+      Equal.cong(U32, List<&2, U32>, uu => List.append(&2, U32, hd5(left), hd <> bs(tl, U32.is_zero(uu), U32.is_eq(uu,
+        1),
         uu, l1, Png.enc.cap(l1), Png.enc.bf(l1))), (cp - 1 : U32), 0, e0)
     case False{}:
       +cp = Png.enc.cap(left)
       +l1 = (left - 1 : U32)
       +nz1 = {two(cp, Equal.sym(Bool, U32.is_zero(cp), False{}, nzc), Equal.sym(Bool, U32.is_eq(cp, 1), False{}, ez1)) :
         {U32.is_zero((cp - 1 : U32)) == False{} : Bool}}
-      %Equal.sym(Bool, U32.is_eq(cp, 1), False{}, ez1) : {open.bs(h, t, l1, cp, Png.enc.bf(left)) == List.append(&2, U32,
-        hd5(left), bs(h <> t, False{}, _, cp, left, Png.enc.cap(l1), Png.enc.bf(l1))) : List<&2, U32>}
-      Equal.cong(Bool, List<&2, U32>, zb => List.append(&2, U32, hd5(left), h <> bs(t, zb, U32.is_eq((cp - 1 : U32), 1),
+      %Equal.sym(Bool, U32.is_eq(cp, 1), False{}, ez1) : {open.bs(hd, tl, l1, cp, Png.enc.bf(left)) == List.append(&2,
+        U32,
+        hd5(left), bs(hd <> tl, False{}, _, cp, left, Png.enc.cap(l1), Png.enc.bf(l1))) : List<&2, U32>}
+      Equal.cong(Bool, List<&2, U32>, zb => List.append(&2, U32, hd5(left), hd <> bs(tl, zb, U32.is_eq((cp - 1 : U32),
+        1),
         (cp - 1 : U32), l1, Png.enc.cap(l1), Png.enc.bf(l1))), U32.is_zero((cp - 1 : U32)), False{}, nz1)
 
 # a block's start with bytes left: the header, then the bytes with the block's
@@ -2324,8 +2439,8 @@ def n0.pe(
   +plen: U32,
   +pbf: U32,
   pe: {plen == Png.enc.cap(pl) : U32} & {pbf == Png.enc.bf(pl) : U32}
-) -> {bs(rr, True{}, False{}, 0, pl, plen, pbf) == bs(rr, True{}, False{}, 0, pl, Png.enc.cap(pl), Png.enc.bf(pl)) :
-  List<&2, U32>}:
+) -> {bs(rr, True{}, False{}, 0, pl, plen, pbf) == bs(rr, True{}, False{}, 0, pl, Png.enc.cap(pl),
+  Png.enc.bf(pl)) : List<&2, U32>}:
   (+e_l, +e_b) = pe
   Equal.trans(List<&2, U32>, bs(rr, True{}, False{}, 0, pl, plen, pbf), bs(rr, True{}, False{}, 0, pl, Png.enc.cap(pl),
     pbf), bs(rr, True{}, False{}, 0, pl, Png.enc.cap(pl), Png.enc.bf(pl)), Equal.cong(U32, List<&2, U32>, uu => bs(rr,
@@ -2352,8 +2467,10 @@ def n0.bs(
   Equal.trans(List<&2, U32>, bs(rr, U32.is_zero(need), U32.is_eq(need, 1), need, pl, plen, pbf), bs(rr, True{}, False{},
     0, pl, plen, pbf), bs(rr, True{}, False{}, 0, left2, Png.enc.cap(left2), Png.enc.bf(left2)),
     Equal.cong(U32, List<&2, U32>, uu => bs(rr, U32.is_zero(uu), U32.is_eq(uu, 1), uu, pl, plen, pbf), need, 0, e0),
-    Equal.trans(List<&2, U32>, bs(rr, True{}, False{}, 0, pl, plen, pbf), bs(rr, True{}, False{}, 0, pl, Png.enc.cap(pl),
-      Png.enc.bf(pl)), bs(rr, True{}, False{}, 0, left2, Png.enc.cap(left2), Png.enc.bf(left2)), n0.pe(rr, pl, plen, pbf,
+    Equal.trans(List<&2, U32>, bs(rr, True{}, False{}, 0, pl, plen, pbf), bs(rr, True{}, False{}, 0, pl,
+      Png.enc.cap(pl),
+      Png.enc.bf(pl)), bs(rr, True{}, False{}, 0, left2, Png.enc.cap(left2), Png.enc.bf(left2)), n0.pe(rr, pl, plen,
+        pbf,
       hb(Equal.sym(Bool, True{}, U32.is_zero(need), ez))), Equal.cong(U32, List<&2, U32>, uu => bs(rr, True{}, False{},
       0, uu, Png.enc.cap(uu), Png.enc.bf(uu)), pl, left2, e_p)))
 
@@ -2378,7 +2495,8 @@ def z0.s2(+nr: Nat, +dk: Nat, +hw: {Nat.is_le(Nat.add(Nat.add(nr, 1n), dk), 1n) 
   +h1 = {R.le_add_r(Nat.add(nr, 1n), dk, 1n, hw) : {Nat.is_le(Nat.add(nr, 1n), 1n) == True{} : Bool}}
   +h2 = {R.le_rw_l(Nat.add(nr, 1n), 1n+Nat.add(nr, 0n), 1n, R.add_succ(nr, 0n), h1) : {Nat.is_le(Nat.add(nr, 0n), 0n) ==
     True{} : Bool}}
-  Equal.trans(Nat, nr, Nat.add(nr, 0n), 0n, Equal.sym(Nat, Nat.add(nr, 0n), nr, R.add_zero(nr)), le.zero(Nat.add(nr, 0n),
+  Equal.trans(Nat, nr, Nat.add(nr, 0n), 0n, Equal.sym(Nat, Nat.add(nr, 0n), nr, R.add_zero(nr)), le.zero(Nat.add(nr,
+    0n),
     h2))
 
 # the fuel after a block header: one step fewer, one block fewer, one more to close it
@@ -2425,30 +2543,32 @@ def need.nil(
 
 # the filter byte: 0, then the row's samples
 def cur.filt(
-  +s: U32,
-  +t: List<&2, U32>,
+  +sv: U32,
+  +tl: List<&2, U32>,
   +row: U32,
   +wp: Nat,
   +er: {U32.to_nat(row) == 1n+wp : Nat}
-) -> {W9.sc(s <> t, 0n, 1n+wp, True{}) == 0 <> W9.sc(s <> t, U32.to_nat(row), 1n+wp, True{}) : List<&2, U32>}:
-  Equal.cong(Nat, List<&2, U32>, kz => 0 <> W9.sc(s <> t, kz, 1n+wp, True{}), 1n+wp, U32.to_nat(row), Equal.sym(Nat,
+) -> {W9.sc(sv <> tl, 0n, 1n+wp, True{}) == 0 <> W9.sc(sv <> tl, U32.to_nat(row), 1n+wp, True{}) : List<&2, U32>}:
+  Equal.cong(Nat, List<&2, U32>, kz => 0 <> W9.sc(sv <> tl, kz, 1n+wp, True{}), 1n+wp, U32.to_nat(row), Equal.sym(Nat,
     U32.to_nat(row), 1n+wp, er))
 
 # a red byte: the sample's red, then its green and blue and the rest of the row
 def cur.red(
-  +s: U32,
-  +t: List<&2, U32>,
+  +sv: U32,
+  +tl: List<&2, U32>,
   +row: U32,
   +wn: Nat,
   +hrow: {U32.is_zero(row) == False{} : Bool}
-) -> {W9.sc(s <> t, U32.to_nat(row), wn, True{}) == Png.enc.r(s) <> Png.enc.g(s) <> Png.enc.b(s) <> W9.sc(t,
+) -> {W9.sc(sv <> tl, U32.to_nat(row), wn, True{}) == Png.enc.r(sv) <> Png.enc.g(sv) <> Png.enc.b(sv) <> W9.sc(tl,
   Png.enc.pred(U32.to_nat(row)), wn, True{}) : List<&2, U32>}:
   +r1 = U32.to_nat((row - 1 : U32))
   +er = {Wp1.u32_dec(row, hrow) : {U32.to_nat(row) == 1n+r1 : Nat}}
-  Equal.trans(List<&2, U32>, W9.sc(s <> t, U32.to_nat(row), wn, True{}), W9.sc(s <> t, 1n+r1, wn, True{}), Png.enc.r(s)
-    <> Png.enc.g(s) <> Png.enc.b(s) <> W9.sc(t, Png.enc.pred(U32.to_nat(row)), wn, True{}),
-    Equal.cong(Nat, List<&2, U32>, kz => W9.sc(s <> t, kz, wn, True{}), U32.to_nat(row), 1n+r1, er),
-    Equal.cong(Nat, List<&2, U32>, kz => Png.enc.r(s) <> Png.enc.g(s) <> Png.enc.b(s) <> W9.sc(t, Png.enc.pred(kz), wn,
+  Equal.trans(List<&2, U32>, W9.sc(sv <> tl, U32.to_nat(row), wn, True{}), W9.sc(sv <> tl, 1n+r1, wn, True{}),
+    Png.enc.r(sv)
+    <> Png.enc.g(sv) <> Png.enc.b(sv) <> W9.sc(tl, Png.enc.pred(U32.to_nat(row)), wn, True{}),
+    Equal.cong(Nat, List<&2, U32>, kz => W9.sc(sv <> tl, kz, wn, True{}), U32.to_nat(row), 1n+r1, er),
+    Equal.cong(Nat, List<&2, U32>, kz => Png.enc.r(sv) <> Png.enc.g(sv) <> Png.enc.b(sv) <> W9.sc(tl, Png.enc.pred(kz),
+      wn,
       True{}), 1n+r1, U32.to_nat(row), Equal.sym(Nat, U32.to_nat(row), 1n+r1, er)))
 
 # a row's last blue byte: the next row starts with its filter byte
@@ -2474,6 +2594,29 @@ def cur.blue(
   U32.to_nat((row - 1 : U32)), wn, True{}) : List<&2, U32>}:
   Equal.cong(Nat, List<&2, U32>, kz => Png.enc.b(col) <> W9.sc(px, Png.enc.pred(kz), wn, True{}), U32.to_nat(row),
     1n+U32.to_nat((row - 1 : U32)), Wp1.u32_dec(row, hrow))
+
+# at a filter byte or a blue channel, the next is not a red or green one, and zlast says the row's last pixel
+def rg.hbl(filt: Bool, zred: Bool, zgrn: Bool, zlast: Bool, +row: U32) -> Type:
+  {filt == False{} : Bool} -> {zred == False{} : Bool} -> {zgrn == False{} : Bool} -> {zlast == U32.is_eq(row, 1) :
+    Bool}
+
+# how many bytes are left from the cursor
+def curl(filt: Bool, zred: Bool, zgrn: Bool, px: List<&2, U32>, +col: U32, +row: U32, +wp: Nat) -> Nat:
+  List.length(&2, U32, cur(filt, zred, zgrn, px, col, row, 1n+wp))
+
+# the steps the walk takes from the cursor: the bytes, one more when a block is open, and two per block
+def rgw(
+  filt: Bool,
+  zred: Bool,
+  zgrn: Bool,
+  px: List<&2, U32>,
+  +col: U32,
+  +row: U32,
+  +wp: Nat,
+  zblock: Bool,
+  +kk: Nat
+) -> Nat:
+  Nat.add(Nat.add(curl(filt, zred, zgrn, px, col, row, wp), R.bit(Bool.not(zblock))), Nat.double(kk))
 
 # enc.rgb.go writes bs's blocks of the raw bytes its cursor walks, with their
 # CRC run, and the Adler-32 of those bytes, while its fuel covers a step per
@@ -2510,18 +2653,14 @@ def rg(
   +ew: {U32.to_nat(ww) == 1n+wp : Nat},
   +hrow: {U32.is_zero(row) == False{} : Bool},
   hfw: {filt == True{} : Bool} -> {row == ww : U32},
-  hbl: {filt == False{} : Bool} -> {zred == False{} : Bool} -> {zgrn == False{} : Bool} -> {zlast == U32.is_eq(row, 1) :
-    Bool},
-  +hx: {Nat.add(U32.to_nat(rm(zblock, need)), xn) == List.length(&2, U32, cur(filt, zred, zgrn, px, col, row, 1n+wp)) :
-    Nat},
+  hbl: rg.hbl(filt, zred, zgrn, zlast, row),
+  +hx: {Nat.add(U32.to_nat(rm(zblock, need)), xn) == curl(filt, zred, zgrn, px, col, row, wp) : Nat},
   hk: kok(xn, kk, U32.to_nat(mx)),
-  +hw: {Nat.is_le(Nat.add(Nat.add(List.length(&2, U32, cur(filt, zred, zgrn, px, col, row, 1n+wp)),
-    R.bit(Bool.not(zblock))), Nat.double(kk)), 1n+fuel) == True{} : Bool},
-  hb: rg.hyp(zblock, zdone, zspan, zneed, List.length(&2, U32, cur(filt, zred, zgrn, px, col, row, 1n+wp)), left, len,
-    need, pl, plen, pbf)
-) -> {Png.enc.rgb.go(fuel, zblock, zdone, zspan, zneed, filt, zred, zgrn, zlast, px, col, row, ww, need, cc, acc, aa, bb,
-  left, len) == rg.val(zblock, cur(filt, zred, zgrn, px, col, row, 1n+wp), cc, acc, aa, bb, left, need, pl, plen, pbf) :
-  (U32 & List<&2, U32>) & U32}:
+  +hw: {Nat.is_le(rgw(filt, zred, zgrn, px, col, row, wp, zblock, kk), 1n+fuel) == True{} : Bool},
+  hb: rg.hyp(zblock, zdone, zspan, zneed, curl(filt, zred, zgrn, px, col, row, wp), left, len, need, pl, plen, pbf)
+) -> {Png.enc.rgb.go(fuel, zblock, zdone, zspan, zneed, filt, zred, zgrn, zlast, px, col, row, ww, need, cc, acc, aa,
+  bb, left, len) == rg.val(zblock, cur(filt, zred, zgrn, px, col, row, 1n+wp), cc, acc, aa, bb, left, need, pl, plen,
+  pbf) : (U32 & List<&2, U32>) & U32}:
   match fuel:
     case 0n:
       match zblock:
@@ -2591,7 +2730,8 @@ def rg(
                         e_R))) : {Nat.add(U32.to_nat(cp), x2) == nr : Nat}}
                       +h_lt2 = {R.lt_rw_r(Nat.mul(kp, mn), xn, 1n+nt, Equal.trans(Nat, xn, nr, 1n+nt, hx, e_R), h_lt) :
                         {Nat.is_lt(Nat.mul(kp, mn), 1n+nt) == True{} : Bool}}
-                      +h_le2 = {R.le_rw_l(xn, 1n+nt, Nat.add(mn, Nat.mul(kp, mn)), Equal.trans(Nat, xn, nr, 1n+nt, hx, e_R),
+                      +h_le2 = {R.le_rw_l(xn, 1n+nt, Nat.add(mn, Nat.mul(kp, mn)), Equal.trans(Nat, xn, nr, 1n+nt, hx,
+                        e_R),
                         h_le) : {Nat.is_le(1n+nt, Nat.add(mn, Nat.mul(kp, mn))) == True{} : Bool}}
                       hk2 = kok.rw(Nat.sub(nt, U32.to_nat((cm - 1 : U32))), x2, kp, mn, Equal.cong(Nat, Nat, kz =>
                         Nat.sub(nt, kz), U32.to_nat((cm - 1 : U32)), U32.to_nat(c1), Equal.sym(Nat, U32.to_nat(c1),
@@ -2611,27 +2751,36 @@ def rg(
                       +c5 = Crc.crc.byte(Crc.crc.byte(Crc.crc.byte(Crc.crc.byte(Crc.crc.byte(cc, bf), b1), b2), b3), b4)
                       +a4 = {b4 <> b3 <> b2 <> b1 <> bf <> acc : List<&2, U32>}
                       +bb2 = bs(rr, False{}, U32.is_eq(cp, 1), cp, left, Png.enc.cap(l1), Png.enc.bf(l1))
-                      +ih = {rg(pp, False{}, False{}, True{}, False{}, filt, zred, zgrn, zlast, px, col, row, ww, cp, c5, a4,
-                        aa, bb, left, cp, left, Png.enc.cap(l1), Png.enc.bf(l1), kp, x2, wp, mx, emx, ew, hrow, hfw, hbl,
+                      +ih = {rg(pp, False{}, False{}, True{}, False{}, filt, zred, zgrn, zlast, px, col, row, ww, cp,
+                        c5, a4,
+                        aa, bb, left, cp, left, Png.enc.cap(l1), Png.enc.bf(l1), kp, x2, wp, mx, emx, ew, hrow, hfw,
+                          hbl,
                         hx2, hk2, hw2, ({==}, ({==}, (Equal.sym(Bool, U32.is_zero(cp), False{}, nz_cp), (e_l, (ell2,
                         edge.no(cp, left, Png.enc.cap(l1), Png.enc.bf(l1), nz_cp))))))) : {Png.enc.rgb.go(pp, False{},
-                        False{}, True{}, False{}, filt, zred, zgrn, zlast, px, col, row, ww, cp, c5, a4, aa, bb, left, cp)
+                        False{}, True{}, False{}, filt, zred, zgrn, zlast, px, col, row, ww, cp, c5, a4, aa, bb, left,
+                          cp)
                         == (fr(bs(rr, U32.is_zero(cp), U32.is_eq(cp, 1), cp, left, Png.enc.cap(l1), Png.enc.bf(l1)), c5,
                         a4), afold(rr, aa, bb)) : (U32 & List<&2, U32>) & U32}}
-                      Equal.trans((U32 & List<&2, U32>) & U32, Png.enc.rgb.go(pp, False{}, False{}, True{}, False{}, filt,
-                        zred, zgrn, zlast, px, col, row, ww, cp, c5, a4, aa, bb, left, cp), (fr(bb2, c5, a4), afold(rr, aa,
+                      Equal.trans((U32 & List<&2, U32>) & U32, Png.enc.rgb.go(pp, False{}, False{}, True{}, False{},
+                        filt,
+                        zred, zgrn, zlast, px, col, row, ww, cp, c5, a4, aa, bb, left, cp), (fr(bb2, c5, a4), afold(rr,
+                          aa,
                         bb)), rg.val(True{}, rr, cc, acc, aa, bb, left, need, pl, plen, pbf),
-                        Equal.trans((U32 & List<&2, U32>) & U32, Png.enc.rgb.go(pp, False{}, False{}, True{}, False{}, filt,
-                          zred, zgrn, zlast, px, col, row, ww, cp, c5, a4, aa, bb, left, cp), (fr(bs(rr, U32.is_zero(cp),
+                        Equal.trans((U32 & List<&2, U32>) & U32, Png.enc.rgb.go(pp, False{}, False{}, True{}, False{},
+                          filt,
+                          zred, zgrn, zlast, px, col, row, ww, cp, c5, a4, aa, bb, left, cp), (fr(bs(rr,
+                            U32.is_zero(cp),
                           U32.is_eq(cp, 1), cp, left, Png.enc.cap(l1), Png.enc.bf(l1)), c5, a4), afold(rr, aa, bb)),
                           (fr(bb2, c5, a4), afold(rr, aa, bb)), ih, Equal.cong(Bool, (U32 & List<&2, U32>) & U32, zb =>
-                          (fr(bs(rr, zb, U32.is_eq(cp, 1), cp, left, Png.enc.cap(l1), Png.enc.bf(l1)), c5, a4), afold(rr,
+                          (fr(bs(rr, zb, U32.is_eq(cp, 1), cp, left, Png.enc.cap(l1), Png.enc.bf(l1)), c5, a4),
+                            afold(rr,
                           aa, bb)), U32.is_zero(cp), False{}, nz_cp)),
                         Equal.sym((U32 & List<&2, U32>) & U32, rg.val(True{}, rr, cc, acc, aa, bb, left, need, pl, plen,
                           pbf), (fr(bb2, c5, a4), afold(rr, aa, bb)), Equal.trans((U32 & List<&2, U32>) & U32,
                           rg.val(True{}, rr, cc, acc, aa, bb, left, need, pl, plen, pbf), (fr(List.append(&2, U32,
                           hd5(left), bb2), cc, acc), afold(rr, aa, bb)), (fr(bb2, c5, a4), afold(rr, aa, bb)),
-                          Equal.cong(List<&2, U32>, (U32 & List<&2, U32>) & U32, ys => (fr(ys, cc, acc), afold(rr, aa, bb)),
+                          Equal.cong(List<&2, U32>, (U32 & List<&2, U32>) & U32, ys => (fr(ys, cc, acc), afold(rr, aa,
+                            bb)),
                           bs(rr, True{}, False{}, 0, left, cp, bf), List.append(&2, U32, hd5(left), bb2), spl(rr, left,
                           e_l, nzl, nz_cp)), Equal.cong(U32 & List<&2, U32>, (U32 & List<&2, U32>) & U32, qq => (qq,
                           afold(rr, aa, bb)), fr(List.append(&2, U32, hd5(left), bb2), cc, acc), fr(bb2, c5, a4),
@@ -2661,7 +2810,8 @@ def rg(
                       +nr = List.length(&2, U32, rr)
                       +l2 = (left - len : U32)
                       +e_n0 = {zero.val(need, e_zn) : {U32.to_nat(need) == 0n : Nat}}
-                      +e_lf = {Equal.trans(Nat, U32.to_nat(left), Nat.add(U32.to_nat(left), 0n), Nat.add(U32.to_nat(len),
+                      +e_lf = {Equal.trans(Nat, U32.to_nat(left), Nat.add(U32.to_nat(left), 0n),
+                        Nat.add(U32.to_nat(len),
                         nr), Equal.sym(Nat, Nat.add(U32.to_nat(left), 0n), U32.to_nat(left),
                         R.add_zero(U32.to_nat(left))), Equal.trans(Nat, Nat.add(U32.to_nat(left), 0n),
                         Nat.add(U32.to_nat(left), U32.to_nat(need)), Nat.add(U32.to_nat(len), nr), Equal.cong(Nat, Nat,
@@ -2679,7 +2829,8 @@ def rg(
                       +hx2 = {Equal.trans(Nat, xn, Nat.add(U32.to_nat(need), xn), nr, Equal.cong(Nat, Nat, kz =>
                         Nat.add(kz, xn), 0n, U32.to_nat(need), Equal.sym(Nat, U32.to_nat(need), 0n, e_n0)), hx) :
                         {Nat.add(U32.to_nat(0), xn) == nr : Nat}}
-                      +ih = {rg(pp, True{}, U32.is_zero(l2), False{}, False{}, filt, zred, zgrn, zlast, px, col, row, ww,
+                      +ih = {rg(pp, True{}, U32.is_zero(l2), False{}, False{}, filt, zred, zgrn, zlast, px, col, row,
+                        ww,
                         need, cc, acc, aa, bb, l2, len, pl, plen, pbf, kk, xn, wp, mx, emx, ew, hrow, hfw, hbl, hx2, hk,
                         hw.end(nr, Nat.double(kk), pp, hw), ({==}, e_l2)) : {Png.enc.rgb.go(pp, True{},
                         U32.is_zero(l2), False{}, False{}, filt, zred, zgrn, zlast, px, col, row, ww, need, cc, acc, aa,
@@ -2700,12 +2851,30 @@ def rg(
                             match px:
                               case Nil{}:
                                 (_e_d, (_e_s, (e_zn, _rest))) = hb
-                                Empty.absurd({Png.enc.rgb.go(1n+pp, False{}, False{}, True{}, False{}, True{}, zred, zgrn, zlast, [], col, row, ww, need, cc, acc, aa, bb, left, len) == rg.val(False{}, cur(True{}, zred, zgrn, [], col, row, 1n+wp), cc, acc, aa, bb, left, need, pl, plen, pbf) : (U32 & List<&2, U32>) & U32}, need.nil(need, xn, e_zn, hx))
+                                Empty.absurd({Png.enc.rgb.go(1n+pp, False{}, False{}, True{}, False{}, True{}, zred,
+                                  zgrn, zlast, [], col, row, ww, need, cc, acc, aa, bb, left, len) == rg.val(False{},
+                                    cur(True{}, zred, zgrn, [], col, row, 1n+wp), cc, acc, aa, bb, left, need, pl,
+                                    plen, pbf) : (U32 & List<&2, U32>) & U32}, need.nil(need, xn, e_zn, hx))
                               case +s <> +t:
                                 (_e_d, (_e_s, (+e_zn, (+e_pl, (+e_ll, _hbe))))) = hb
                                 +r2 = cur(False{}, True{}, False{}, s <> t, col, row, 1n+wp)
-                                +e_R = {cur.filt(s, t, row, wp, Equal.trans(Nat, U32.to_nat(row), U32.to_nat(ww), 1n+wp, Equal.cong(U32, Nat, uu => U32.to_nat(uu), row, ww, hfw({==})), ew)) : {cur(True{}, zred, zgrn, s <> t, col, row, 1n+wp) == 0 <> r2 : List<&2, U32>}}
-                                rg.byte(pp, 0, cur(True{}, zred, zgrn, s <> t, col, row, 1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn, Png.enc.rgb.go(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, True{}, False{}, False{}, s <> t, col, row, ww, (need - 1 : U32), Crc.crc.byte(cc, 0), 0 <> acc, Png.enc.add(aa, 0), Png.enc.add(bb, Png.enc.add(aa, 0)), left, len), e_R, e_zn, hx, hw, e_pl, e_ll, xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, True{}, False{}, False{}, s <> t, col, row, ww, (need - 1 : U32), Crc.crc.byte(cc, 0), 0 <> acc, Png.enc.add(aa, 0), Png.enc.add(bb, Png.enc.add(aa, 0)), left, len, (pl - 1 : U32), xx, yy, kk, xn, wp, mx, emx, ew, hrow, ef => Empty.absurd({row == ww : U32}, U32L.false_true(ef)), _e1 => e2 => _e3 => Empty.absurd({False{} == U32.is_eq(row, 1) : Bool}, U32L.false_true(Equal.sym(Bool, True{}, False{}, e2))), h2, hk, h3, ({==}, ({==}, ({==}, (h4, (h5, h1)))))))
+                                +e_R = {cur.filt(s, t, row, wp, Equal.trans(Nat, U32.to_nat(row), U32.to_nat(ww),
+                                  1n+wp, Equal.cong(U32, Nat, uu => U32.to_nat(uu), row, ww,
+                                  hfw({==})), ew)) : {cur(True{}, zred, zgrn, s <> t, col, row, 1n+wp) ==
+                                    0 <> r2 : List<&2, U32>}}
+                                rg.byte(pp, 0, cur(True{}, zred, zgrn, s <> t, col, row, 1n+wp), r2, need, pl, plen,
+                                  pbf, cc, acc, aa, bb, left, len, kk, xn, Png.enc.rgb.go(pp, False{}, False{}, True{},
+                                  U32.is_zero((need - 1 : U32)), False{}, True{}, False{}, False{}, s <> t, col, row,
+                                    ww, (need - 1 : U32), Crc.crc.byte(cc, 0), 0 <> acc, Png.enc.add(aa, 0),
+                                    Png.enc.add(bb, Png.enc.add(aa, 0)), left, len), e_R, e_zn, hx, hw, e_pl, e_ll,
+                                    xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{},
+                                    U32.is_zero((need - 1 : U32)), False{}, True{}, False{}, False{}, s <> t, col, row,
+                                    ww, (need - 1 : U32), Crc.crc.byte(cc, 0), 0 <> acc, Png.enc.add(aa, 0),
+                                    Png.enc.add(bb, Png.enc.add(aa, 0)), left, len, (pl - 1 : U32), xx, yy, kk, xn, wp,
+                                    mx, emx, ew, hrow, ef => Empty.absurd({row == ww : U32}, U32L.false_true(ef)),
+                                    _e1 => e2 => _e3 => Empty.absurd({False{} == U32.is_eq(row, 1) : Bool},
+                                    U32L.false_true(Equal.sym(Bool, True{}, False{}, e2))), h2, hk, h3, ({==}, ({==},
+                                    ({==}, (h4, (h5, h1)))))))
                           case False{}:
                             match zred:
                               case True{}:
@@ -2716,31 +2885,102 @@ def rg(
                                         match px:
                                           case Nil{}:
                                             (_e_d, (_e_s, (e_zn, _rest))) = hb
-                                            Empty.absurd({Png.enc.rgb.go(1n+pp, False{}, False{}, True{}, False{}, False{}, True{}, _gn, _ls, [], col, row, ww, need, cc, acc, aa, bb, left, len) == rg.val(False{}, cur(False{}, True{}, _gn, [], col, row, 1n+wp), cc, acc, aa, bb, left, need, pl, plen, pbf) : (U32 & List<&2, U32>) & U32}, need.nil(need, xn, e_zn, hx))
+                                            Empty.absurd({Png.enc.rgb.go(1n+pp, False{}, False{}, True{}, False{},
+                                              False{}, True{}, _gn, _ls, [], col, row, ww, need, cc, acc, aa, bb, left,
+                                                len) == rg.val(False{}, cur(False{}, True{}, _gn, [], col, row, 1n+wp),
+                                                cc, acc, aa, bb, left, need, pl, plen, pbf) : (U32 & List<&2,
+                                                U32>) & U32}, need.nil(need, xn, e_zn, hx))
                                           case +s <> +t:
                                             (_e_d, (_e_s, (+e_zn, (+e_pl, (+e_ll, _hbe))))) = hb
                                             +r2 = cur(False{}, False{}, True{}, t, s, row, 1n+wp)
-                                            +e_R = {cur.red(s, t, row, 1n+wp, hrow) : {cur(False{}, True{}, _gn, s <> t, col, row, 1n+wp) == Png.enc.r(s) <> r2 : List<&2, U32>}}
-                                            rg.byte(pp, Png.enc.r(s), cur(False{}, True{}, _gn, s <> t, col, row, 1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn, Png.enc.rgb.go(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, False{}, True{}, False{}, t, s, row, ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.r(s)), Png.enc.r(s) <> acc, Png.enc.add(aa, Png.enc.r(s)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.r(s))), left, len), e_R, e_zn, hx, hw, e_pl, e_ll, xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, False{}, True{}, False{}, t, s, row, ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.r(s)), Png.enc.r(s) <> acc, Png.enc.add(aa, Png.enc.r(s)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.r(s))), left, len, (pl - 1 : U32), xx, yy, kk, xn, wp, mx, emx, ew, hrow, ef => Empty.absurd({row == ww : U32}, U32L.false_true(ef)), _e1 => _e2 => e3 => Empty.absurd({False{} == U32.is_eq(row, 1) : Bool}, U32L.false_true(Equal.sym(Bool, True{}, False{}, e3))), h2, hk, h3, ({==}, ({==}, ({==}, (h4, (h5, h1)))))))
+                                            +e_R = {cur.red(s, t, row, 1n+wp, hrow) : {cur(False{}, True{}, _gn,
+                                              s <> t, col, row, 1n+wp) == Png.enc.r(s) <> r2 : List<&2, U32>}}
+                                            rg.byte(pp, Png.enc.r(s), cur(False{}, True{}, _gn, s <> t, col, row,
+                                              1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn,
+                                                Png.enc.rgb.go(pp, False{}, False{}, True{},
+                                                U32.is_zero((need - 1 : U32)), False{}, False{}, True{}, False{}, t, s,
+                                                row, ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.r(s)),
+                                                Png.enc.r(s) <> acc, Png.enc.add(aa, Png.enc.r(s)), Png.enc.add(bb,
+                                                Png.enc.add(aa, Png.enc.r(s))), left, len), e_R, e_zn, hx, hw, e_pl,
+                                                e_ll, xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{},
+                                                False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, False{},
+                                                True{}, False{}, t, s, row, ww, (need - 1 : U32), Crc.crc.byte(cc,
+                                                Png.enc.r(s)), Png.enc.r(s) <> acc, Png.enc.add(aa, Png.enc.r(s)),
+                                                Png.enc.add(bb, Png.enc.add(aa, Png.enc.r(s))), left, len,
+                                                (pl - 1 : U32), xx, yy, kk, xn, wp, mx, emx, ew, hrow,
+                                                ef => Empty.absurd({row == ww : U32}, U32L.false_true(ef)),
+                                                _e1 => _e2 => e3 => Empty.absurd({False{} == U32.is_eq(row, 1) : Bool},
+                                                U32L.false_true(Equal.sym(Bool, True{}, False{}, e3))), h2, hk, h3,
+                                                ({==}, ({==}, ({==}, (h4, (h5, h1)))))))
                               case False{}:
                                 match zgrn:
                                   case True{}:
                                     (_e_d, (_e_s, (+e_zn, (+e_pl, (+e_ll, _hbe))))) = hb
                                     +r2 = cur(False{}, False{}, False{}, px, col, row, 1n+wp)
-                                    +e_R = {{==} : {cur(False{}, False{}, True{}, px, col, row, 1n+wp) == Png.enc.g(col) <> r2 : List<&2, U32>}}
-                                    rg.byte(pp, Png.enc.g(col), cur(False{}, False{}, True{}, px, col, row, 1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn, Png.enc.rgb.go(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, False{}, False{}, U32.is_eq(row, 1), px, col, row, ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.g(col)), Png.enc.g(col) <> acc, Png.enc.add(aa, Png.enc.g(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.g(col))), left, len), e_R, e_zn, hx, hw, e_pl, e_ll, xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, False{}, False{}, U32.is_eq(row, 1), px, col, row, ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.g(col)), Png.enc.g(col) <> acc, Png.enc.add(aa, Png.enc.g(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.g(col))), left, len, (pl - 1 : U32), xx, yy, kk, xn, wp, mx, emx, ew, hrow, ef => Empty.absurd({row == ww : U32}, U32L.false_true(ef)), _e1 => _e2 => _e3 => {==}, h2, hk, h3, ({==}, ({==}, ({==}, (h4, (h5, h1)))))))
+                                    +e_R = {{==} : {cur(False{}, False{}, True{}, px, col, row,
+                                      1n+wp) == Png.enc.g(col) <> r2 : List<&2, U32>}}
+                                    rg.byte(pp, Png.enc.g(col), cur(False{}, False{}, True{}, px, col, row, 1n+wp), r2,
+                                      need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn, Png.enc.rgb.go(pp,
+                                      False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, False{},
+                                        False{}, U32.is_eq(row, 1), px, col, row, ww, (need - 1 : U32),
+                                        Crc.crc.byte(cc, Png.enc.g(col)), Png.enc.g(col) <> acc, Png.enc.add(aa,
+                                        Png.enc.g(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.g(col))), left, len),
+                                        e_R, e_zn, hx, hw, e_pl, e_ll, xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp,
+                                        False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, False{},
+                                        False{}, U32.is_eq(row, 1), px, col, row, ww, (need - 1 : U32),
+                                        Crc.crc.byte(cc, Png.enc.g(col)), Png.enc.g(col) <> acc, Png.enc.add(aa,
+                                        Png.enc.g(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.g(col))), left, len,
+                                        (pl - 1 : U32), xx, yy, kk, xn, wp, mx, emx, ew, hrow,
+                                        ef => Empty.absurd({row == ww : U32}, U32L.false_true(ef)),
+                                        _e1 => _e2 => _e3 => {==}, h2, hk, h3, ({==}, ({==}, ({==}, (h4, (h5, h1)))))))
                                   case False{}:
                                     match zlast:
                                       case True{}:
                                         (_e_d, (_e_s, (+e_zn, (+e_pl, (+e_ll, _hbe))))) = hb
                                         +r2 = cur(True{}, True{}, False{}, px, col, ww, 1n+wp)
-                                        +e_R = {cur.last(col, px, row, 1n+wp, hbl({==}, {==}, {==})) : {cur(False{}, False{}, False{}, px, col, row, 1n+wp) == Png.enc.b(col) <> r2 : List<&2, U32>}}
-                                        rg.byte(pp, Png.enc.b(col), cur(False{}, False{}, False{}, px, col, row, 1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn, Png.enc.rgb.go(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), True{}, True{}, False{}, False{}, px, col, ww, ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.b(col)), Png.enc.b(col) <> acc, Png.enc.add(aa, Png.enc.b(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.b(col))), left, len), e_R, e_zn, hx, hw, e_pl, e_ll, xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), True{}, True{}, False{}, False{}, px, col, ww, ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.b(col)), Png.enc.b(col) <> acc, Png.enc.add(aa, Png.enc.b(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.b(col))), left, len, (pl - 1 : U32), xx, yy, kk, xn, wp, mx, emx, ew, Wp1.u32_nonzero(ww, wp, ew), _ef => {==}, ef => Empty.absurd({True{} == False{} : Bool} -> {False{} == False{} : Bool} -> {False{} == U32.is_eq(ww, 1) : Bool}, U32L.false_true(Equal.sym(Bool, True{}, False{}, ef))), h2, hk, h3, ({==}, ({==}, ({==}, (h4, (h5, h1)))))))
+                                        +e_R = {cur.last(col, px, row, 1n+wp, hbl({==}, {==}, {==})) : {cur(False{},
+                                          False{}, False{}, px, col, row, 1n+wp) == Png.enc.b(col) <> r2 : List<&2,
+                                            U32>}}
+                                        rg.byte(pp, Png.enc.b(col), cur(False{}, False{}, False{}, px, col, row,
+                                          1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn,
+                                            Png.enc.rgb.go(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)),
+                                            True{}, True{}, False{}, False{}, px, col, ww, ww, (need - 1 : U32),
+                                            Crc.crc.byte(cc, Png.enc.b(col)), Png.enc.b(col) <> acc, Png.enc.add(aa,
+                                            Png.enc.b(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.b(col))), left,
+                                            len), e_R, e_zn, hx, hw, e_pl, e_ll,
+                                            xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{},
+                                            U32.is_zero((need - 1 : U32)), True{}, True{}, False{}, False{}, px, col,
+                                            ww, ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.b(col)),
+                                            Png.enc.b(col) <> acc, Png.enc.add(aa, Png.enc.b(col)), Png.enc.add(bb,
+                                            Png.enc.add(aa, Png.enc.b(col))), left, len, (pl - 1 : U32), xx, yy, kk,
+                                            xn, wp, mx, emx, ew, Wp1.u32_nonzero(ww, wp, ew), _ef => {==},
+                                            ef => Empty.absurd({True{} == False{} : Bool} -> {False{} ==
+                                            False{} : Bool} -> {False{} == U32.is_eq(ww, 1) : Bool},
+                                            U32L.false_true(Equal.sym(Bool, True{}, False{}, ef))), h2, hk, h3, ({==},
+                                            ({==}, ({==}, (h4, (h5, h1)))))))
                                       case False{}:
                                         (_e_d, (_e_s, (+e_zn, (+e_pl, (+e_ll, _hbe))))) = hb
                                         +r2 = cur(False{}, True{}, False{}, px, col, (row - 1 : U32), 1n+wp)
-                                        +e_R = {cur.blue(col, px, row, 1n+wp, hrow) : {cur(False{}, False{}, False{}, px, col, row, 1n+wp) == Png.enc.b(col) <> r2 : List<&2, U32>}}
-                                        rg.byte(pp, Png.enc.b(col), cur(False{}, False{}, False{}, px, col, row, 1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn, Png.enc.rgb.go(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, True{}, False{}, False{}, px, col, (row - 1 : U32), ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.b(col)), Png.enc.b(col) <> acc, Png.enc.add(aa, Png.enc.b(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.b(col))), left, len), e_R, e_zn, hx, hw, e_pl, e_ll, xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, True{}, False{}, False{}, px, col, (row - 1 : U32), ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.b(col)), Png.enc.b(col) <> acc, Png.enc.add(aa, Png.enc.b(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.b(col))), left, len, (pl - 1 : U32), xx, yy, kk, xn, wp, mx, emx, ew, two(row, Equal.sym(Bool, U32.is_zero(row), False{}, hrow), hbl({==}, {==}, {==})), ef => Empty.absurd({(row - 1 : U32) == ww : U32}, U32L.false_true(ef)), _e1 => e2 => _e3 => Empty.absurd({False{} == U32.is_eq((row - 1 : U32), 1) : Bool}, U32L.false_true(Equal.sym(Bool, True{}, False{}, e2))), h2, hk, h3, ({==}, ({==}, ({==}, (h4, (h5, h1)))))))
+                                        +e_R = {cur.blue(col, px, row, 1n+wp, hrow) : {cur(False{}, False{}, False{},
+                                          px, col, row, 1n+wp) == Png.enc.b(col) <> r2 : List<&2, U32>}}
+                                        rg.byte(pp, Png.enc.b(col), cur(False{}, False{}, False{}, px, col, row,
+                                          1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn,
+                                            Png.enc.rgb.go(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)),
+                                            False{}, True{}, False{}, False{}, px, col, (row - 1 : U32), ww,
+                                            (need - 1 : U32), Crc.crc.byte(cc, Png.enc.b(col)), Png.enc.b(col) <> acc,
+                                            Png.enc.add(aa, Png.enc.b(col)), Png.enc.add(bb, Png.enc.add(aa,
+                                            Png.enc.b(col))), left, len), e_R, e_zn, hx, hw, e_pl, e_ll,
+                                            xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{},
+                                            U32.is_zero((need - 1 : U32)), False{}, True{}, False{}, False{}, px, col,
+                                            (row - 1 : U32), ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.b(col)),
+                                            Png.enc.b(col) <> acc, Png.enc.add(aa, Png.enc.b(col)), Png.enc.add(bb,
+                                            Png.enc.add(aa, Png.enc.b(col))), left, len, (pl - 1 : U32), xx, yy, kk,
+                                            xn, wp, mx, emx, ew, two(row, Equal.sym(Bool, U32.is_zero(row), False{},
+                                            hrow), hbl({==}, {==}, {==})), ef => Empty.absurd({(row - 1 : U32) ==
+                                            ww : U32}, U32L.false_true(ef)),
+                                            _e1 => e2 => _e3 => Empty.absurd({False{} == U32.is_eq((row - 1 : U32),
+                                            1) : Bool}, U32L.false_true(Equal.sym(Bool, True{}, False{}, e2))), h2, hk,
+                                            h3, ({==}, ({==}, ({==}, (h4, (h5, h1)))))))
 
 # ---- I. Adler-32 as enc.rgb.go adds it is Inf.adler.of ----
 
@@ -2755,8 +2995,12 @@ def addm(zz: Bool, +tt: U32, +pm: U32) -> U32:
       tt
 
 # enc.add.at is addm at 65521
-def addm.eq(zz: Bool, +tt: U32, +pm: U32, +epm: {pm == 65521 : U32}) -> {Png.enc.add.at(zz, tt) == addm(zz, tt, pm) :
-  U32}:
+def addm.eq(
+  zz: Bool,
+  +tt: U32,
+  +pm: U32,
+  +epm: {pm == 65521 : U32}
+) -> {Png.enc.add.at(zz, tt) == addm(zz, tt, pm) : U32}:
   match zz:
     case True{}:
       Equal.cong(U32, U32, uu => (tt - uu : U32), 65521, pm, Equal.sym(U32, pm, 65521, epm))
@@ -2764,8 +3008,12 @@ def addm.eq(zz: Bool, +tt: U32, +pm: U32, +epm: {pm == 65521 : U32}) -> {Png.enc
       {==}
 
 # at most and below cannot both hold the other way round
-def le.lt.no(+aa: Nat, +bb: Nat, +h1: {Nat.is_le(aa, bb) == True{} : Bool}, +h2: {Nat.is_lt(bb, aa) == True{} : Bool}) ->
-  Empty:
+def le.lt.no(
+  +aa: Nat,
+  +bb: Nat,
+  +h1: {Nat.is_le(aa, bb) == True{} : Bool},
+  +h2: {Nat.is_lt(bb, aa) == True{} : Bool}
+) -> Empty:
   lt.irr(aa, R.le_lt_trans(aa, bb, aa, h1, h2))
 
 # t below 2 m is t mod m after one subtraction of m, or none: which one is t >= m's answer
@@ -2799,7 +3047,8 @@ def md.at(
           +e_t2 = {Equal.trans(Nat, U32.to_nat(tt), Nat.add(Nat.add(mn, 0n), rn), Nat.add(mn, rn), e_t, Equal.cong(Nat,
             Nat, kz => Nat.add(kz, rn), Nat.add(mn, 0n), mn, R.add_zero(mn))) : {U32.to_nat(tt) == Nat.add(mn, rn) :
             Nat}}
-          u32.same((tt - pm : U32), U32.mod(tt, pm), Equal.trans(Nat, U32.to_nat((tt - pm : U32)), Nat.sub(U32.to_nat(tt),
+          u32.same((tt - pm : U32), U32.mod(tt, pm), Equal.trans(Nat, U32.to_nat((tt - pm : U32)),
+            Nat.sub(U32.to_nat(tt),
             mn), rn, R.u32_sub_nat(tt, pm, hg), Equal.trans(Nat, Nat.sub(U32.to_nat(tt), mn), Nat.sub(Nat.add(mn, rn),
             mn), rn, Equal.cong(Nat, Nat, kz => Nat.sub(kz, mn), U32.to_nat(tt), Nat.add(mn, rn), e_t2),
             R.sub_add_cancel(mn, rn))))
@@ -2828,15 +3077,18 @@ def md.at(
       Empty.absurd({tt == U32.mod(tt, pm) : U32}, le.lt.no(mn, U32.to_nat(tt), h2, hl))
 
 # the modulus doubled is a U32's value
-def pm.dbl(+pm: U32, +epm: {pm == 65521 : U32}) -> {U32.to_nat(U32.add(pm, pm)) == Nat.add(U32.to_nat(pm),
-  U32.to_nat(pm)) : Nat}:
+def pm.dbl(
+  +pm: U32,
+  +epm: {pm == 65521 : U32}
+) -> {U32.to_nat(U32.add(pm, pm)) == Nat.add(U32.to_nat(pm), U32.to_nat(pm)) : Nat}:
   add.cf(pm, pm, Equal.cong(U32, Bool, uu => cy32(uu, uu), pm, 65521, epm))
 
 # U32.mod by the modulus: a quotient and a remainder below it
 def pm.dvm(+tt: U32, +pm: U32, +epm: {pm == 65521 : U32}) -> dvm.ty(tt, pm):
   +mn = U32.to_nat(pm)
   +hm = {Equal.trans(Bool, Nat.is_lt(0n, mn), U32.is_lt(0, pm), True{}, Equal.sym(Bool, U32.is_lt(0, pm), Nat.is_lt(0n,
-    mn), R.u32_lt(0, pm)), Equal.cong(U32, Bool, uu => U32.is_lt(0, uu), pm, 65521, epm)) : {Nat.is_lt(0n, mn) == True{} :
+    mn), R.u32_lt(0, pm)), Equal.cong(U32, Bool, uu => U32.is_lt(0, uu), pm, 65521, epm)) : {Nat.is_lt(0n, mn) ==
+      True{} :
     Bool}}
   +h2 = {R.le_rw_r(Nat.add(mn, mn), Nat.add(mn, mn), U32.to_nat(U32.add(pm, pm)), Equal.sym(Nat,
     U32.to_nat(U32.add(pm, pm)), Nat.add(mn, mn), pm.dbl(pm, epm)), R.le_refl(Nat.add(mn, mn))) :
@@ -2869,15 +3121,22 @@ def mod.once(
       epm), ht), Equal.cong(U32, U32, uu => U32.mod(tt, uu), pm, 65521, epm)))
 
 # the remainder pm.dvm gives, read as mod 65521
-def mod.lt.go(+tt: U32, +pm: U32, +epm: {pm == 65521 : U32}, pr: dvm.ty(tt, pm)) -> {Nat.is_lt(U32.to_nat((tt % 65521 :
-  U32)), U32.to_nat(pm)) == True{} : Bool}:
+def mod.lt.go(
+  +tt: U32,
+  +pm: U32,
+  +epm: {pm == 65521 : U32},
+  pr: dvm.ty(tt, pm)
+) -> {Nat.is_lt(U32.to_nat((tt % 65521 : U32)), U32.to_nat(pm)) == True{} : Bool}:
   (_e_t, +l_r) = pr
   R.lt_rw_l(U32.to_nat(U32.mod(tt, pm)), U32.to_nat((tt % 65521 : U32)), U32.to_nat(pm), Equal.cong(U32, Nat, uu =>
     U32.to_nat(U32.mod(tt, uu)), pm, 65521, epm), l_r)
 
 # U32.mod by 65521 is below it
-def mod.lt(+tt: U32, +pm: U32, +epm: {pm == 65521 : U32}) -> {Nat.is_lt(U32.to_nat((tt % 65521 : U32)), U32.to_nat(pm))
-  == True{} : Bool}:
+def mod.lt(
+  +tt: U32,
+  +pm: U32,
+  +epm: {pm == 65521 : U32}
+) -> {Nat.is_lt(U32.to_nat((tt % 65521 : U32)), U32.to_nat(pm)) == True{} : Bool}:
   mod.lt.go(tt, pm, epm, pm.dvm(tt, pm, epm))
 
 # one Adler-32 add of values below the modulus is the add mod 65521
@@ -2906,8 +3165,12 @@ def add.mod(
     Equal.sym(Nat, U32.to_nat((ss + xx : U32)), Nat.add(sn, xn), e_s), h3))
 
 # a byte is below the modulus
-def byte.pm(+xx: U32, +pm: U32, +epm: {pm == 65521 : U32}, +hh: {U32.is_le(xx, 255) == True{} : Bool}) ->
-  {Nat.is_lt(U32.to_nat(xx), U32.to_nat(pm)) == True{} : Bool}:
+def byte.pm(
+  +xx: U32,
+  +pm: U32,
+  +epm: {pm == 65521 : U32},
+  +hh: {U32.is_le(xx, 255) == True{} : Bool}
+) -> {Nat.is_lt(U32.to_nat(xx), U32.to_nat(pm)) == True{} : Bool}:
   R.le_lt_trans(U32.to_nat(xx), U32.to_nat(255), U32.to_nat(pm), Equal.trans(Bool, Nat.is_le(U32.to_nat(xx),
     U32.to_nat(255)), U32.is_le(xx, 255), True{}, Equal.sym(Bool, U32.is_le(xx, 255), Nat.is_le(U32.to_nat(xx),
     U32.to_nat(255)), R.u32_le(xx, 255)), hh), Equal.trans(Bool, Nat.is_lt(U32.to_nat(255), U32.to_nat(pm)),
@@ -2941,7 +3204,8 @@ def ad.eq(
       Equal.trans(U32, afold(t, Png.enc.add(aa, x), Png.enc.add(bb, Png.enc.add(aa, x))), afold(t, a2, b2),
         Inf.adler.fin(Inf.adler.go(t, a2, b2)),
         Equal.trans(U32, afold(t, Png.enc.add(aa, x), Png.enc.add(bb, Png.enc.add(aa, x))), afold(t, a2,
-          Png.enc.add(bb, Png.enc.add(aa, x))), afold(t, a2, b2), Equal.cong(U32, U32, uu => afold(t, uu, Png.enc.add(bb,
+          Png.enc.add(bb, Png.enc.add(aa, x))), afold(t, a2, b2), Equal.cong(U32, U32, uu => afold(t, uu,
+            Png.enc.add(bb,
           Png.enc.add(aa, x))), Png.enc.add(aa, x), a2, e_a), Equal.cong(U32, U32, uu => afold(t, a2, uu),
           Png.enc.add(bb, Png.enc.add(aa, x)), b2, e_b)),
         ad.eq(t, a2, b2, pm, epm, Wp2.bytes.tail(t, U32.is_le(x, 255), hby), l_a, l_b))
@@ -2972,8 +3236,12 @@ def mul2(kk: Nat) -> {Nat.mul(kk, 2n) == Nat.double(kk) : Nat}:
       Equal.cong(Nat, Nat, xx => 2n+xx, Nat.mul(kp, 2n), Nat.double(kp), mul2(kp))
 
 # a count above 65535 is not zero, once is_zero's answer is named
-def big.nz.at(zz: Bool, +nn: U32, +ez: {U32.is_zero(nn) == zz : Bool}, +hbig: {U32.is_le(nn, 65535) == False{} : Bool}) ->
-  {U32.is_zero(nn) == False{} : Bool}:
+def big.nz.at(
+  zz: Bool,
+  +nn: U32,
+  +ez: {U32.is_zero(nn) == zz : Bool},
+  +hbig: {U32.is_le(nn, 65535) == False{} : Bool}
+) -> {U32.is_zero(nn) == False{} : Bool}:
   match zz:
     case False{}:
       ez
@@ -2991,21 +3259,22 @@ def rgb.fuel(
   +nr: Nat,
   +hn: {U32.to_nat(nn) == nr : Nat},
   +nz: {U32.is_zero(nn) == False{} : Bool},
-  +h_tu: {Nat.is_le(Nat.add(Nat.add(nr, Nat.mul(U32.to_nat(Png.enc.nblk(nn)), 5n)), 6n), U32.to_nat(tu)) == True{} :
-    Bool}
-) -> {Nat.is_le(Nat.add(Nat.add(nr, 0n), Nat.double(U32.to_nat(Png.enc.nblk(nn)))), 1n+U32.to_nat(((nn +
-  (Png.enc.nblk(nn) * 2 : U32) : U32) - 1 : U32))) == True{} : Bool}:
+  +h_tu: {Nat.is_le(kzn(nr, nn), U32.to_nat(tu)) == True{} : Bool}
+) -> {Nat.is_le(Nat.add(Nat.add(nr, 0n), Nat.double(U32.to_nat(Png.enc.nblk(nn)))),
+  1n+U32.to_nat(((nn + (Png.enc.nblk(nn) * 2 : U32) : U32) - 1 : U32))) == True{} : Bool}:
   +kb = Png.enc.nblk(nn)
   +kn = U32.to_nat(kb)
   +k2 = Nat.mul(kn, 2n)
   +tn = U32.to_nat(tu)
   +s1 = (nn + (kb * 2 : U32) : U32)
-  +h5 = {R.le_add_r(Nat.add(nr, Nat.mul(kn, 5n)), 6n, tn, h_tu) : {Nat.is_le(Nat.add(nr, Nat.mul(kn, 5n)), tn) == True{} :
+  +h5 = {R.le_add_r(Nat.add(nr, Nat.mul(kn, 5n)), 6n, tn, h_tu) : {Nat.is_le(Nat.add(nr, Nat.mul(kn, 5n)),
+    tn) == True{} :
     Bool}}
   +h25 = {R.le_rw_r(k2, Nat.mul(5n, kn), Nat.mul(kn, 5n), R.mul_comm(5n, kn), R.le_rw_l(Nat.mul(2n, kn), k2,
     Nat.mul(5n, kn), R.mul_comm(2n, kn), R.le_mul_mono(2n, 5n, kn, {==}))) : {Nat.is_le(k2, Nat.mul(kn, 5n)) == True{} :
     Bool}}
-  +h2 = {R.le_trans(Nat.add(nr, k2), Nat.add(nr, Nat.mul(kn, 5n)), tn, R.le_add_mono(nr, k2, Nat.mul(kn, 5n), h25), h5) :
+  +h2 = {R.le_trans(Nat.add(nr, k2), Nat.add(nr, Nat.mul(kn, 5n)), tn, R.le_add_mono(nr, k2, Nat.mul(kn, 5n), h25),
+    h5) :
     {Nat.is_le(Nat.add(nr, k2), tn) == True{} : Bool}}
   +e_m = {R.u32_mul_below(kb, 2, tu, R.le_add_l(nr, k2, tn, h2)) : {U32.to_nat((kb * 2 : U32)) == k2 : Nat}}
   +e_s = {Equal.trans(Nat, U32.to_nat(s1), Nat.add(U32.to_nat(nn), U32.to_nat((kb * 2 : U32))), Nat.add(nr, k2),
@@ -3014,14 +3283,17 @@ def rgb.fuel(
     2 : U32))), Equal.cong(Nat, Nat, xx => Nat.add(xx, k2), nr, U32.to_nat(nn), Equal.sym(Nat, U32.to_nat(nn), nr, hn)),
     Equal.cong(Nat, Nat, xx => Nat.add(U32.to_nat(nn), xx), k2, U32.to_nat((kb * 2 : U32)), Equal.sym(Nat,
     U32.to_nat((kb * 2 : U32)), k2, e_m))), h2)), Equal.trans(Nat, Nat.add(U32.to_nat(nn), U32.to_nat((kb * 2 : U32))),
-    Nat.add(nr, U32.to_nat((kb * 2 : U32))), Nat.add(nr, k2), Equal.cong(Nat, Nat, xx => Nat.add(xx, U32.to_nat((kb * 2 :
-    U32))), U32.to_nat(nn), nr, hn), Equal.cong(Nat, Nat, xx => Nat.add(nr, xx), U32.to_nat((kb * 2 : U32)), k2, e_m))) :
+    Nat.add(nr, U32.to_nat((kb * 2 : U32))), Nat.add(nr, k2), Equal.cong(Nat, Nat, xx => Nat.add(xx,
+      U32.to_nat((kb * 2 :
+    U32))), U32.to_nat(nn), nr, hn), Equal.cong(Nat, Nat, xx => Nat.add(nr, xx), U32.to_nat((kb * 2 : U32)), k2,
+      e_m))) :
     {U32.to_nat(s1) == Nat.add(nr, k2) : Nat}}
   +e_n = {Equal.trans(Nat, U32.to_nat(nn), 1n+U32.to_nat((nn - 1 : U32)), 1n+U32.to_nat((nn - 1 : U32)), Wp1.u32_dec(nn,
     nz), {==}) : {U32.to_nat(nn) == 1n+U32.to_nat((nn - 1 : U32)) : Nat}}
   +nz1 = {Wp1.u32_nonzero(s1, Nat.add(U32.to_nat((nn - 1 : U32)), k2), Equal.trans(Nat, U32.to_nat(s1), Nat.add(nr, k2),
     1n+Nat.add(U32.to_nat((nn - 1 : U32)), k2), e_s, Equal.cong(Nat, Nat, xx => Nat.add(xx, k2), nr, 1n+U32.to_nat((nn -
-    1 : U32)), Equal.trans(Nat, nr, U32.to_nat(nn), 1n+U32.to_nat((nn - 1 : U32)), Equal.sym(Nat, U32.to_nat(nn), nr, hn),
+    1 : U32)), Equal.trans(Nat, nr, U32.to_nat(nn), 1n+U32.to_nat((nn - 1 : U32)), Equal.sym(Nat, U32.to_nat(nn), nr,
+      hn),
     e_n)))) : {U32.is_zero(s1) == False{} : Bool}}
   +e_st = {Equal.sym(Nat, U32.to_nat(s1), 1n+U32.to_nat((s1 - 1 : U32)), Wp1.u32_dec(s1, nz1)) : {1n+U32.to_nat((s1 - 1
     : U32)) == U32.to_nat(s1) : Nat}}
@@ -3030,10 +3302,23 @@ def rgb.fuel(
     xx => Nat.add(nr, xx), Nat.double(kn), k2, Equal.sym(Nat, k2, Nat.double(kn), mul2(kn)))) :
     {Nat.add(Nat.add(nr, 0n), Nat.double(kn)) == Nat.add(nr, k2) : Nat}}
   R.le_rw_r(Nat.add(Nat.add(nr, 0n), Nat.double(kn)), Nat.add(nr, k2), 1n+U32.to_nat((s1 - 1 : U32)), Equal.trans(Nat,
-    Nat.add(nr, k2), U32.to_nat(s1), 1n+U32.to_nat((s1 - 1 : U32)), Equal.sym(Nat, U32.to_nat(s1), Nat.add(nr, k2), e_s),
+    Nat.add(nr, k2), U32.to_nat(s1), 1n+U32.to_nat((s1 - 1 : U32)), Equal.sym(Nat, U32.to_nat(s1), Nat.add(nr, k2),
+      e_s),
     Equal.sym(Nat, 1n+U32.to_nat((s1 - 1 : U32)), U32.to_nat(s1), e_st)), R.le_rw_l(Nat.add(nr, k2),
     Nat.add(Nat.add(nr, 0n), Nat.double(kn)), Nat.add(nr, k2), Equal.sym(Nat, Nat.add(Nat.add(nr, 0n), Nat.double(kn)),
     Nat.add(nr, k2), e_l), R.le_refl(Nat.add(nr, k2))))
+
+# the scanlines of a picture 1 + w' wide
+def sco(+px: List<&2, U32>, +wp: Nat, +op: Bool) -> List<&2, U32>:
+  W9.sc(px, 0n, 1n+wp, op)
+
+# the IDAT data length the encoder writes for the raw bytes xs
+def ilen(+xs: List<&2, U32>) -> U32:
+  Png.enc.idat.ln(Png.enc.len(xs, 0))
+
+# the zlib stream of xs in stored blocks of 65535 bytes
+def zst(+xs: List<&2, U32>) -> List<&2, U32>:
+  Laws.zlib.stored(65535, xs)
 
 # enc.wide.rgb after the signature and IHDR: the IDAT chunk holding the zlib
 # stream of the scanlines in stored blocks of 65535 bytes, then IEND
@@ -3048,15 +3333,11 @@ def rgb.tail(
   +emx: {mx == 65535 : U32},
   +epm: {pm == 65521 : U32},
   +ew: {U32.to_nat(ww) == 1n+wp : Nat},
-  +hn: {U32.to_nat(Png.enc.len(W9.sc(px, 0n, 1n+wp, True{}), 0)) == List.length(&2, U32, W9.sc(px, 0n, 1n+wp, True{}))
-    : Nat},
-  +hbig: {U32.is_le(Png.enc.len(W9.sc(px, 0n, 1n+wp, True{}), 0), 65535) == False{} : Bool},
-  +hby: {Laws.bytes(W9.sc(px, 0n, 1n+wp, True{})) == True{} : Bool},
-  +hl: {Png.enc.idat.ln(Png.enc.len(W9.sc(px, 0n, 1n+wp, True{}), 0)) == Png.enc.len(Laws.zlib.stored(65535,
-    W9.sc(px, 0n, 1n+wp, True{})), 0) : U32},
-  +h_tu: {Nat.is_le(Nat.add(Nat.add(List.length(&2, U32, W9.sc(px, 0n, 1n+wp, True{})),
-    Nat.mul(U32.to_nat(Png.enc.nblk(Png.enc.len(W9.sc(px, 0n, 1n+wp, True{}), 0))), 5n)), 6n), U32.to_nat(tu)) == True{}
-    : Bool}
+  +hn: {U32.to_nat(Png.enc.len(sco(px, wp, True{}), 0)) == List.length(&2, U32, sco(px, wp, True{})) : Nat},
+  +hbig: {U32.is_le(Png.enc.len(sco(px, wp, True{}), 0), 65535) == False{} : Bool},
+  +hby: {Laws.bytes(sco(px, wp, True{})) == True{} : Bool},
+  +hl: {ilen(sco(px, wp, True{})) == Png.enc.len(zst(sco(px, wp, True{})), 0) : U32},
+  +h_tu: {Nat.is_le(kzs(sco(px, wp, True{})), U32.to_nat(tu)) == True{} : Bool}
 ) -> {Png.enc.wide.rgb.go(Png.enc.crc.list(Png.enc.be(Png.tag.idat()), 4294967295,
   Png.enc.cat.go(Png.enc.be(Png.enc.idat.ln(Png.enc.len(W9.sc(px, 0n, 1n+wp, True{}), 0))), [])), px, ww,
   Png.enc.len(W9.sc(px, 0n, 1n+wp, True{}), 0), ie) == Png.enc.cat(Png.enc.chunk(Png.tag.idat(),
@@ -3081,13 +3362,16 @@ def rgb.tail(
   +hl2 = {Equal.trans(U32, ll, Png.enc.len(zz, 0), Png.enc.len(zb(bb, sum), 0), hl, Equal.cong(List<&2, U32>, U32, ys =>
     Png.enc.len(zb(ys, sum), 0), bl, bb, e_b)) : {ll == Png.enc.len(zb(bb, sum), 0) : U32}}
   +nz = {big.nz.at(U32.is_zero(nn), nn, {==}, hbig) : {U32.is_zero(nn) == False{} : Bool}}
-  -go = Png.enc.rgb.go(U32.to_nat(steps), True{}, False{}, False{}, False{}, True{}, True{}, False{}, False{}, px, 0, ww,
+  -go = Png.enc.rgb.go(U32.to_nat(steps), True{}, False{}, False{}, False{}, True{}, True{}, False{}, False{}, px, 0,
+    ww,
     ww, 0, c2, a2, 1, 0, nn, 0)
-  +e_go = {rg(U32.to_nat(steps), True{}, False{}, False{}, False{}, True{}, True{}, False{}, False{}, px, 0, ww, ww, 0, c2,
+  +e_go = {rg(U32.to_nat(steps), True{}, False{}, False{}, False{}, True{}, True{}, False{}, False{}, px, 0, ww, ww, 0,
+    c2,
     a2, 1, 0, nn, 0, nn, 0, 0, kn, nr, wp, mx, emx, ew, Wp1.u32_nonzero(ww, wp, ew), _ef => {==}, ef =>
     Empty.absurd({True{} == False{} : Bool} -> {False{} == False{} : Bool} -> {False{} == U32.is_eq(ww, 1) : Bool},
     U32L.false_true(Equal.sym(Bool, True{}, False{}, ef))), {==}, kok.rw(U32.to_nat(nn), nr, kn, U32.to_nat(mx), hn,
-    nb.k(nn, mx, emx)), rgb.fuel(nn, tu, nr, hn, nz, h_tu), (Equal.sym(Bool, U32.is_zero(nn), False{}, nz), hn)) : {go ==
+    nb.k(nn, mx, emx)), rgb.fuel(nn, tu, nr, hn, nz, h_tu), (Equal.sym(Bool, U32.is_zero(nn), False{},
+      nz), hn)) : {go ==
     (fr(bb, c2, a2), afold(raw, 1, 0)) : (U32 & List<&2, U32>) & U32}}
   +e_fr = {Equal.trans(U32 & List<&2, U32>, fr(bb, c2, a2), fr(List.append(&2, U32, [120, 1], bb), c1, a1), fr(t0(bb),
     4294967295, aa), fr.app([120, 1], bb, c1, a1), fr.app(bi, List.append(&2, U32, [120, 1], bb), 4294967295, aa)) :
@@ -3163,10 +3447,12 @@ def anc.at(
     case False{} False{} False{} False{} False{} True{}:
       {==}
     case True{} _z2 _z3 _z4 _z5 _an:
-      Empty.absurd({Png.png.apply.at(False{}, True{}, _z2, _z3, _z4, _z5, _an, True{}, sp, si, sdn, st, colour, data, pg)
+      Empty.absurd({Png.png.apply.at(False{}, True{}, _z2, _z3, _z4, _z5, _an, True{}, sp, si, sdn, st, colour, data,
+        pg)
         == Png.NMore{Png.png.seal(pg)} : Png.Nx}, U32L.false_true(Equal.sym(Bool, True{}, False{}, e1)))
     case False{} True{} _z3 _z4 _z5 _an:
-      Empty.absurd({Png.png.apply.at(False{}, False{}, True{}, _z3, _z4, _z5, _an, True{}, sp, si, sdn, st, colour, data,
+      Empty.absurd({Png.png.apply.at(False{}, False{}, True{}, _z3, _z4, _z5, _an, True{}, sp, si, sdn, st, colour,
+        data,
         pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}, U32L.false_true(Equal.sym(Bool, True{}, False{}, e2)))
     case False{} False{} True{} _z4 _z5 _an:
       Empty.absurd({Png.png.apply.at(False{}, False{}, False{}, True{}, _z4, _z5, _an, True{}, sp, si, sdn, st, colour,
@@ -3224,8 +3510,8 @@ def anc.step(
   +done: Bool,
   +hb: {Laws.spec.anc.bit(tt) == True{} : Bool},
   +ht: {U32.is_eq(tt, 1951551059) == False{} : Bool}
-) -> {Png.png.apply(tt, data, sd(ww, hh, cc, plte, trns, idat, sid, done)) == Png.NMore{sd(ww, hh, cc, plte, trns, idat,
-  sid, Bool.or(sid, done))} : Png.Nx}:
+) -> {Png.png.apply(tt, data, sd(ww, hh, cc, plte, trns, idat, sid, done)) == Png.NMore{sd(ww, hh, cc, plte, trns,
+  idat, sid, Bool.or(sid, done))} : Png.Nx}:
   anc.at(U32.is_eq(tt, Png.tag.ihdr()), U32.is_eq(tt, Png.tag.idat()), U32.is_eq(tt, Png.tag.iend()), U32.is_eq(tt,
     Png.tag.plte()), U32.is_eq(tt, Png.tag.trns()), Png.tag.anc(tt), Maybe.is_some(&2, List<&2, U32>, plte), sid, done,
     Maybe.is_some(&2, List<&2, U32>, trns), cc, data, sd(ww, hh, cc, plte, trns, idat, sid, done), neq(tt,
@@ -3295,14 +3581,16 @@ def anc.pre(
   +plte: Maybe<&2, List<&2, U32>>,
   +trns: Maybe<&2, List<&2, U32>>,
   hc: Laws.spec.ancs.ok(cs)
-) -> {Png.png.go(Laws.spec.ancs(cs, rest), Png.ZLen{}, False{}, 0, 0, [], [], W9.st(ww, hh, cc, plte, trns, [], False{}))
-  == Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], W9.st(ww, hh, cc, plte, trns, [], False{})) : Maybe<&2,
-  Png.Pic>}:
+) -> {Png.png.go(Laws.spec.ancs(cs, rest), Png.ZLen{}, False{}, 0, 0, [], [], W9.st(ww, hh, cc, plte, trns, [],
+  False{})) == Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], W9.st(ww, hh, cc, plte, trns, [],
+  False{})) : Maybe<&2, Png.Pic>}:
   Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(Laws.spec.ancs(cs, rest), Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh, cc,
-    plte, trns, [], False{}, False{})), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh, cc, plte, trns, [],
+    plte, trns, [], False{}, False{})), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh, cc, plte, trns,
+      [],
     False{}, dn(cs, False{}, False{}))), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh, cc, plte, trns,
     [], False{}, False{})), anc.walk(cs, rest, ww, hh, cc, plte, trns, [], False{}, False{}, hc), Equal.cong(Bool,
-    Maybe<&2, Png.Pic>, bb => Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh, cc, plte, trns, [], False{},
+    Maybe<&2, Png.Pic>, bb => Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh, cc, plte, trns, [],
+      False{},
     bb)), dn(cs, False{}, False{}), False{}, dn.ff(cs)))
 
 # the IDAT chunks, ancillary chunks, then IEND: with done the IDAT data read
@@ -3322,15 +3610,16 @@ def walk.idats(
   ha: Laws.spec.ancs.ok(a3)
 ) -> {Png.png.go(Laws.spec.idats(ds, Laws.spec.ancs(a3, Laws.spec.chunk([73, 69, 78, 68], [], []))), Png.ZLen{},
   False{}, 0, 0, [], [], W9.st(ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid)) ==
-  Png.png.samples(Inf.inflate(List.append(&2, U32, done, List.concat(&2, U32, ds))), ww, hh, cc, Laws.spec.or.nil(plte),
-  Laws.spec.or.nil(trns)) : Maybe<&2, Png.Pic>}:
+  Png.png.samples(Inf.inflate(List.append(&2, U32, done, List.concat(&2, U32, ds))), ww, hh, cc,
+  Laws.spec.or.nil(plte), Laws.spec.or.nil(trns)) : Maybe<&2, Png.Pic>}:
   match ds:
     case Nil{}:
       +pl = Laws.spec.or.nil(plte)
       +tr = Laws.spec.or.nil(trns)
       +ie = Laws.spec.chunk([73, 69, 78, 68], [], [])
       +pg = sd(ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid, dn(a3, sid, False{}))
-      Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(Laws.spec.ancs(a3, ie), Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh, cc,
+      Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(Laws.spec.ancs(a3, ie), Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh,
+        cc,
         plte, trns, List.reverse(&2, U32, done), sid, False{})), Png.png.go(ie, Png.ZLen{}, False{}, 0, 0, [], [], pg),
         Png.png.samples(Inf.inflate(List.append(&2, U32, done, [])), ww, hh, cc, pl, tr),
         anc.walk(a3, ie, ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid, False{}, ha),
@@ -3338,7 +3627,8 @@ def walk.idats(
           Png.png.finish(Png.pg.iend(pg)), Png.png.samples(Inf.inflate(List.append(&2, U32, done, [])), ww, hh, cc, pl,
           tr),
           W9.chunk.end(73, 69, 78, 68, [], pg, Png.pg.iend(pg), {==}, W9.iend.ok.true(W9.need(cc, plte), pg, h_nd)),
-          Equal.trans(Maybe<&2, Png.Pic>, Png.png.finish(Png.pg.iend(pg)), Png.png.samples(Inf.inflate(done), ww, hh, cc,
+          Equal.trans(Maybe<&2, Png.Pic>, Png.png.finish(Png.pg.iend(pg)), Png.png.samples(Inf.inflate(done), ww, hh,
+            cc,
             pl, tr), Png.png.samples(Inf.inflate(List.append(&2, U32, done, [])), ww, hh, cc, pl, tr),
             Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate(xs), ww, hh, cc, pl, tr),
               List.reverse(&2, U32, List.reverse(&2, U32, done)), done, Wp2.rev_rev(done)),
@@ -3382,12 +3672,107 @@ def walk.idats(
               List.append(&2, U32, d2, List.concat(&2, U32, tl)), List.append(&2, U32, done, List.append(&2, U32, dd,
               List.concat(&2, U32, tl))), Wp2.app_assoc(done, dd, List.concat(&2, U32, tl))))))
 
-# the chunks after the signature, with ancillary chunks after IHDR, PLTE,
-# tRNS and the IDAT chunks: the samples of the IDAT data, inflated
+# the PLTE chunk after tRNS: its colour type allows it and its length is a palette's, so the state keeps its data
+# beside tRNS's
+def plte.late(
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  +pp: List<&2, U32>,
+  +trns: Maybe<&2, List<&2, U32>>,
+  h_pl: {Laws.spec.plte.ok(cc, Some{pp}) == True{} : Bool}
+) -> {Png.png.apply(Png.be.u32(80, 76, 84, 69), List.reverse(&2, U32, pp), W9.st(ww, hh, cc, None{}, trns, [],
+  False{})) == Png.NMore{W9.st(ww, hh, cc, Some{pp}, trns, [], False{})} : Png.Nx}:
+  +ok = Bool.or(U32.is_eq(cc, 2), Bool.or(U32.is_eq(cc, 3), U32.is_eq(cc, 6)))
+  +rp = List.reverse(&2, U32, pp)
+  +e_len = {Wp2.len_rev(pp) : {List.length(&2, U32, rp) == List.length(&2, U32, pp) : Nat}}
+  +e_ok = {Equal.trans(Bool, Bool.and(ok, Png.png.mod3(rp)), Bool.and(ok, Laws.spec.pal.len(pp)), True{},
+    Equal.cong(Nat, Bool, kk => Bool.and(ok, Bool.and(U32.is_gt(U32.from_nat(kk), 0),
+      Bool.and(U32.is_zero((U32.from_nat(kk) % 3 : U32)), U32.is_le(U32.from_nat(kk), 768)))),
+      List.length(&2, U32, rp), List.length(&2, U32, pp), e_len), h_pl) :
+    {Bool.and(ok, Png.png.mod3(rp)) == True{} : Bool}}
+  +pg0 = W9.st(ww, hh, cc, None{}, trns, [], False{})
+  Equal.trans(Png.Nx, Png.png.allow(Bool.and(ok, Png.png.mod3(rp)), Png.pg.plte(pg0, List.reverse(&2, U32, rp))),
+    Png.NMore{Png.pg.plte(pg0, List.reverse(&2, U32, rp))},
+    Png.NMore{W9.st(ww, hh, cc, Some{pp}, trns, [], False{})},
+    W9.allow.true(Bool.and(ok, Png.png.mod3(rp)), Png.pg.plte(pg0, List.reverse(&2, U32, rp)), e_ok),
+    Equal.cong(List<&2, U32>, Png.Nx, xs => Png.NMore{Png.pg.plte(pg0, xs)}, List.reverse(&2, U32, rp), pp,
+      Wp2.rev_rev(pp)))
+
+# PLTE after tRNS, when there is one
+def walk.plte.late(
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  +plte: Maybe<&2, List<&2, U32>>,
+  +trns: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, U32>,
+  h_pl: {Laws.spec.plte.ok(cc, plte) == True{} : Bool},
+  hf: Laws.spec.fits.opt(plte)
+) -> {Png.png.go(Laws.spec.chunk.opt([80, 76, 84, 69], plte, rest), Png.ZLen{}, False{}, 0, 0, [], [], W9.st(ww, hh,
+  cc, None{}, trns, [], False{})) == Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], W9.st(ww, hh, cc, plte, trns,
+  [], False{})) : Maybe<&2, Png.Pic>}:
+  match plte:
+    case None{}:
+      {==}
+    case Some{+pp}:
+      W9.chunk.more(80, 76, 84, 69, pp, rest, W9.st(ww, hh, cc, None{}, trns, [], False{}), W9.st(ww, hh, cc, Some{pp},
+        trns, [], False{}), hf, plte.late(ww, hh, cc, pp, trns, h_pl))
+
+# PLTE, a1 and tRNS, in either order: the state after them keeps both
+def walk.mid(
+  late: Bool,
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  +plte: Maybe<&2, List<&2, U32>>,
+  +a1: List<&2, Laws.Anc>,
+  +trns: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, U32>,
+  h_pl: {Laws.spec.plte.ok(cc, plte) == True{} : Bool},
+  h_tr: {Laws.spec.trns.ok(cc, plte, trns) == True{} : Bool},
+  h_late: {Bool.or(Bool.not(late), Laws.spec.trns.ok(cc, None{}, trns)) == True{} : Bool},
+  h_fp: Laws.spec.fits.opt(plte),
+  h_ft: Laws.spec.fits.opt(trns),
+  h_a1: Laws.spec.ancs.ok(a1)
+) -> {Png.png.go(Laws.spec.mid(late, plte, a1, trns, rest), Png.ZLen{}, False{}, 0, 0, [], [], W9.st(ww, hh, cc,
+  None{}, None{}, [], False{})) == Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], W9.st(ww, hh, cc, plte, trns,
+  [], False{})) : Maybe<&2, Png.Pic>}:
+  match late:
+    case False{}:
+      +r2 = Laws.spec.chunk.opt([116, 82, 78, 83], trns, rest)
+      +q1 = Laws.spec.ancs(a1, r2)
+      +s1 = W9.st(ww, hh, cc, plte, None{}, [], False{})
+      +s2 = W9.st(ww, hh, cc, plte, trns, [], False{})
+      Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(Laws.spec.chunk.opt([80, 76, 84, 69], plte, q1), Png.ZLen{}, False{},
+        0, 0, [], [], W9.st(ww, hh, cc, None{}, None{}, [], False{})), Png.png.go(q1, Png.ZLen{}, False{}, 0, 0, [], [],
+        s1), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], s2),
+        W9.walk.plte(ww, hh, cc, plte, q1, h_pl, h_fp),
+        Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(q1, Png.ZLen{}, False{}, 0, 0, [], [], s1), Png.png.go(r2,
+          Png.ZLen{}, False{}, 0, 0, [], [], s1), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], s2),
+          anc.pre(a1, r2, ww, hh, cc, plte, None{}, h_a1),
+          W9.walk.trns(ww, hh, cc, plte, trns, rest, h_tr, h_ft)))
+    case True{}:
+      +r2 = Laws.spec.chunk.opt([80, 76, 84, 69], plte, rest)
+      +q1 = Laws.spec.ancs(a1, r2)
+      +s1 = W9.st(ww, hh, cc, None{}, trns, [], False{})
+      +s2 = W9.st(ww, hh, cc, plte, trns, [], False{})
+      Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(Laws.spec.chunk.opt([116, 82, 78, 83], trns, q1), Png.ZLen{},
+        False{}, 0, 0, [], [], W9.st(ww, hh, cc, None{}, None{}, [], False{})), Png.png.go(q1, Png.ZLen{}, False{}, 0,
+        0, [], [], s1), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], s2),
+        W9.walk.trns(ww, hh, cc, None{}, trns, q1, h_late, h_ft),
+        Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(q1, Png.ZLen{}, False{}, 0, 0, [], [], s1), Png.png.go(r2,
+          Png.ZLen{}, False{}, 0, 0, [], [], s1), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], s2),
+          anc.pre(a1, r2, ww, hh, cc, None{}, trns, h_a1),
+          walk.plte.late(ww, hh, cc, plte, trns, rest, h_pl, h_fp)))
+
+# the chunks after the signature, with ancillary chunks after IHDR, between PLTE and tRNS (in either order), after
+# them and after the IDAT chunks: the samples of the IDAT data, inflated
 def walk.png(
   +ww: U32,
   +hh: U32,
   +cc: U32,
+  +late: Bool,
   +a0: List<&2, Laws.Anc>,
   +plte: Maybe<&2, List<&2, U32>>,
   +a1: List<&2, Laws.Anc>,
@@ -3400,6 +3785,7 @@ def walk.png(
   +h_cc: {Laws.spec.colour.ok(cc) == True{} : Bool},
   +h_pl: {Laws.spec.plte.ok(cc, plte) == True{} : Bool},
   +h_tr: {Laws.spec.trns.ok(cc, plte, trns) == True{} : Bool},
+  +h_late: {Bool.or(Bool.not(late), Laws.spec.trns.ok(cc, None{}, trns)) == True{} : Bool},
   h_fp: Laws.spec.fits.opt(plte),
   h_ft: Laws.spec.fits.opt(trns),
   h_fi: Laws.spec.fits.all(idats),
@@ -3408,35 +3794,441 @@ def walk.png(
   h_a2: Laws.spec.ancs.ok(a2),
   h_a3: Laws.spec.ancs.ok(a3)
 ) -> {Png.decode(Laws.spec.chunk([73, 72, 68, 82], Laws.spec.ihdr.data(ww, hh, cc), Laws.spec.ancs(a0,
-  Laws.spec.chunk.opt([80, 76, 84, 69], plte, Laws.spec.ancs(a1, Laws.spec.chunk.opt([116, 82, 78, 83], trns,
-  Laws.spec.ancs(a2, Laws.spec.idats(idats, Laws.spec.ancs(a3, Laws.spec.chunk([73, 69, 78, 68], [], [])))))))))) ==
-  Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww, hh, cc, Laws.spec.or.nil(plte), Laws.spec.or.nil(trns)) :
-  Maybe<&2, Png.Pic>}:
+  Laws.spec.mid(late, plte, a1, trns, Laws.spec.ancs(a2, Laws.spec.idats(idats, Laws.spec.ancs(a3,
+  Laws.spec.chunk([73, 69, 78, 68], [], [])))))))) == Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww,
+  hh, cc, Laws.spec.or.nil(plte), Laws.spec.or.nil(trns)) : Maybe<&2, Png.Pic>}:
   +r3 = Laws.spec.idats(idats, Laws.spec.ancs(a3, Laws.spec.chunk([73, 69, 78, 68], [], [])))
   +q2 = Laws.spec.ancs(a2, r3)
-  +r2 = Laws.spec.chunk.opt([116, 82, 78, 83], trns, q2)
-  +q1 = Laws.spec.ancs(a1, r2)
-  +r1 = Laws.spec.chunk.opt([80, 76, 84, 69], plte, q1)
+  +r1 = Laws.spec.mid(late, plte, a1, trns, q2)
   +q0 = Laws.spec.ancs(a0, r1)
   +s0 = W9.st(ww, hh, cc, None{}, None{}, [], False{})
-  +s1 = W9.st(ww, hh, cc, plte, None{}, [], False{})
   +s2 = W9.st(ww, hh, cc, plte, trns, [], False{})
   +out = Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww, hh, cc, Laws.spec.or.nil(plte),
     Laws.spec.or.nil(trns))
-  Equal.trans(Maybe<&2, Png.Pic>,
-    Png.png.go(Laws.spec.chunk([73, 72, 68, 82], Laws.spec.ihdr.data(ww, hh, cc), q0), Png.ZLen{}, False{}, 0, 0, [], [],
-      Png.pg.empty()),
-    Png.png.go(q0, Png.ZLen{}, False{}, 0, 0, [], [], s0), out,
-    W9.chunk.more(73, 72, 68, 82, Laws.spec.ihdr.data(ww, hh, cc), q0, Png.pg.empty(), s0, {==}, W9.ihdr.step(ww, hh, cc,
-      h_ww, h_hh, h_cc)),
+  Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(Laws.spec.chunk([73, 72, 68, 82], Laws.spec.ihdr.data(ww, hh, cc), q0),
+    Png.ZLen{}, False{}, 0, 0, [], [], Png.pg.empty()), Png.png.go(q0, Png.ZLen{}, False{}, 0, 0, [], [], s0), out,
+    W9.chunk.more(73, 72, 68, 82, Laws.spec.ihdr.data(ww, hh, cc), q0, Png.pg.empty(), s0, {==}, W9.ihdr.step(ww, hh,
+      cc, h_ww, h_hh, h_cc)),
     Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(q0, Png.ZLen{}, False{}, 0, 0, [], [], s0), Png.png.go(r1, Png.ZLen{},
       False{}, 0, 0, [], [], s0), out, anc.pre(a0, r1, ww, hh, cc, None{}, None{}, h_a0),
-      Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(r1, Png.ZLen{}, False{}, 0, 0, [], [], s0), Png.png.go(q1, Png.ZLen{},
-        False{}, 0, 0, [], [], s1), out, W9.walk.plte(ww, hh, cc, plte, q1, h_pl, h_fp),
-        Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(q1, Png.ZLen{}, False{}, 0, 0, [], [], s1), Png.png.go(r2, Png.ZLen{},
-          False{}, 0, 0, [], [], s1), out, anc.pre(a1, r2, ww, hh, cc, plte, None{}, h_a1),
-          Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(r2, Png.ZLen{}, False{}, 0, 0, [], [], s1), Png.png.go(q2,
-            Png.ZLen{}, False{}, 0, 0, [], [], s2), out, W9.walk.trns(ww, hh, cc, plte, trns, q2, h_tr, h_ft),
-            Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(q2, Png.ZLen{}, False{}, 0, 0, [], [], s2), Png.png.go(r3,
-              Png.ZLen{}, False{}, 0, 0, [], [], s2), out, anc.pre(a2, r3, ww, hh, cc, plte, trns, h_a2),
-              walk.idats(idats, ww, hh, cc, plte, trns, a3, [], False{}, W9.need.ok(cc, plte, h_pl), h_fi, h_a3)))))))
+      Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(r1, Png.ZLen{}, False{}, 0, 0, [], [], s0), Png.png.go(q2, Png.ZLen{},
+        False{}, 0, 0, [], [], s2), out, walk.mid(late, ww, hh, cc, plte, a1, trns, q2, h_pl, h_tr, h_late, h_fp, h_ft,
+        h_a1),
+        Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(q2, Png.ZLen{}, False{}, 0, 0, [], [], s2), Png.png.go(r3,
+          Png.ZLen{}, False{}, 0, 0, [], [], s2), out, anc.pre(a2, r3, ww, hh, cc, plte, trns, h_a2),
+          walk.idats(idats, ww, hh, cc, plte, trns, a3, [], False{}, W9.need.ok(cc, plte, h_pl), h_fi, h_a3)))))
+
+# ---- L. the sizes from 8 w h, and the wide encodings as the one-block layout ----
+
+# p a is at most p b when a is at most b
+def ml.le(
+  pp: Nat,
+  +aa: Nat,
+  +bb: Nat,
+  +hh: {Nat.is_le(aa, bb) == True{} : Bool}
+) -> {Nat.is_le(Nat.mul(pp, aa), Nat.mul(pp, bb)) == True{} : Bool}:
+  match pp:
+    case 0n:
+      {==}
+    case 1n+(+qq):
+      R.le_add_both(aa, bb, Nat.mul(qq, aa), Nat.mul(qq, bb), hh, ml.le(qq, aa, bb, hh))
+
+# the encoder's channel count is at most 4
+def nch4(op: Bool) -> {Nat.is_le(Laws.spec.nch(op), 4n) == True{} : Bool}:
+  match op:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# one row: 1 + w k is at most 5 w, for w above 0 and k at most 4
+def row5(
+  +wp: Nat,
+  +kk: Nat,
+  +hk: {Nat.is_le(kk, 4n) == True{} : Bool}
+) -> {Nat.is_le(1n+Nat.mul(1n+wp, kk), Nat.mul(1n+wp, 5n)) == True{} : Bool}:
+  R.le_add_both(1n+kk, 5n, Nat.mul(wp, kk), Nat.mul(wp, 5n), hk, ml.le(wp, kk, 5n, R.le_trans(kk, 4n, 5n, hk, {==})))
+
+# the scanline bytes are at most 5 w h
+def scan5(
+  hn: Nat,
+  +wp: Nat,
+  +kk: Nat,
+  +hk: {Nat.is_le(kk, 4n) == True{} : Bool}
+) -> {Nat.is_le(Nat.mul(hn, 1n+Nat.mul(1n+wp, kk)), Nat.mul(Nat.mul(hn, 1n+wp), 5n)) == True{} : Bool}:
+  match hn:
+    case 0n:
+      {==}
+    case 1n+(+hp):
+      +bb = {1n+Nat.mul(1n+wp, kk) : Nat}
+      +wn = {1n+wp : Nat}
+      R.le_rw_r(Nat.add(bb, Nat.mul(hp, bb)), Nat.add(Nat.mul(wn, 5n), Nat.mul(Nat.mul(hp, wn), 5n)),
+        Nat.mul(Nat.add(wn, Nat.mul(hp, wn)), 5n), Equal.sym(Nat, Nat.mul(Nat.add(wn, Nat.mul(hp, wn)), 5n),
+        Nat.add(Nat.mul(wn, 5n), Nat.mul(Nat.mul(hp, wn), 5n)), R.mul_add(wn, Nat.mul(hp, wn), 5n)),
+        R.le_add_both(bb, Nat.mul(wn, 5n), Nat.mul(hp, bb), Nat.mul(Nat.mul(hp, wn), 5n), row5(wp, kk, hk),
+        scan5(hp, wp, kk, hk)))
+
+# 5 x below 5 y: x below y
+def lt.c5(
+  xx: Nat,
+  yy: Nat,
+  +hh: {Nat.is_lt(Nat.mul(xx, 5n), Nat.mul(yy, 5n)) == True{} : Bool}
+) -> {Nat.is_lt(xx, yy) == True{} : Bool}:
+  match xx yy:
+    case 0n 0n:
+      hh
+    case 0n 1n+_yp:
+      {==}
+    case 1n+_xp 0n:
+      hh
+    case 1n+xp 1n+yp:
+      lt.c5(xp, yp, hh)
+
+# (5 p) 5 is 25 p
+def m25(pp: Nat) -> {Nat.mul(Nat.mul(pp, 5n), 5n) == Nat.mul(pp, 25n) : Nat}:
+  match pp:
+    case 0n:
+      {==}
+    case 1n+(+qq):
+      Equal.cong(Nat, Nat, xx => Nat.add(25n, xx), Nat.mul(Nat.mul(qq, 5n), 5n), Nat.mul(qq, 25n), m25(qq))
+
+# 5 a is at most 8 a
+def five.eight(+aa: Nat) -> {Nat.is_le(Nat.mul(aa, 5n), Nat.mul(8n, aa)) == True{} : Bool}:
+  R.le_rw_r(Nat.mul(aa, 5n), Nat.add(Nat.mul(5n, aa), Nat.mul(3n, aa)), Nat.mul(8n, aa), Equal.sym(Nat,
+    Nat.mul(Nat.add(5n, 3n), aa), Nat.add(Nat.mul(5n, aa), Nat.mul(3n, aa)), R.mul_add(5n, 3n, aa)),
+    R.le_rw_l(Nat.mul(5n, aa), Nat.mul(aa, 5n), Nat.add(Nat.mul(5n, aa), Nat.mul(3n, aa)), R.mul_comm(5n, aa),
+    R.le_add_more(Nat.mul(5n, aa), Nat.mul(5n, aa), Nat.mul(3n, aa), R.le_refl(Nat.mul(5n, aa)))))
+
+# 11 + y is at most 3 a when y is at most a and 6 is too
+def eleven(
+  +yy: Nat,
+  +aa: Nat,
+  +hy: {Nat.is_le(yy, aa) == True{} : Bool},
+  +h6: {Nat.is_le(6n, aa) == True{} : Bool}
+) -> {Nat.is_le(11n+yy, Nat.mul(3n, aa)) == True{} : Bool}:
+  +a0 = Nat.add(aa, 0n)
+  +h6z = {R.le_rw_r(6n, aa, a0, Equal.sym(Nat, a0, aa, R.add_zero(aa)), h6) : {Nat.is_le(6n, a0) == True{} : Bool}}
+  +h11 = {R.le_trans(11n, 12n, Nat.add(aa, a0), {==}, R.le_add_both(6n, aa, 6n, a0, h6, h6z)) : {Nat.is_le(11n,
+    Nat.add(aa, a0)) == True{} : Bool}}
+  R.le_rw_l(Nat.add(yy, 11n), 11n+yy, Nat.mul(3n, aa), R.add_comm(yy, 11n), R.le_add_both(yy, aa, 11n, Nat.add(aa, a0),
+    hy, h11))
+
+# the stored blocks' bytes fit in 8 a: n + 5 k + 6 is at most 8 a when n is at most 5 a, k blocks of m bytes hold
+# the n bytes, m is at least 25 and n is above m
+def kb(
+  kk: Nat,
+  +xn: Nat,
+  +mn: Nat,
+  +aa: Nat,
+  hk: kok(xn, kk, mn),
+  +h5: {Nat.is_le(xn, Nat.mul(aa, 5n)) == True{} : Bool},
+  +hm: {Nat.is_le(25n, mn) == True{} : Bool},
+  +hb: {Nat.is_lt(mn, xn) == True{} : Bool}
+) -> {Nat.is_le(Nat.add(Nat.add(xn, Nat.mul(kk, 5n)), 6n), Nat.mul(8n, aa)) == True{} : Bool}:
+  match kk:
+    case 0n:
+      Empty.absurd({Nat.is_le(Nat.add(Nat.add(xn, 0n), 6n), Nat.mul(8n, aa)) == True{} : Bool},
+        U32L.false_true(Equal.trans(Bool, False{}, Nat.is_lt(mn, 0n), True{}, R.lt_zero_false(mn), R.lt_rw_r(mn, xn, 0n,
+        hk, hb))))
+    case 1n+(+kp):
+      (hl, _hr) = hk
+      +yy = Nat.mul(kp, 5n)
+      +x5 = Nat.mul(aa, 5n)
+      +y25 = {R.le_rw_l(Nat.mul(kp, 25n), Nat.mul(yy, 5n), Nat.mul(kp, mn), Equal.sym(Nat, Nat.mul(yy, 5n),
+        Nat.mul(kp, 25n), m25(kp)), ml.le(kp, 25n, mn, hm)) : {Nat.is_le(Nat.mul(yy, 5n), Nat.mul(kp, mn)) == True{} :
+        Bool}}
+      +ya = {lt.c5(yy, aa, R.le_lt_trans(Nat.mul(yy, 5n), Nat.mul(kp, mn), x5, y25, R.lt_le_trans(Nat.mul(kp, mn), xn,
+        x5, hl, h5))) : {Nat.is_lt(yy, aa) == True{} : Bool}}
+      +a5 = {lt.c5(5n, aa, R.le_lt_trans(25n, mn, x5, hm, R.lt_le_trans(mn, xn, x5, hb, h5))) : {Nat.is_lt(5n, aa) ==
+        True{} : Bool}}
+      +h6 = {Equal.trans(Bool, Nat.is_le(6n, aa), Nat.is_lt(5n, aa), True{}, Equal.sym(Bool, Nat.is_lt(5n, aa),
+        Nat.is_le(6n, aa), R.lt_le_succ(5n, aa)), a5) : {Nat.is_le(6n, aa) == True{} : Bool}}
+      +h5c = {R.le_rw_r(xn, x5, Nat.mul(5n, aa), R.mul_comm(aa, 5n), h5) : {Nat.is_le(xn, Nat.mul(5n, aa)) == True{} :
+        Bool}}
+      +lhs = Nat.add(Nat.add(xn, 5n+yy), 6n)
+      +e1 = {Equal.trans(Nat, lhs, Nat.add(xn, 5n+Nat.add(yy, 6n)), Nat.add(xn, 11n+yy), R.add_assoc(xn, 5n+yy, 6n),
+        Equal.cong(Nat, Nat, zz => Nat.add(xn, Nat.add(5n, zz)), Nat.add(yy, 6n), Nat.add(6n, yy), R.add_comm(yy,
+        6n))) : {lhs == Nat.add(xn, 11n+yy) : Nat}}
+      R.le_rw_r(lhs, Nat.add(Nat.mul(5n, aa), Nat.mul(3n, aa)), Nat.mul(8n, aa), Equal.sym(Nat, Nat.mul(Nat.add(5n, 3n),
+        aa), Nat.add(Nat.mul(5n, aa), Nat.mul(3n, aa)), R.mul_add(5n, 3n, aa)),
+        R.le_rw_l(Nat.add(xn, 11n+yy), lhs, Nat.add(Nat.mul(5n, aa), Nat.mul(3n, aa)), Equal.sym(Nat, lhs,
+        Nat.add(xn, 11n+yy), e1), R.le_add_both(xn, Nat.mul(5n, aa), 11n+yy, Nat.mul(3n, aa), h5c, eleven(yy, aa,
+        R.lt_le(yy, aa, ya), h6))))
+
+# the IDAT data of the wide encodings fits in t, a word whose value is 8 a, when the scanlines are at most 5 a bytes
+def tu.ok(
+  +raw: List<&2, U32>,
+  +mx: U32,
+  +tu: U32,
+  +aa: Nat,
+  +emx: {mx == 65535 : U32},
+  +hn: {U32.to_nat(Png.enc.len(raw, 0)) == List.length(&2, U32, raw) : Nat},
+  +hbig: {U32.is_le(Png.enc.len(raw, 0), 65535) == False{} : Bool},
+  +h5: {Nat.is_le(List.length(&2, U32, raw), Nat.mul(aa, 5n)) == True{} : Bool},
+  +et: {U32.to_nat(tu) == Nat.mul(8n, aa) : Nat}
+) -> {Nat.is_le(Nat.add(Nat.add(List.length(&2, U32, raw), Nat.mul(U32.to_nat(Png.enc.nblk(Png.enc.len(raw, 0))), 5n)),
+  6n), U32.to_nat(tu)) == True{} : Bool}:
+  +ll = Png.enc.len(raw, 0)
+  +xn = U32.to_nat(ll)
+  +ln = List.length(&2, U32, raw)
+  +mn = U32.to_nat(mx)
+  +kn = U32.to_nat(Png.enc.nblk(ll))
+  +hm = {Equal.trans(Bool, Nat.is_le(25n, mn), U32.is_le(25, mx), True{}, Equal.sym(Bool, U32.is_le(25, mx),
+    Nat.is_le(25n, mn), R.u32_le(25, mx)), Equal.cong(U32, Bool, uu => U32.is_le(25, uu), mx, 65535, emx)) :
+    {Nat.is_le(25n, mn) == True{} : Bool}}
+  +hle = {Equal.trans(Bool, Nat.is_le(xn, mn), U32.is_le(ll, mx), False{}, Equal.sym(Bool, U32.is_le(ll, mx),
+    Nat.is_le(xn, mn), R.u32_le(ll, mx)), Equal.trans(Bool, U32.is_le(ll, mx), U32.is_le(ll, 65535), False{},
+    Equal.cong(U32, Bool, uu => U32.is_le(ll, uu), mx, 65535, emx), hbig)) : {Nat.is_le(xn, mn) == False{} : Bool}}
+  +h5x = {R.le_rw_l(ln, xn, Nat.mul(aa, 5n), Equal.sym(Nat, xn, ln, hn), h5) : {Nat.is_le(xn, Nat.mul(aa, 5n)) ==
+    True{} : Bool}}
+  +k1 = {kb(kn, xn, mn, aa, nb.k(ll, mx, emx), h5x, hm, nle.lt(xn, mn, hle)) : {Nat.is_le(Nat.add(Nat.add(xn,
+    Nat.mul(kn, 5n)), 6n), Nat.mul(8n, aa)) == True{} : Bool}}
+  R.le_rw_r(Nat.add(Nat.add(ln, Nat.mul(kn, 5n)), 6n), Nat.mul(8n, aa), U32.to_nat(tu), Equal.sym(Nat, U32.to_nat(tu),
+    Nat.mul(8n, aa), et), R.le_rw_l(Nat.add(Nat.add(xn, Nat.mul(kn, 5n)), 6n), Nat.add(Nat.add(ln, Nat.mul(kn, 5n)),
+    6n), Nat.mul(8n, aa), Equal.cong(Nat, Nat, zz => Nat.add(Nat.add(zz, Nat.mul(kn, 5n)), 6n), xn, ln, hn), k1))
+
+# w k, taken in a word, does not wrap when h (1 + w k) is at most a word's value
+def nb.em(
+  +ww: U32,
+  +op: Bool,
+  +wp: Nat,
+  +hp: Nat,
+  +cap: U32,
+  +e_w: {U32.to_nat(ww) == 1n+wp : Nat},
+  +h_n: {Nat.is_le(Nat.mul(1n+hp, 1n+Nat.mul(1n+wp, Laws.spec.nch(op))), U32.to_nat(cap)) == True{} : Bool}
+) -> {U32.to_nat(U32.mul(ww, Png.enc.nch(op))) == Nat.mul(U32.to_nat(ww), U32.to_nat(Png.enc.nch(op))) : Nat}:
+  +kk = Laws.spec.nch(op)
+  +wk = Nat.mul(1n+wp, kk)
+  +cn = U32.to_nat(cap)
+  +nc = Png.enc.nch(op)
+  +h_y = {R.le_add_r(1n+wk, Nat.mul(hp, 1n+wk), cn, h_n) : {Nat.is_le(1n+wk, cn) == True{} : Bool}}
+  +h_wk = {R.le_trans(wk, 1n+wk, cn, W9.le.succ(wk), h_y) : {Nat.is_le(wk, cn) == True{} : Bool}}
+  +e_m1n = {Equal.trans(Nat, Nat.mul(U32.to_nat(ww), U32.to_nat(nc)), Nat.mul(1n+wp, U32.to_nat(nc)), wk,
+    Equal.cong(Nat, Nat, xx => Nat.mul(xx, U32.to_nat(nc)), U32.to_nat(ww), 1n+wp, e_w), Equal.cong(Nat, Nat, xx =>
+    Nat.mul(1n+wp, xx), U32.to_nat(nc), kk, W9.nch.val(op))) : {Nat.mul(U32.to_nat(ww), U32.to_nat(nc)) == wk : Nat}}
+  R.u32_mul_below(ww, nc, cap, R.le_rw_l(wk, Nat.mul(U32.to_nat(ww), U32.to_nat(nc)), cn, Equal.sym(Nat,
+    Nat.mul(U32.to_nat(ww), U32.to_nat(nc)), wk, e_m1n), h_wk))
+
+# the filtered byte count, taken in a word, is h (1 + w k) when that is at most a word's value
+def nb.val(
+  +ww: U32,
+  +hh: U32,
+  +op: Bool,
+  +wp: Nat,
+  +hp: Nat,
+  +cap: U32,
+  +e_w: {U32.to_nat(ww) == 1n+wp : Nat},
+  +e_h: {U32.to_nat(hh) == 1n+hp : Nat},
+  +h_n: {Nat.is_le(Nat.mul(1n+hp, 1n+Nat.mul(1n+wp, Laws.spec.nch(op))), U32.to_nat(cap)) == True{} : Bool}
+) -> {U32.to_nat(Png.enc.nbytes(op, ww, hh)) == Nat.mul(1n+hp, 1n+Nat.mul(1n+wp, Laws.spec.nch(op))) : Nat}:
+  +kk = Laws.spec.nch(op)
+  +wk = Nat.mul(1n+wp, kk)
+  +nn = Nat.mul(1n+hp, 1n+wk)
+  +cn = U32.to_nat(cap)
+  +nc = Png.enc.nch(op)
+  +m1 = U32.mul(ww, nc)
+  +h_y = {R.le_add_r(1n+wk, Nat.mul(hp, 1n+wk), cn, h_n) : {Nat.is_le(1n+wk, cn) == True{} : Bool}}
+  +e_m1n = {Equal.trans(Nat, Nat.mul(U32.to_nat(ww), U32.to_nat(nc)), Nat.mul(1n+wp, U32.to_nat(nc)), wk,
+    Equal.cong(Nat, Nat, xx => Nat.mul(xx, U32.to_nat(nc)), U32.to_nat(ww), 1n+wp, e_w), Equal.cong(Nat, Nat, xx =>
+    Nat.mul(1n+wp, xx), U32.to_nat(nc), kk, W9.nch.val(op))) : {Nat.mul(U32.to_nat(ww), U32.to_nat(nc)) == wk : Nat}}
+  +t1 = {Equal.trans(Nat, U32.to_nat(m1), Nat.mul(U32.to_nat(ww), U32.to_nat(nc)), wk, nb.em(ww, op, wp, hp, cap, e_w,
+    h_n), e_m1n) : {U32.to_nat(m1) == wk : Nat}}
+  +x1 = U32.add(m1, 1)
+  +e_x = {Equal.trans(Nat, Nat.add(U32.to_nat(m1), 1n), Nat.add(wk, 1n), 1n+wk, Equal.cong(Nat, Nat, xx => Nat.add(xx,
+    1n), U32.to_nat(m1), wk, t1), W9.add.one.nat(wk)) : {Nat.add(U32.to_nat(m1), 1n) == 1n+wk : Nat}}
+  +t2 = {Equal.trans(Nat, U32.to_nat(x1), Nat.add(U32.to_nat(m1), 1n), 1n+wk, R.u32_add_below(m1, 1, cap,
+    R.le_rw_l(1n+wk, Nat.add(U32.to_nat(m1), 1n), cn, Equal.sym(Nat, Nat.add(U32.to_nat(m1), 1n), 1n+wk, e_x), h_y)),
+    e_x) : {U32.to_nat(x1) == 1n+wk : Nat}}
+  +e_3 = {Equal.trans(Nat, Nat.mul(U32.to_nat(hh), U32.to_nat(x1)), Nat.mul(1n+hp, U32.to_nat(x1)), nn, Equal.cong(Nat,
+    Nat, xx => Nat.mul(xx, U32.to_nat(x1)), U32.to_nat(hh), 1n+hp, e_h), Equal.cong(Nat, Nat, xx => Nat.mul(1n+hp, xx),
+    U32.to_nat(x1), 1n+wk, t2)) : {Nat.mul(U32.to_nat(hh), U32.to_nat(x1)) == nn : Nat}}
+  Equal.trans(Nat, U32.to_nat(U32.mul(hh, x1)), Nat.mul(U32.to_nat(hh), U32.to_nat(x1)), nn, R.u32_mul_below(hh, x1,
+    cap, R.le_rw_l(nn, Nat.mul(U32.to_nat(hh), U32.to_nat(x1)), cn, Equal.sym(Nat, Nat.mul(U32.to_nat(hh),
+    U32.to_nat(x1)), nn, e_3), h_n)), e_3)
+
+# not at most: above
+def gt.nle(cc: Cmp, +hh: {Cmp.is_le(cc) == False{} : Bool}) -> {Cmp.is_gt(cc) == True{} : Bool}:
+  match cc:
+    case LT{}:
+      Empty.absurd({Cmp.is_gt(LT{}) == True{} : Bool}, U32L.false_true(Equal.sym(Bool, True{}, False{}, hh)))
+    case EQ{}:
+      Empty.absurd({Cmp.is_gt(EQ{}) == True{} : Bool}, U32L.false_true(Equal.sym(Bool, True{}, False{}, hh)))
+    case GT{}:
+      {==}
+
+
+# the raw scanline list and its count, as the encoder builds them: the scanlines and their length
+def raw.pair(
+  +px: List<&2, U32>,
+  +ww: U32,
+  +wp: Nat,
+  +op: Bool,
+  +e_w: {U32.to_nat(ww) == 1n+wp : Nat}
+) -> {Png.enc.raw(px, 0n, U32.to_nat(ww), op, [], 0) == (W9.sc(px, 0n, 1n+wp, op), Png.enc.len(W9.sc(px, 0n, 1n+wp,
+  op), 0)) : List<&2, U32> & U32}:
+  +ss = W9.sc(px, 0n, 1n+wp, op)
+  +ll = Png.enc.len(ss, 0)
+  +r0 = List.reverse(&2, U32, List.reverse.go(&2, U32, ss, []))
+  +m0 = W9.cnt(px, 0n, 1n+wp, op, 0)
+  +ls = List.length(&2, U32, ss)
+  +e_m0 = {Equal.trans(U32, m0, U32.from_nat(ls), ll, W9.cnt.word(px, 0n, 1n+wp, op, 0n), Equal.sym(U32, ll,
+    U32.from_nat(ls), W9.len.word(ss))) : {m0 == ll : U32}}
+  Equal.trans(List<&2, U32> & U32, Png.enc.raw(px, 0n, U32.to_nat(ww), op, [], 0), Png.enc.raw(px, 0n, 1n+wp, op, [],
+    0), (ss, ll),
+    Equal.cong(Nat, List<&2, U32> & U32, kn => Png.enc.raw(px, 0n, kn, op, [], 0), U32.to_nat(ww), 1n+wp, e_w),
+    Equal.trans(List<&2, U32> & U32, Png.enc.raw(px, 0n, 1n+wp, op, [], 0), (r0, m0), (ss, ll), W9.raw.eq(px, 0n,
+      1n+wp, op, [], 0),
+      Equal.trans(List<&2, U32> & U32, (r0, m0), (ss, m0), (ss, ll),
+        Equal.cong(List<&2, U32>, List<&2, U32> & U32, xs => (xs, m0), r0, ss, Wp2.rev_rev(ss)),
+        Equal.cong(U32, List<&2, U32> & U32, uu => (ss, uu), m0, ll, e_m0))))
+
+# colour type 6 past one stored block: the wide layout is the one-block layout around the stored blocks of 65535
+# bytes. Both sides are stated stuck on a flag, since the IHDR's CRC over a symbolic width and height is slow to
+# normalise; the flags are rewritten to True and False only for the step that unfolds the layouts
+def core.f(
+  +zt: Bool,
+  +zf: Bool,
+  +ww: U32,
+  +hh: U32,
+  +ss: List<&2, U32>,
+  +et: {zt == True{} : Bool},
+  +ef: {zf == False{} : Bool},
+  +hn: {U32.to_nat(Png.enc.len(ss, 0)) == List.length(&2, U32, ss) : Nat},
+  +hbig: {U32.is_le(Png.enc.len(ss, 0), 65535) == False{} : Bool},
+  +hl: {Png.enc.idat.ln(Png.enc.len(ss, 0)) == Png.enc.len(Laws.zlib.stored(65535, ss), 0) : U32}
+) -> {Png.enc.seal.at(zt, ww, hh, False{}, ss, Png.enc.len(ss, 0)) == Png.enc.seal.at(zf, ww, hh, False{}, ss,
+  Png.enc.len(ss, 0)) : List<&2, U32>}:
+  %Equal.sym(Bool, zt, True{}, et) : {Png.enc.seal.at(_, ww, hh, False{}, ss, Png.enc.len(ss, 0)) == Png.enc.seal.at(zf,
+    ww, hh, False{}, ss, Png.enc.len(ss, 0)) : List<&2, U32>}
+  %Equal.sym(Bool, zf, False{}, ef) : {Png.enc.seal.at(True{}, ww, hh, False{}, ss, Png.enc.len(ss, 0)) ==
+    Png.enc.seal.at(_, ww, hh, False{}, ss, Png.enc.len(ss, 0)) : List<&2, U32>}
+  Equal.cong(List<&2, U32>, List<&2, U32>, tl => Png.enc.cat(Png.enc.sig(), Png.enc.cat(Png.enc.chunk(Png.tag.ihdr(),
+    Png.enc.ihdr(ww, hh, Png.enc.ct(False{}))), tl)),
+    Png.enc.seal.body(Png.enc.crc.list(Png.enc.be(Png.tag.idat()), 4294967295,
+    Png.enc.cat.go(Png.enc.be(Png.enc.idat.ln(Png.enc.len(ss, 0))), [])), ss, Png.enc.len(ss, 0), Inf.adler.of(ss),
+    Png.enc.chunk(Png.tag.iend(), [])),
+    Png.enc.cat(Png.enc.chunk(Png.tag.idat(), Laws.zlib.stored(65535, ss)), Png.enc.chunk(Png.tag.iend(), [])),
+    wide.tail(ss, 65535, Png.enc.chunk(Png.tag.iend(), []), {==}, hn, hbig, hl))
+
+# colour type 2 past one stored block, written from the samples: the one-block layout around the stored blocks of
+# 65535 bytes, stated stuck on flags as core.f is
+def core.t(
+  +zo: Bool,
+  +zf: Bool,
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>,
+  +wp: Nat,
+  +tu: U32,
+  +eo: {zo == True{} : Bool},
+  +ef: {zf == False{} : Bool},
+  +e_w: {U32.to_nat(ww) == 1n+wp : Nat},
+  +hn: {U32.to_nat(Png.enc.len(sco(px, wp, True{}), 0)) == List.length(&2, U32, sco(px, wp, True{})) : Nat},
+  +hbig: {U32.is_le(Png.enc.len(sco(px, wp, True{}), 0), 65535) == False{} : Bool},
+  +hby: {Laws.bytes(sco(px, wp, True{})) == True{} : Bool},
+  +h_tu: {Nat.is_le(kzs(sco(px, wp, True{})), U32.to_nat(tu)) == True{} : Bool}
+) -> {Png.enc.paint.wide(zo, ww, hh, px, Png.enc.len(W9.sc(px, 0n, 1n+wp, True{}), 0)) == Png.enc.seal.at(zf, ww, hh,
+  zo, W9.sc(px, 0n, 1n+wp, True{}), Png.enc.len(W9.sc(px, 0n, 1n+wp, True{}), 0)) : List<&2, U32>}:
+  +ss = W9.sc(px, 0n, 1n+wp, True{})
+  +ll = Png.enc.len(ss, 0)
+  +ie = Png.enc.chunk(Png.tag.iend(), [])
+  +hl = idat.len(ss, 65535, tu, {==}, hn, hbig, h_tu)
+  %Equal.sym(Bool, zo, True{}, eo) : {Png.enc.paint.wide(_, ww, hh, px, ll) == Png.enc.seal.at(zf, ww, hh, _, ss, ll) :
+    List<&2, U32>}
+  %Equal.sym(Bool, zf, False{}, ef) : {Png.enc.paint.wide(True{}, ww, hh, px, ll) == Png.enc.seal.at(_, ww, hh, True{},
+    ss, ll) : List<&2, U32>}
+  Equal.cong(List<&2, U32>, List<&2, U32>, tl => Png.enc.cat(Png.enc.sig(), Png.enc.cat(Png.enc.chunk(Png.tag.ihdr(),
+    Png.enc.ihdr(ww, hh, Png.enc.ct(True{}))), tl)),
+    Png.enc.wide.rgb.go(Png.enc.crc.list(Png.enc.be(Png.tag.idat()), 4294967295,
+    Png.enc.cat.go(Png.enc.be(Png.enc.idat.ln(ll)), [])), px, ww, ll, ie),
+    Png.enc.cat(Png.enc.chunk(Png.tag.idat(), Laws.zlib.stored(65535, ss)), ie),
+    rgb.tail(px, ww, wp, 65535, 65521, tu, ie, {==}, {==}, e_w, hn, hbig, hby, hl, h_tu))
+
+# the wide encodings, colour type 2 from the samples and colour type 6 from the raw list, are the one-block layout
+# around the stored blocks of 65535 bytes. The layout is stated stuck on zf, which is False, and on zo, which is op
+def wide.op(
+  op: Bool,
+  +zo: Bool,
+  +zf: Bool,
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>,
+  +wp: Nat,
+  +nb: U32,
+  +tu: U32,
+  +eo: {zo == op : Bool},
+  +ef: {zf == False{} : Bool},
+  +e_w: {U32.to_nat(ww) == 1n+wp : Nat},
+  +e_nb: {nb == Png.enc.len(W9.sc(px, 0n, 1n+wp, op), 0) : U32},
+  +hn: {U32.to_nat(Png.enc.len(sco(px, wp, op), 0)) == List.length(&2, U32, sco(px, wp, op)) : Nat},
+  +hbig: {U32.is_le(Png.enc.len(sco(px, wp, op), 0), 65535) == False{} : Bool},
+  +hby: {Laws.bytes(sco(px, wp, op)) == True{} : Bool},
+  +h_tu: {Nat.is_le(kzs(sco(px, wp, op)), U32.to_nat(tu)) == True{} : Bool}
+) -> {Png.enc.paint.wide(zo, ww, hh, px, nb) == Png.enc.seal.at(zf, ww, hh, zo, W9.sc(px, 0n, 1n+wp, op),
+  Png.enc.len(W9.sc(px, 0n, 1n+wp, op), 0)) : List<&2, U32>}:
+  match op:
+    case True{}:
+      +ss = W9.sc(px, 0n, 1n+wp, True{})
+      +ll = Png.enc.len(ss, 0)
+      Equal.trans(List<&2, U32>, Png.enc.paint.wide(zo, ww, hh, px, nb), Png.enc.paint.wide(zo, ww, hh, px, ll),
+        Png.enc.seal.at(zf, ww, hh, zo, ss, ll),
+        Equal.cong(U32, List<&2, U32>, uu => Png.enc.paint.wide(zo, ww, hh, px, uu), nb, ll, e_nb),
+        core.t(zo, zf, ww, hh, px, wp, tu, eo, ef, e_w, hn, hbig, hby, h_tu))
+    case False{}:
+      +ss = W9.sc(px, 0n, 1n+wp, False{})
+      +ll = Png.enc.len(ss, 0)
+      +hl = idat.len(ss, 65535, tu, {==}, hn, hbig, h_tu)
+      +hg = {gt.nle(U32.cmp(ll, 65535), hbig) : {U32.is_gt(ll, 65535) == True{} : Bool}}
+      %Equal.sym(Bool, zo, False{}, eo) : {Png.enc.paint.wide(_, ww, hh, px, nb) == Png.enc.seal.at(zf, ww, hh, _, ss,
+        ll) : List<&2, U32>}
+      Equal.trans(List<&2, U32>, Png.enc.paint.wide(False{}, ww, hh, px, nb), Png.enc.seal(ww, hh, False{}, (ss, ll)),
+        Png.enc.seal.at(zf, ww, hh, False{}, ss, ll),
+        Equal.cong(List<&2, U32> & U32, List<&2, U32>, pr => Png.enc.seal(ww, hh, False{}, pr), Png.enc.raw(px, 0n,
+          U32.to_nat(ww), False{}, [], 0), (ss, ll), raw.pair(px, ww, wp, False{}, e_w)),
+        core.f(U32.is_gt(ll, 65535), zf, ww, hh, ss, hg, ef, hn, hbig, hl))
+
+# whether every sample is opaque, as the encoder asks
+def opq(+px: List<&2, U32>) -> Bool:
+  Png.enc.opaque(px, True{})
+
+# the scanline byte count h (1 + w k), for 1 + h' rows of 1 + w' pixels of the encoder's channels
+def snn(+hp: Nat, +wp: Nat, op: Bool) -> Nat:
+  Nat.mul(1n+hp, 1n+Nat.mul(1n+wp, Laws.spec.nch(op)))
+
+# a picture past one stored block: its encoding is the one-block layout around the stored blocks of 65535 bytes,
+# the layout stated stuck on zf, which is False
+def wide.rt(
+  +zf: Bool,
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>,
+  +wp: Nat,
+  +tu: U32,
+  +ef: {zf == False{} : Bool},
+  e_good: {Png.enc.good(ww, hh, px) == True{} : Bool},
+  +e_w: {U32.to_nat(ww) == 1n+wp : Nat},
+  +e_nb: {Png.enc.nbytes(opq(px), ww, hh) == Png.enc.len(sco(px, wp, opq(px)), 0) : U32},
+  +hn: {U32.to_nat(Png.enc.len(sco(px, wp, opq(px)), 0)) == List.length(&2, U32, sco(px, wp, opq(px))) : Nat},
+  +hbig: {U32.is_le(Png.enc.len(sco(px, wp, opq(px)), 0), 65535) == False{} : Bool},
+  +hby: {Laws.bytes(sco(px, wp, opq(px))) == True{} : Bool},
+  +h_tu: {Nat.is_le(kzs(sco(px, wp, opq(px))), U32.to_nat(tu)) == True{} : Bool}
+) -> {Png.enc.open(Png.enc.good(ww, hh, px), ww, hh, px) == Some{Png.enc.seal.at(zf, ww, hh, Png.enc.opaque(px,
+  True{}), W9.sc(px, 0n, 1n+wp, Png.enc.opaque(px, True{})), Png.enc.len(W9.sc(px, 0n, 1n+wp, Png.enc.opaque(px,
+  True{})), 0))} : Maybe<&2, List<&2, U32>>}:
+  +op = Png.enc.opaque(px, True{})
+  +nb = Png.enc.nbytes(op, ww, hh)
+  +ss = W9.sc(px, 0n, 1n+wp, op)
+  +ll = Png.enc.len(ss, 0)
+  +so = Png.enc.seal.at(zf, ww, hh, op, ss, ll)
+  +hg = {Equal.trans(Bool, U32.is_gt(nb, 65535), U32.is_gt(ll, 65535), True{}, Equal.cong(U32, Bool, uu =>
+    U32.is_gt(uu, 65535), nb, ll, e_nb), gt.nle(U32.cmp(ll, 65535), hbig)) : {U32.is_gt(nb, 65535) == True{} : Bool}}
+  Equal.trans(Maybe<&2, List<&2, U32>>, Png.enc.open(Png.enc.good(ww, hh, px), ww, hh, px), Png.enc.open(True{}, ww,
+    hh, px), Some{so},
+    Equal.cong(Bool, Maybe<&2, List<&2, U32>>, zb => Png.enc.open(zb, ww, hh, px), Png.enc.good(ww, hh, px), True{},
+      e_good),
+    Equal.trans(Maybe<&2, List<&2, U32>>, Png.enc.open(True{}, ww, hh, px), Some{Png.enc.paint.at(True{}, ww, hh, op,
+      px, nb)}, Some{so},
+      Equal.cong(Bool, Maybe<&2, List<&2, U32>>, zb => Some{Png.enc.paint.at(zb, ww, hh, op, px, nb)}, U32.is_gt(nb,
+        65535), True{}, hg),
+      Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, xs => Some{xs}, Png.enc.paint.wide(op, ww, hh, px, nb), so,
+        wide.op(op, op, zf, ww, hh, px, wp, nb, tu, {==}, ef, e_w, e_nb, hn, hbig, hby, h_tu))))

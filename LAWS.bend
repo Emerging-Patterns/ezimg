@@ -2520,12 +2520,28 @@ def spec.ancs.ok(cs: List<&2, Anc>) -> Type:
       {spec.anc.bit(typ) == True{} : Bool} & ({U32.is_eq(typ, 1951551059) == False{} : Bool} & (spec.fits(data) &
         spec.ancs.ok(tl)))
 
-# a PNG file as spec.png lays it out, with ancillary chunks where PNG section 5.6 allows them: a0 after IHDR, a1 after
-# PLTE, a2 after tRNS, and a3 after the IDAT chunks, before IEND
+# PLTE, ancillary chunks a1 and tRNS, then rest; with late, tRNS comes first, an order the decoder also takes when
+# the colour type allows tRNS with no PLTE yet
+def spec.mid(
+  late: Bool,
+  plte: Maybe<&2, List<&2, U32>>,
+  a1: List<&2, Anc>,
+  trns: Maybe<&2, List<&2, U32>>,
+  rest: List<&2, U32>
+) -> List<&2, U32>:
+  match late:
+    case False{}:
+      spec.chunk.opt([80, 76, 84, 69], plte, spec.ancs(a1, spec.chunk.opt([116, 82, 78, 83], trns, rest)))
+    case True{}:
+      spec.chunk.opt([116, 82, 78, 83], trns, spec.ancs(a1, spec.chunk.opt([80, 76, 84, 69], plte, rest)))
+
+# a PNG file as spec.png lays it out, with ancillary chunks where PNG section 5.6 allows them: a0 after IHDR, a1
+# between PLTE and tRNS, a2 after them, and a3 after the IDAT chunks, before IEND
 def spec.png.anc(
   +ww: U32,
   +hh: U32,
   +cc: U32,
+  late: Bool,
   a0: List<&2, Anc>,
   plte: Maybe<&2, List<&2, U32>>,
   a1: List<&2, Anc>,
@@ -2535,18 +2551,20 @@ def spec.png.anc(
   a3: List<&2, Anc>
 ) -> List<&2, U32>:
   List.append(&2, U32, Img.png_sig(), spec.chunk([73, 72, 68, 82], spec.ihdr.data(ww, hh, cc), spec.ancs(a0,
-    spec.chunk.opt([80, 76, 84, 69], plte, spec.ancs(a1, spec.chunk.opt([116, 82, 78, 83], trns, spec.ancs(a2,
-    spec.idats(idats, spec.ancs(a3, spec.chunk([73, 69, 78, 68], [], []))))))))))
+    spec.mid(late, plte, a1, trns, spec.ancs(a2, spec.idats(idats, spec.ancs(a3, spec.chunk([73, 69, 78, 68], [],
+    []))))))))
 
 # LAW: ancillary chunks where PNG section 5.6 allows them leave what decode_png makes of a file: the file png_walk
-# reads, with ancillary chunks after IHDR, PLTE, tRNS and the IDAT chunks, decodes to the raster px.of packs from the
-# unfiltered inflated IDAT data, with the IHDR colour type and the PLTE and tRNS data
+# reads, with ancillary chunks after IHDR, PLTE, tRNS and the IDAT chunks, and with tRNS before PLTE where the decoder
+# takes that order (late), decodes to the raster px.of packs from the unfiltered inflated IDAT data, with the IHDR
+# colour type and the PLTE and tRNS data
 # IMG-PNG-9
 # IMG-PIX-1
 law png_walk_anc:
   for +ww: U32
   for +hh: U32
   for +cc: U32
+  for +late: Bool
   for +a0: List<&2, Anc>
   for +plte: Maybe<&2, List<&2, U32>>
   for +a1: List<&2, Anc>
@@ -2559,6 +2577,7 @@ law png_walk_anc:
   for h_cc: {spec.colour.ok(cc) == True{} : Bool}
   for h_pl: {spec.plte.ok(cc, plte) == True{} : Bool}
   for h_tr: {spec.trns.ok(cc, plte, trns) == True{} : Bool}
+  for h_late: {Bool.or(Bool.not(late), spec.trns.ok(cc, None{}, trns)) == True{} : Bool}
   for h_fp: spec.fits.opt(plte)
   for h_ft: spec.fits.opt(trns)
   for h_fi: spec.fits.all(idats)
@@ -2566,5 +2585,5 @@ law png_walk_anc:
   for h_a1: spec.ancs.ok(a1)
   for h_a2: spec.ancs.ok(a2)
   for h_a3: spec.ancs.ok(a3)
-  {Img.decode_png(spec.png.anc(ww, hh, cc, a0, plte, a1, trns, a2, idats, a3)) == spec.decoded(Inf.inflate(
+  {Img.decode_png(spec.png.anc(ww, hh, cc, late, a0, plte, a1, trns, a2, idats, a3)) == spec.decoded(Inf.inflate(
     List.concat(&2, U32, idats)), ww, hh, cc, spec.or.nil(plte), spec.or.nil(trns)) : Maybe<&2, Img.Raster>}
