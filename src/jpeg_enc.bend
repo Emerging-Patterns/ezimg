@@ -341,19 +341,51 @@ def encode.clip.b(pos: Bool, +vv: U32, +lim: U32) -> U32:
 def encode.clip(+vv: U32, +lim: U32) -> U32:
   encode.clip.b(U32.is_eq(Jpeg.decode.sign(vv), 0), vv, lim)
 
-# a DC clipped to T.81's range for 8-bit samples, -1024 to 1023, by its sign, so the difference of two DCs has
-# at most 11 bits (F.1.2.1). The level shift keeps the forward DCT's DC in -1024..1015, so the clip never
-# changes it.
-def encode.dcclip.b(pos: Bool, +vv: U32) -> U32:
+# a DC clipped to T.81's range for 8-bit samples, -1024 to 1023, kept as that plus 1024 (0 to 2047), so the
+# difference of two DCs has at most 11 bits (F.1.2.1) and is found without wrapping. The level shift keeps the
+# forward DCT's DC in -1024..1015, so the clip never changes it.
+def encode.dcbias.b(pos: Bool, +vv: U32) -> U32:
   match pos:
     case True{}:
-      encode.clip.hi(U32.is_gt(vv, 1023), vv, 1023)
+      (encode.clip.hi(U32.is_gt(vv, 1023), vv, 1023) + 1024 : U32)
     case False{}:
-      encode.clip.lo(U32.is_gt(Jpeg.decode.abs(vv), 1024), vv, 1024)
+      (1024 - encode.clip.hi(U32.is_gt(Jpeg.decode.abs(vv), 1024), Jpeg.decode.abs(vv), 1024) : U32)
 
-# a DC clipped to -1024 to 1023
-def encode.dcclip(+vv: U32) -> U32:
-  encode.dcclip.b(U32.is_eq(Jpeg.decode.sign(vv), 0), vv)
+# a DC clipped to -1024 to 1023, plus 1024
+def encode.dcbias(+vv: U32) -> U32:
+  encode.dcbias.b(U32.is_eq(Jpeg.decode.sign(vv), 0), vv)
+
+# a negative DC difference -mm: its size's code, then its magnitude bits, 2^size - 1 - mm (F.1.2.1)
+def encode.magp.n(zz: Bool, pp: Put, +cat: U32, +mm: U32) -> Put:
+  match zz:
+    case True{}:
+      +_u = (cat + mm : U32)
+      pp
+    case False{}:
+      encode.bits(pp, cat, ((U32.shln(1, U32.to_nat(cat)) - 1 : U32) - mm : U32))
+
+# the size's code of a negative DC difference, then its magnitude
+def encode.dc.use.neg(got: Array<U32> & Code, pp: Put, +cat: U32, +mm: U32) -> Array<U32> & Put:
+  match got:
+    case (a, Code{+len, +bits}):
+      (a, encode.magp.n(U32.is_eq(cat, 0), encode.bits(pp, len, bits), cat, mm))
+
+# a negative DC difference, -mm
+def encode.dc.neg(aa: Array<U32>, +pp: Put, +mm: U32) -> Array<U32> & Put:
+  +cat = encode.cat(mm)
+  encode.dc.use.neg(encode.sym(aa, cat), pp, cat, mm)
+
+# the DC difference of two biased DCs, by its sign
+def encode.dcdiff.b(up: Bool, aa: Array<U32>, pp: Put, +bb: U32, +pb: U32) -> Array<U32> & Put:
+  match up:
+    case True{}:
+      encode.dc(aa, pp, (bb - pb : U32))
+    case False{}:
+      encode.dc.neg(aa, pp, (pb - bb : U32))
+
+# the DC difference of biased DC bb from biased predictor pb
+def encode.dcdiff(aa: Array<U32>, pp: Put, +bb: U32, +pb: U32) -> Array<U32> & Put:
+  encode.dcdiff.b(U32.is_ge(bb, pb), aa, pp, bb, pb)
 
 def encode.emit(got: Array<U32> & Code, pp: Put) -> Array<U32> & Put:
   match got:
@@ -453,18 +485,18 @@ def encode.block.dc(got: Array<U32> & Put, ac: Array<U32>, +dd: U32, rest: List<
   (dc2, p2) = got
   encode.block.join(encode.ac(rest, 0, (ac, p2)), dc2, dd)
 
-# the DC, clipped to T.81's 8-bit range, is written as its difference from the last and kept, so the next block
-# can predict from it
+# the DC, clipped to T.81's 8-bit range and biased by 1024, is written as its difference from the last and kept,
+# so the next block can predict from it
 def encode.block.ac(book: Book, pp: Put, +pred: U32, +dc0: U32, rest: List<&2, U32>) -> Book & U32 & Put:
   match book:
     case Book{dc, ac}:
-      +d = encode.dcclip(dc0)
-      encode.block.dc(encode.dc(dc, pp, (d - pred : U32)), ac, d, rest)
+      +d = encode.dcbias(dc0)
+      encode.block.dc(encode.dcdiff(dc, pp, d, pred), ac, d, rest)
 
 def encode.block.go(book: Book, pp: Put, +pred: U32, zz: List<&2, U32>) -> Book & U32 & Put:
   match zz:
     case Nil{}:
-      (book, 0, pp)
+      (book, 1024, pp)
     case +dc0 <> rest:
       encode.block.ac(book, pp, pred, dc0, rest)
 
@@ -1216,8 +1248,8 @@ def encode.scan.dc(
 ) -> Book & U32 & Put:
   match book:
     case Book{dc, ac}:
-      +d = encode.dcclip(d0)
-      encode.scan.join(encode.dc(dc, pp, (d - pred : U32)), ac, d, rest, arr)
+      +d = encode.dcbias(d0)
+      encode.scan.join(encode.dcdiff(dc, pp, d, pred), ac, d, rest, arr)
 
 def encode.scan.open(
   rest: List<&2, U32>,
@@ -1232,7 +1264,7 @@ def encode.scan.open(
 def encode.scan.none(book: Book, pp: Put, arr: Array<U32>, +pred: U32) -> Book & U32 & Put:
   +_s = encode.pix.sink(arr)
   +_p = (pred - pred : U32)
-  (book, 0, pp)
+  (book, 1024, pp)
 
 # DC at the first zigzag index, then the AC run, both read from the frequency plane
 def encode.scan(book: Book, pp: Put, +pred: U32, arr: Array<U32>, zig: List<&2, U32>) -> Book & U32 & Put:
@@ -1629,15 +1661,15 @@ def encode.solid.end(got: Array<U32> & Book & U32 & Put) -> Put:
 def encode.solid.cr(got: Array<U32> & Book & U32 & Put, +ctx: Ctx) -> Put:
   (a, book, +dc, bit) = got
   +_d = (dc - dc : U32)
-  encode.solid.end(encode.block(book, bit, 0, a, 1, 1, 0, 0, 2, ctx))
+  encode.solid.end(encode.block(book, bit, 1024, a, 1, 1, 0, 0, 2, ctx))
 
 def encode.solid.cb(got: Array<U32> & Book & U32 & Put, +ctx: Ctx) -> Put:
   (a, book, +dc, bit) = got
   +_d = (dc - dc : U32)
-  encode.solid.cr(encode.block(book, bit, 0, a, 1, 1, 0, 0, 1, ctx), ctx)
+  encode.solid.cr(encode.block(book, bit, 1024, a, 1, 1, 0, 0, 1, ctx), ctx)
 
 def encode.solid.y(aa: Array<U32>, book: Book, bit: Put, +ctx: Ctx) -> Put:
-  encode.solid.cb(encode.block(book, bit, 0, aa, 1, 1, 0, 0, 0, ctx), ctx)
+  encode.solid.cb(encode.block(book, bit, 1024, aa, 1, 1, 0, 0, 0, ctx), ctx)
 
 # one colour repeated. The first MCU is that block; every later MCU is three zero differences.
 # The result is the entropy-coded bytes.
@@ -1657,7 +1689,7 @@ def encode.go(+ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
   +area = (ww * hh : U32)
   book = encode.book(encode.dccounts(), encode.dcsyms(), encode.accounts(), encode.acsyms())
   encode.pad(encode.mcus(U32.to_nat((mw * mh : U32)),
-    (encode.pix.load(U32.to_nat(area), px, Jpeg.decode.plane(area), 0), book, 0, 0, 0,
+    (encode.pix.load(U32.to_nat(area), px, Jpeg.decode.plane(area), 0), book, 1024, 1024, 1024,
       encode.put0()), 0, 0, mw, ww, hh, encode.ctx()))
 
 # the entropy-coded bytes, by what the watch found: neutral, one solid colour, or anything else
