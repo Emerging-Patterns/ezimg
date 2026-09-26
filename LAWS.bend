@@ -2478,3 +2478,415 @@ law jpeg_unstuff:
   for +ok: U32
   {jpg.read8(List.length(&2, JByte, bs), Jpeg.decode.read.n(8, Jpeg.Bits{0, ok, 0, Jenc.encode.stuff.all(
     List.reverse(&2, U32, jpg.bytes(bs)), [])})) == jpg.bytes(bs) : List<&2, U32>}
+
+# ---- wp13-jpeg-planes ----
+
+# a plane is a perfect binary tree of 2^d leaves, every leaf d nodes down, as decode.plane builds it
+def jpg.perfect(+dd: Nat, aa: Array<U32>) -> Bool:
+  match dd aa:
+    case 0n ALeaf{_xx}:
+      True{}
+    case 0n ANode{_xs, _ys}:
+      False{}
+    case 1n+_ee ALeaf{_xx}:
+      False{}
+    case 1n+ee ANode{xs, ys}:
+      +pl = jpg.perfect(ee, xs)
+      +ph = jpg.perfect(ee, ys)
+      Bool.and(pl, ph)
+
+# LAW: Array.get at an index finds the value the last Array.set at that index wrote, in any array
+# IMG-JPG-2
+law jpeg_get_set:
+  for plane: Array<U32>
+  for +ii: U32
+  for +vv: U32
+  {jpg.val(Array.get(U32, Array.set(U32, plane, ii, vv), ii)) == vv : U32}
+
+# LAW: on a plane that is a perfect binary tree of 2^d leaves, d below 32, an Array.set at one index below 2^d
+# leaves what Array.get finds at another index below 2^d
+# IMG-JPG-2
+law jpeg_get_set_other:
+  for +dd: Nat
+  for plane: Array<U32>
+  for h_perfect: {jpg.perfect(dd, plane) == True{} : Bool}
+  for h_dd: {Nat.is_lt(dd, 32n) == True{} : Bool}
+  for +ii: U32
+  for +jj: U32
+  for +vv: U32
+  for h_ii: {Nat.is_lt(U32.to_nat(ii), Nat.pow(2n, dd)) == True{} : Bool}
+  for h_jj: {Nat.is_lt(U32.to_nat(jj), Nat.pow(2n, dd)) == True{} : Bool}
+  for h_ne: {U32.is_eq(ii, jj) == False{} : Bool}
+  {jpg.val(Array.get(U32, Array.set(U32, plane, ii, vv), jj)) == jpg.val(Array.get(U32, plane, jj)) : U32}
+
+# whether xx is one of the left coordinates x0 + pp, x0 + pp + 1, ..., added in U32 as the decoder adds them
+def jpg.span(left: Nat, +x0: U32, +pp: U32, +xx: U32) -> Bool:
+  match left:
+    case 0n:
+      False{}
+    case 1n+rest:
+      +here = U32.is_eq((x0 + pp : U32), xx)
+      +more = jpg.span(rest, x0, (pp + 1 : U32), xx)
+      Bool.or(here, more)
+
+# whether sample (row, col) of a block at (ox, oy), each sample covering pw by ph pixels, covers pixel (xx, yy):
+# the pw pixels from ox + col * pw across and the ph pixels from oy + row * ph down
+def jpg.covers(+row: U32, +col: U32, +ox: U32, +oy: U32, +pw: U32, +ph: U32, +xx: U32, +yy: U32) -> Bool:
+  Bool.and(jpg.span(U32.to_nat(pw), (ox + col * pw : U32), 0, xx), jpg.span(U32.to_nat(ph), (oy + row * ph : U32), 0,
+    yy))
+
+# the value pixel (xx, yy) holds once samples col onward of a block row are painted over a plane where it held acc:
+# each sample that covers the pixel replaces the value, in the order of the samples
+def jpg.blk.col(
+  left: Nat,
+  +samples: List<&2, U32>,
+  +row: U32,
+  +col: U32,
+  +ox: U32,
+  +oy: U32,
+  +pw: U32,
+  +ph: U32,
+  +xx: U32,
+  +yy: U32,
+  +acc: U32
+) -> U32:
+  match left:
+    case 0n:
+      acc
+    case 1n+pp:
+      jpg.blk.col(pp, samples, row, (col + 1 : U32), ox, oy, pw, ph, xx, yy, Bool.pick(U32, jpg.covers(row, col, ox, oy,
+        pw, ph, xx, yy), Jpeg.decode.at(samples, (row * 8 + col : U32)), acc))
+
+# the value pixel (xx, yy) holds once rows row onward of a block are painted over a plane where it held acc
+def jpg.blk(
+  left: Nat,
+  +samples: List<&2, U32>,
+  +row: U32,
+  +ox: U32,
+  +oy: U32,
+  +pw: U32,
+  +ph: U32,
+  +xx: U32,
+  +yy: U32,
+  +acc: U32
+) -> U32:
+  match left:
+    case 0n:
+      acc
+    case 1n+pp:
+      jpg.blk(pp, samples, (row + 1 : U32), ox, oy, pw, ph, xx, yy, jpg.blk.col(8n, samples, row, 0, ox, oy, pw, ph, xx,
+        yy, acc))
+
+# the value pixel (xx, yy) holds once a block is painted at gg over a plane where it held acc: the block's sample
+# k = 8 * row + col, the last in that order whose pw by ph pixels at (ox + col * pw, oy + row * ph) take in the
+# pixel, or acc when none does
+def jpg.block.at(gg: Jpeg.Geom, +samples: List<&2, U32>, +xx: U32, +yy: U32, +acc: U32) -> U32:
+  match gg:
+    case Jpeg.Geom{+ox, +oy, +pw, +ph, _ww, _hh}:
+      jpg.blk(8n, samples, 0, ox, oy, pw, ph, xx, yy, acc)
+
+# LAW: painting a block onto a plane that is a perfect binary tree of 2^d leaves, d below 32, the frame's
+# w * h points at most 2^d, leaves at pixel (x, y) of the frame, point y * w + x, the sample of the block whose
+# pixels take it in, the last in the block's order, and what the point held before when no sample's do
+# IMG-JPG-2
+law jpeg_paint_at:
+  for +dd: Nat
+  for plane: Array<U32>
+  for h_perfect: {jpg.perfect(dd, plane) == True{} : Bool}
+  for h_dd: {Nat.is_lt(dd, 32n) == True{} : Bool}
+  for +ox: U32
+  for +oy: U32
+  for +pw: U32
+  for +ph: U32
+  for +ww: U32
+  for +hh: U32
+  for +samples: List<&2, U32>
+  for h_fit: {Nat.is_le(Nat.mul(U32.to_nat(ww), U32.to_nat(hh)), Nat.pow(2n, dd)) == True{} : Bool}
+  for +xx: U32
+  for +yy: U32
+  for h_xx: {U32.is_lt(xx, ww) == True{} : Bool}
+  for h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
+  {jpg.val(Array.get(U32, Jpeg.decode.paint.use(Jpeg.Geom{ox, oy, pw, ph, ww, hh}, True{}, samples, plane),
+    (yy * ww + xx : U32))) == jpg.block.at(Jpeg.Geom{ox, oy, pw, ph, ww, hh}, samples, xx, yy, jpg.val(Array.get(U32,
+    plane, (yy * ww + xx : U32)))) : U32}
+
+# LAW: the depth decode.plane takes for nn points, 1 to 2^d with d at most 31, is below 32, and the plane's 2^depth
+# leaves are at least nn: every point has a leaf of its own, 2^31 points, where U32 shl wraps, included
+# IMG-JPG-2
+law jpeg_plane_depth:
+  for +nn: U32
+  for +dd: Nat
+  for h_pos: {Nat.is_lt(0n, U32.to_nat(nn)) == True{} : Bool}
+  for h_dd: {Nat.is_le(dd, 31n) == True{} : Bool}
+  for h_nn: {Nat.is_le(U32.to_nat(nn), Nat.pow(2n, dd)) == True{} : Bool}
+  {Bool.and(Nat.is_lt(Jpeg.decode.depth(nn), 32n), Nat.is_le(U32.to_nat(nn), Nat.pow(2n, Jpeg.decode.depth(nn)))) ==
+    True{} : Bool}
+
+# a data unit the decoder decoded: where the walk had it and its 64 samples (IMG-JPG-7's values)
+type JUnit is Data:
+  JUnit{ctrl: Jpeg.Ctrl, samples: List<&2, U32>}
+
+# the samples of the data units decode.blocks decodes, the unit in blk and left more after it, in the order it
+# decodes them (IMG-JPG-7's values)
+def jpg.samples.run(
+  left: Nat,
+  blk: Jpeg.Blk,
+  +ctrl: Jpeg.Ctrl,
+  +preds: Jpeg.Preds,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ri: U32
+) -> List<&2, List<&2, U32>>:
+  match left:
+    case 0n:
+      match blk:
+        case Jpeg.Blk{+samples, _bits, _pred, _bok}:
+          [samples]
+    case 1n+pp:
+      match blk:
+        case Jpeg.Blk{+samples, +bits, +pred, _bok}:
+          match ctrl:
+            case Jpeg.Ctrl{+comp, _bi, _mx, _my, _mcu, _rst}:
+              samples <> jpg.samples.run(pp, Jpeg.decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri),
+                Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ctrl, frame, scan, ri)),
+                Jpeg.decode.preds.next(Jpeg.decode.adv.duef(Jpeg.decode.adv(ctrl, frame, scan, ri)), preds, comp, pred),
+                frame, scan, tabs, ri)
+
+# places and samples, paired in order, as many as the shorter list holds
+def jpg.zip(ps: List<&2, Jpeg.Ctrl>, ss: List<&2, List<&2, U32>>) -> List<&2, JUnit>:
+  match ps ss:
+    case Nil{} _ss:
+      []
+    case _pc <> _pt Nil{}:
+      []
+    case pc <> pt sc <> st:
+      JUnit{pc, sc} <> jpg.zip(pt, st)
+
+# the data units decode.blocks decodes from blk on, left more after it: the k-th at the k-th place the decoder's walk
+# visits (jpg.trace, which jpeg_walk_frame shows is T.81 A.2.3's order), with the k-th unit's samples
+def jpg.units.run(
+  +left: Nat,
+  +blk: Jpeg.Blk,
+  +ctrl: Jpeg.Ctrl,
+  +preds: Jpeg.Preds,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ri: U32
+) -> List<&2, JUnit>:
+  jpg.zip(jpg.trace(1n+left, ctrl, frame, scan, ri), jpg.samples.run(left, blk, ctrl, preds, frame, scan, tabs, ri))
+
+# the ok flag decode.blocks ends with: ok times every decoded unit's
+def jpg.run.ok(
+  left: Nat,
+  blk: Jpeg.Blk,
+  +ctrl: Jpeg.Ctrl,
+  +preds: Jpeg.Preds,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ri: U32,
+  +ok: U32
+) -> U32:
+  match left:
+    case 0n:
+      match blk:
+        case Jpeg.Blk{_samples, _bits, _pred, +bok}:
+          (ok * bok : U32)
+    case 1n+pp:
+      match blk:
+        case Jpeg.Blk{_samples, +bits, +pred, +bok}:
+          match ctrl:
+            case Jpeg.Ctrl{+comp, _bi, _mx, _my, _mcu, _rst}:
+              jpg.run.ok(pp, Jpeg.decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri),
+                Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ctrl, frame, scan, ri)),
+                Jpeg.decode.preds.next(Jpeg.decode.adv.duef(Jpeg.decode.adv(ctrl, frame, scan, ri)), preds, comp, pred),
+                frame, scan, tabs, ri, (ok * bok : U32))
+
+# a plane with the units of scan component comp painted in order, each at decode.geom of its place
+def jpg.paint.all(
+  us: List<&2, JUnit>,
+  +comp: U32,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  plane: Array<U32>
+) -> Array<U32>:
+  match us:
+    case Nil{}:
+      plane
+    case JUnit{+ctrl, +samples} <> rest:
+      jpg.paint.all(rest, comp, frame, scan, Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan),
+        U32.is_eq(Jpeg.decode.ctrl.comp(ctrl), comp), samples, plane))
+
+# the value pixel (xx, yy) holds once the units of scan component comp are painted in order over a plane where it
+# held acc: each unit's block, at decode.geom of its place, as jpg.block.at says
+def jpg.point(
+  us: List<&2, JUnit>,
+  +comp: U32,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +xx: U32,
+  +yy: U32,
+  +acc: U32
+) -> U32:
+  match us:
+    case Nil{}:
+      acc
+    case JUnit{+ctrl, +samples} <> rest:
+      jpg.point(rest, comp, frame, scan, xx, yy, Bool.pick(U32, U32.is_eq(Jpeg.decode.ctrl.comp(ctrl), comp),
+        jpg.block.at(Jpeg.decode.geom(ctrl, frame, scan), samples, xx, yy, acc), acc))
+
+# LAW: decode.blocks paints the k-th unit it decodes at decode.geom of the k-th place its walk visits (jpg.trace), onto
+# the plane of that place's scan component (0 Y, 1 Cb, 2 Cr), and hands the three planes to decode.done
+# IMG-JPG-2
+law jpeg_blocks_paint:
+  for +left: Nat
+  for +blk: Jpeg.Blk
+  for +ctrl: Jpeg.Ctrl
+  for +preds: Jpeg.Preds
+  for +frame: Jpeg.Frame
+  for +scan: Jpeg.Scan
+  for +tabs: Jpeg.Tabs
+  for +ri: U32
+  for yy: Array<U32>
+  for cb: Array<U32>
+  for cr: Array<U32>
+  for +ok: U32
+  {Jpeg.decode.blocks(left, blk, ctrl, preds, frame, scan, tabs, ri, yy, cb, cr, ok) ==
+    Jpeg.decode.done(jpg.run.ok(left, blk, ctrl, preds, frame, scan, tabs, ri, ok), frame,
+    jpg.paint.all(jpg.units.run(left, blk, ctrl, preds, frame, scan, tabs, ri), 0, frame, scan, yy),
+    jpg.paint.all(jpg.units.run(left, blk, ctrl, preds, frame, scan, tabs, ri), 1, frame, scan, cb),
+    jpg.paint.all(jpg.units.run(left, blk, ctrl, preds, frame, scan, tabs, ri), 2, frame, scan, cr)) :
+    Maybe<&2, Jpeg.Pic>}
+
+# LAW: painting a scan component's units onto a plane that is a perfect binary tree of 2^d leaves, d below 32, the
+# frame's w * h points at most 2^d, leaves at pixel (x, y) of the frame, point y * w + x, the value jpg.point gives:
+# each unit's sample whose pixels take the pixel in, the last in order, over what the point held before
+# IMG-JPG-2
+law jpeg_plane_at:
+  for +dd: Nat
+  for plane: Array<U32>
+  for h_perfect: {jpg.perfect(dd, plane) == True{} : Bool}
+  for h_dd: {Nat.is_lt(dd, 32n) == True{} : Bool}
+  for +us: List<&2, JUnit>
+  for +comp: U32
+  for +ww: U32
+  for +hh: U32
+  for +nf: U32
+  for +ids: List<&2, U32>
+  for +hs: List<&2, U32>
+  for +vs: List<&2, U32>
+  for +tq: List<&2, U32>
+  for +hmax: U32
+  for +vmax: U32
+  for +scan: Jpeg.Scan
+  for h_fit: {Nat.is_le(Nat.mul(U32.to_nat(ww), U32.to_nat(hh)), Nat.pow(2n, dd)) == True{} : Bool}
+  for +xx: U32
+  for +yy: U32
+  for h_xx: {U32.is_lt(xx, ww) == True{} : Bool}
+  for h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
+  {jpg.val(Array.get(U32, jpg.paint.all(us, comp, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, plane),
+    (yy * ww + xx : U32))) == jpg.point(us, comp, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy,
+    jpg.val(Array.get(U32, plane, (yy * ww + xx : U32)))) : U32}
+
+# the data units a scan decode of nb blocks decodes: none for no blocks, else from the scan's first block, at the
+# walk's first place, the DC predictors zero
+def jpg.decoded.n(
+  nb: Nat,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32
+) -> List<&2, JUnit>:
+  match nb:
+    case 0n:
+      []
+    case 1n+pp:
+      jpg.units.run(pp, Jpeg.decode.block.of(Jpeg.Bits{0, 1, 0, ent}, 0, Jpeg.decode.pred.zero(), frame, scan, tabs),
+        Jpeg.Ctrl{0, 0, 0, 0, 0, 0}, Jpeg.decode.pred.zero(), frame, scan, tabs, ri)
+
+# the data units decode_jpeg decodes from the entropy-coded bytes ent of a scan in a frame: decode.nblocks of them
+def jpg.decoded(
+  +ww: U32,
+  +hh: U32,
+  +nf: U32,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  +tq: List<&2, U32>,
+  +hmax: U32,
+  +vmax: U32,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32
+) -> List<&2, JUnit>:
+  jpg.decoded.n(U32.to_nat(Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)), Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+    hmax,
+    vmax}, scan, tabs, ent, ri)
+
+# a pixel from its Y, Cb and Cr: gray for a frame of one component, else the T.871 colour (IMG-JPG-6)
+def jpg.colour(+nf: U32, +yv: U32, +bv: U32, +rv: U32) -> U32:
+  Bool.pick(U32, U32.is_eq(nf, 1), Jpeg.gray(yv), Jpeg.rgb(yv, bv, rv))
+
+# sample kk of a decoded raster, if any
+def jpg.px.at(mm: Maybe<&2, Img.Raster>, +kk: Nat) -> Maybe<&2, U32>:
+  match mm:
+    case None{}:
+      None{}
+    case Some{Img.Raster{_ww, _hh, px}}:
+      List.get(&2, U32, px, kk)
+
+# vv, when there is a decoded raster
+def jpg.px.want(mm: Maybe<&2, Img.Raster>, +vv: U32) -> Maybe<&2, U32>:
+  match mm:
+    case None{}:
+      None{}
+    case Some{_rr}:
+      Some{vv}
+
+# LAW: for a SOF0 frame of at most 2^31 points (w * h at most 2^d, d at most 31), whatever the bytes before and
+# the scan, when decode_jpeg returns a raster, its pixel (x, y) is the pixel of the component values at (x, y): gray
+# of Y for one component, else rgb of Y, Cb and Cr. Each component's value is jpg.point over the data units the
+# decoder decodes, their samples IMG-JPG-7's: the k-th unit placed at decode.geom of the k-th place of the
+# decoder's walk (jpg.trace; jpeg_walk_frame: T.81 A.2.3's order; jpeg_mcu_grid_comp: the A.2.3 grid), each of
+# its samples replicated over the pw by ph pixels it covers (jpg.block.at, jpeg_paint_at)
+# IMG-JPG-2
+law jpeg_place:
+  for +bytes: List<&2, U32>
+  for +ww: U32
+  for +hh: U32
+  for +nf: U32
+  for +ids: List<&2, U32>
+  for +hs: List<&2, U32>
+  for +vs: List<&2, U32>
+  for +tq: List<&2, U32>
+  for +hmax: U32
+  for +vmax: U32
+  for +scan: Jpeg.Scan
+  for +tabs: Jpeg.Tabs
+  for +ent: List<&2, U32>
+  for +ri: U32
+  for +kind: U32
+  for +bad: U32
+  for h_walk: {Jpeg.decode.walk(bytes, Jpeg.decode.st0()) == Jpeg.St{Jpeg.Stop{}, Jpeg.Frame{ww, hh, nf, ids, hs, vs,
+    tq,
+    hmax, vmax}, scan, tabs, ent, ri, kind, bad} : Jpeg.St}
+  for +dd: Nat
+  for +h_dd: {Nat.is_le(dd, 31n) == True{} : Bool}
+  for +h_fit: {Nat.is_le(Nat.mul(U32.to_nat(ww), U32.to_nat(hh)), Nat.pow(2n, dd)) == True{} : Bool}
+  for +xx: U32
+  for +yy: U32
+  for +h_xx: {U32.is_lt(xx, ww) == True{} : Bool}
+  for +h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
+  {jpg.px.at(Img.decode_jpeg(bytes), U32.to_nat((yy * ww + xx : U32))) == jpg.px.want(Img.decode_jpeg(bytes),
+    jpg.colour(nf, jpg.point(jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32,
+    ent),
+    ri), 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), jpg.point(jpg.decoded(ww, hh, nf,
+    ids,
+    hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent), ri), 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+    hmax,
+    vmax}, scan, xx, yy, 0), jpg.point(jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2,
+    U32, ent), ri), 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0))) : Maybe<&2, U32>}
