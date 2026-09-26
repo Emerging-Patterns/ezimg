@@ -3395,3 +3395,29 @@ law jpeg_round_trip_some:
   for +h_w: {U32.is_le(ww, 65535) == True{} : Bool}
   for +h_h: {U32.is_le(hh, 65535) == True{} : Bool}
   {Maybe.is_some(&2, Img.Raster, jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px}))) == True{} : Bool}
+
+# a decode's samples, when it returned a raster, all have alpha 255
+def jpg.opq(mm: Maybe<&2, Img.Raster>) -> Bool:
+  match mm:
+    case None{}:
+      True{}
+    case Some{img}:
+      all.opaque(Img.pixels(img), True{})
+
+# a decode that is some raster of width w and height h, every sample of it with alpha 255
+def jpg.round(+mm: Maybe<&2, Img.Raster>, +ww: U32, +hh: U32) -> Bool:
+  Bool.and(Bool.and(Maybe.is_some(&2, Img.Raster, mm), jpg.sized(mm, ww, hh)), jpg.opq(mm))
+
+# LAW: for every well-formed raster r with both sides from 1 to 65535, decode_jpeg(encode_jpeg(r)) is some raster
+# of r's width and height, every sample of it with alpha 255: jpeg_round_trip_some, jpeg_round_trip_sized and
+# jpeg_decode_opaque together. It needs no bound on the samples: sides of at most 65535 keep the MCU count's
+# product, times 3, below 2^32
+# IMG-JPG-3
+law jpeg_round_trip:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for +h_good: {Png.enc.good(ww, hh, px) == True{} : Bool}
+  for +h_w: {U32.is_le(ww, 65535) == True{} : Bool}
+  for +h_h: {U32.is_le(hh, 65535) == True{} : Bool}
+  {jpg.round(jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), ww, hh) == True{} : Bool}

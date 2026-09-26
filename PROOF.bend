@@ -6411,3 +6411,8 @@ def Laws.jpeg_scan_some(tt, rest, ww, hh, h_w, h_h, h_wf, h_n):
 
 def Laws.jpeg_round_trip_some(ww, hh, px, h_good, h_w, h_h):
   W14.some_ok(ww, hh, px, h_good, h_w, h_h, Laws.jpeg_round_trip_scan(ww, hh, px, h_good, h_w, h_h))
+
+def Laws.jpeg_round_trip(ww, hh, px, h_good, h_w, h_h):
+  W14.round_ok(Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), ww, hh, Laws.jpeg_round_trip_some(ww, hh, px,
+    h_good, h_w, h_h), Laws.jpeg_round_trip_sized(ww, hh, px, h_good, h_w, h_h), W14.opq_back(Img.encode_jpeg(
+    Img.Raster{ww, hh, px}), bb => ii => ee => Laws.jpeg_decode_opaque(bb, ii, ee)))

@@ -5102,3 +5102,41 @@ def some_ok(
   %es : {Maybe.is_some(&2, Img.Raster, _) == True{} : Bool}
   psome_some(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(), Jenc.encode.arm(ww,
     hh, cp), 0), some_cnt(ww, hh, cp, hw0, hh0, count_ok(ww, hh, hw0, hh0, h_w, h_h)))
+
+# the opacity of decode_jpeg's samples, for any bytes
+def OpqFact() -> Type:
+  @bytes: List<&2, U32> -> @img: Img.Raster -> @hd: {Img.decode_jpeg(bytes) == Some{img} : Maybe<&2, Img.Raster>} ->
+    {Laws.all.opaque(Img.pixels(img), True{}) == True{} : Bool}
+
+# a decode's samples all have alpha 255, whatever it returned
+def opq_dec(
+  +bytes: List<&2, U32>,
+  mr: Maybe<&2, Img.Raster>,
+  ee: {Img.decode_jpeg(bytes) == mr : Maybe<&2, Img.Raster>},
+  op: OpqFact()
+) -> {Laws.jpg.opq(mr) == True{} : Bool}:
+  match mr:
+    case None{}:
+      {==}
+    case Some{img}:
+      op(bytes, img, ee)
+
+# the samples of the decode of encode_jpeg's bytes all have alpha 255, whatever encode_jpeg returned
+def opq_back(eb: Maybe<&2, List<&2, U32>>, op: OpqFact()) -> {Laws.jpg.opq(Laws.jpg.back(eb)) == True{} : Bool}:
+  match eb:
+    case None{}:
+      {==}
+    case Some{+bytes}:
+      opq_dec(bytes, Img.decode_jpeg(bytes), {==}, op)
+
+# some raster of width w and height h, every sample of it with alpha 255, from the three facts
+def round_ok(
+  +mm: Maybe<&2, Img.Raster>,
+  +ww: U32,
+  +hh: U32,
+  hs: {Maybe.is_some(&2, Img.Raster, mm) == True{} : Bool},
+  hz: {Laws.jpg.sized(mm, ww, hh) == True{} : Bool},
+  ho: {Laws.jpg.opq(mm) == True{} : Bool}
+) -> {Laws.jpg.round(mm, ww, hh) == True{} : Bool}:
+  and_tt(Bool.and(Maybe.is_some(&2, Img.Raster, mm), Laws.jpg.sized(mm, ww, hh)), Laws.jpg.opq(mm),
+    and_tt(Maybe.is_some(&2, Img.Raster, mm), Laws.jpg.sized(mm, ww, hh), hs, hz), ho)
