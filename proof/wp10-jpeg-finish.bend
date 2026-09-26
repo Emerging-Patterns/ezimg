@@ -1641,7 +1641,8 @@ def st.disp(
           st.pad(Jenc.encode.mcus(U32.to_nat((U32.div((ww + 7 : U32), 8) * U32.div((hh + 7 : U32), 8) : U32)),
             (Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px, Jpeg.decode.plane((ww * hh : U32)), 0),
             Jenc.encode.book(Jenc.encode.dccounts(), Jenc.encode.dcsyms(), Jenc.encode.accounts(),
-            Jenc.encode.acsyms()), 0, 0, 0, Jenc.encode.put0()), 0, 0, U32.div((ww + 7 : U32), 8), ww, hh,
+            Jenc.encode.acsyms()), 1024, 1024, 1024, Jenc.encode.put0()), 0, 0, U32.div((ww + 7 : U32), 8), ww,
+            hh,
             Jenc.encode.ctx()))
 
 # the watch's answer, whatever it is, dispatches to stuffed bytes
