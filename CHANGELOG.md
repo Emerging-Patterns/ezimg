@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0](https://github.com/Emerging-Patterns/ezimg/compare/v1.1.0...v1.2.0) (2026-09-26)
+
+
+### Features
+
+* lift the PNG pixel stage to decode_png, and prove the one-block PNG round trip ([#64](https://github.com/Emerging-Patterns/ezimg/issues/64)) ([56a42da](https://github.com/Emerging-Patterns/ezimg/commit/56a42dad5b1f7d8e851de61739099f2d5a02a6e7))
+* prove IMG-JPG-2, the JPEG planes from Array.set to decode_jpeg's pixels ([#67](https://github.com/Emerging-Patterns/ezimg/issues/67)) ([75c266c](https://github.com/Emerging-Patterns/ezimg/commit/75c266c4170cc29bf3c40d1f61ef2a01f4f233a9))
+* prove IMG-PNG-3 and IMG-PNG-4, the PNG encoder's refusals and IHDR ([#56](https://github.com/Emerging-Patterns/ezimg/issues/56)) ([94e3312](https://github.com/Emerging-Patterns/ezimg/commit/94e3312247570b4ffb4ccbcfd7e024c50fd505de))
+* prove IMG-RAS-1 to IMG-RAS-4, the raster helpers ([#58](https://github.com/Emerging-Patterns/ezimg/issues/58)) ([3bd0909](https://github.com/Emerging-Patterns/ezimg/commit/3bd090948d36e8875b62c33217bfaa6359d27ab3))
+* prove the PNG round trip (IMG-PNG-2), and IMG-PNG-9 and IMG-PIX-1 with ancillary chunks ([#69](https://github.com/Emerging-Patterns/ezimg/issues/69)) ([316f3ef](https://github.com/Emerging-Patterns/ezimg/commit/316f3ef8010b6929fd533ce9c2eda98b9bc5385b))
+
+
+### Bug Fixes
+
+* exact T.871 colour conversion in JPEG decode; settle IMG-JPG-2, IMG-JPG-3 and IMG-JPG-6 ([#61](https://github.com/Emerging-Patterns/ezimg/issues/61)) ([f452c29](https://github.com/Emerging-Patterns/ezimg/commit/f452c29229fcf7356a92accd54a5f3651769bc80))
+
 ## [1.1.0](https://github.com/Emerging-Patterns/ezimg/compare/v1.0.0...v1.1.0) (2026-09-25)
 
 
