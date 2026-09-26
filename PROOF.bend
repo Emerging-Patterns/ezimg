@@ -22,6 +22,7 @@ import ./proof/wp10-jpeg-finish.bend as W10
 import ./proof/wp13-jpeg-planes.bend as W13
 import ./proof/wp11-png-finish.bend as W11
 import ./proof/wp12-jpeg-huffman.bend as W12
+import ./proof/wp14-jpeg-encoder.bend as W14
 
 # U32.or with 0xFF000000 first has alpha 255, whatever the other operand:
 # the 32 bits are taken apart four at a time, and Bool.or(True, b) is True.
@@ -6405,3 +6406,13 @@ def Laws.jpeg_huff_ac(pre, h_pre, sy, h_sy, post, h_post):
 
 def Laws.jpeg_scan_some(tt, rest, ww, hh, h_w, h_h, h_wf, h_n):
   W12.scan_some(tt, rest, ww, hh, h_w, h_h, h_wf, h_n)
+
+# ---- wp14-jpeg-encoder ----
+
+def Laws.jpeg_round_trip_some(ww, hh, px, h_good, h_w, h_h):
+  W14.some_ok(ww, hh, px, h_good, h_w, h_h, Laws.jpeg_round_trip_scan(ww, hh, px, h_good, h_w, h_h))
+
+def Laws.jpeg_round_trip(ww, hh, px, h_good, h_w, h_h):
+  W14.round_ok(Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), ww, hh, Laws.jpeg_round_trip_some(ww, hh, px,
+    h_good, h_w, h_h), Laws.jpeg_round_trip_sized(ww, hh, px, h_good, h_w, h_h), W14.opq_back(Img.encode_jpeg(
+    Img.Raster{ww, hh, px}), bb => ii => ee => Laws.jpeg_decode_opaque(bb, ii, ee)))

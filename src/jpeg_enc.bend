@@ -258,44 +258,29 @@ def encode.huff(+counts: List<&2, U32>, +syms: List<&2, U32>) -> Array<U32>:
 def encode.book(+dcc: List<&2, U32>, +dcs: List<&2, U32>, +acc: List<&2, U32>, +acs: List<&2, U32>) -> Book:
   Book{encode.huff(dcc, dcs), encode.huff(acc, acs)}
 
-def encode.cat.fr(done: Bool, +lt: Bool) -> Bool:
-  match done:
+# the first of two sizes when the value is below the limit, else the second
+def encode.cat.pick(lt: Bool, +cc: U32, +rest: U32) -> U32:
+  match lt:
     case True{}:
-      True{}
-    case False{}:
-      lt
-
-def encode.cat.on(fr: Bool) -> U32:
-  match fr:
-    case True{}:
-      1
-    case False{}:
-      0
-
-def encode.cat.c(fr: Bool, +cc: U32) -> U32:
-  match fr:
-    case True{}:
+      +_r = rest
       cc
     case False{}:
-      (cc + 1 : U32)
+      +_c = cc
+      rest
 
-def encode.cat.lim(fr: Bool, +lim: U32) -> U32:
-  match fr:
-    case True{}:
-      lim
-    case False{}:
-      (lim * 2 : U32)
-
-def encode.cat.go(left: Nat, +done: U32, +aa: U32, +cc: U32, +lim: U32) -> U32:
+# the size of a magnitude: the first cc with aa below lim = 2^cc, left sizes tried, else cc. Each comparison is
+# made with a constant limit, so a law over a symbolic value keeps one comparison per size.
+def encode.cat.go(left: Nat, +aa: U32, +cc: U32, +lim: U32) -> U32:
   match left:
     case 0n:
+      +_a = aa
+      +_l = lim
       cc
     case 1n+p:
-      +fr = encode.cat.fr(U32.is_eq(done, 1), U32.is_lt(aa, lim))
-      encode.cat.go(p, encode.cat.on(fr), aa, encode.cat.c(fr, cc), encode.cat.lim(fr, lim))
+      encode.cat.pick(U32.is_lt(aa, lim), cc, encode.cat.go(p, aa, (cc + 1 : U32), (lim * 2 : U32)))
 
 def encode.cat(+vv: U32) -> U32:
-  encode.cat.go(12n, 0, Jpeg.decode.abs(vv), 0, 1)
+  encode.cat.go(12n, Jpeg.decode.abs(vv), 0, 1)
 
 def encode.mag.s(+ss: U32, +cat: U32, +vv: U32) -> U32:
   match ss:
@@ -345,15 +330,62 @@ def encode.clip.lo(lo: Bool, +vv: U32, +lim: U32) -> U32:
     case False{}:
       vv
 
-def encode.clip.s(+ss: U32, +vv: U32, +lim: U32) -> U32:
-  match ss:
-    case 0:
+# by the sign, asked with U32.is_eq so a law reaches a symbolic value
+def encode.clip.b(pos: Bool, +vv: U32, +lim: U32) -> U32:
+  match pos:
+    case True{}:
       encode.clip.hi(U32.is_gt(vv, lim), vv, lim)
-    case _:
+    case False{}:
       encode.clip.lo(U32.is_gt(Jpeg.decode.abs(vv), lim), vv, lim)
 
 def encode.clip(+vv: U32, +lim: U32) -> U32:
-  encode.clip.s(Jpeg.decode.sign(vv), vv, lim)
+  encode.clip.b(U32.is_eq(Jpeg.decode.sign(vv), 0), vv, lim)
+
+# a DC clipped to T.81's range for 8-bit samples, -1024 to 1023, kept as that plus 1024 (0 to 2047), so the
+# difference of two DCs has at most 11 bits (F.1.2.1) and is found without wrapping. The level shift keeps the
+# forward DCT's DC in -1024..1015, so the clip never changes it.
+def encode.dcbias.b(pos: Bool, +vv: U32) -> U32:
+  match pos:
+    case True{}:
+      (encode.clip.hi(U32.is_gt(vv, 1023), vv, 1023) + 1024 : U32)
+    case False{}:
+      (1024 - encode.clip.hi(U32.is_gt(Jpeg.decode.abs(vv), 1024), Jpeg.decode.abs(vv), 1024) : U32)
+
+# a DC clipped to -1024 to 1023, plus 1024
+def encode.dcbias(+vv: U32) -> U32:
+  encode.dcbias.b(U32.is_eq(Jpeg.decode.sign(vv), 0), vv)
+
+# a negative DC difference -mm: its size's code, then its magnitude bits, 2^size - 1 - mm (F.1.2.1)
+def encode.magp.n(zz: Bool, pp: Put, +cat: U32, +mm: U32) -> Put:
+  match zz:
+    case True{}:
+      +_u = (cat + mm : U32)
+      pp
+    case False{}:
+      encode.bits(pp, cat, ((U32.shln(1, U32.to_nat(cat)) - 1 : U32) - mm : U32))
+
+# the size's code of a negative DC difference, then its magnitude
+def encode.dc.use.neg(got: Array<U32> & Code, pp: Put, +cat: U32, +mm: U32) -> Array<U32> & Put:
+  match got:
+    case (a, Code{+len, +bits}):
+      (a, encode.magp.n(U32.is_eq(cat, 0), encode.bits(pp, len, bits), cat, mm))
+
+# a negative DC difference, -mm
+def encode.dc.neg(aa: Array<U32>, +pp: Put, +mm: U32) -> Array<U32> & Put:
+  +cat = encode.cat(mm)
+  encode.dc.use.neg(encode.sym(aa, cat), pp, cat, mm)
+
+# the DC difference of two biased DCs, by its sign
+def encode.dcdiff.b(up: Bool, aa: Array<U32>, pp: Put, +bb: U32, +pb: U32) -> Array<U32> & Put:
+  match up:
+    case True{}:
+      encode.dc(aa, pp, (bb - pb : U32))
+    case False{}:
+      encode.dc.neg(aa, pp, (pb - bb : U32))
+
+# the DC difference of biased DC bb from biased predictor pb
+def encode.dcdiff(aa: Array<U32>, pp: Put, +bb: U32, +pb: U32) -> Array<U32> & Put:
+  encode.dcdiff.b(U32.is_ge(bb, pb), aa, pp, bb, pb)
 
 def encode.emit(got: Array<U32> & Code, pp: Put) -> Array<U32> & Put:
   match got:
@@ -399,17 +431,34 @@ def encode.ac.step(+cc: U32, +run: U32, st: Array<U32> & Put) -> Array<U32> & Pu
     case (a, p):
       +clip = encode.clip(cc, 1023)
       +cat = encode.cat(clip)
-      +sym = U32.or(U32.shln(U32.mod(run, 16), 4n), cat)
-      encode.ac.hit(encode.zrls(U32.to_nat(U32.div(run, 16)), (a, p)), sym, cat, clip)
+      +sym = U32.or(cat, U32.shln(U32.and(15, run), 4n))
+      encode.ac.hit(encode.zrls(U32.to_nat(U32.shrn(run, 4n)), (a, p)), sym, cat, clip)
 
+# the zero run after one more coefficient
+def encode.ac.run(zero: Bool, +run: U32) -> U32:
+  match zero:
+    case True{}:
+      (run + 1 : U32)
+    case False{}:
+      +_r = run
+      0
+
+# one more coefficient: a zero only lengthens the run
+def encode.ac.at(zero: Bool, +cc: U32, +run: U32, st: Array<U32> & Put) -> Array<U32> & Put:
+  match zero:
+    case True{}:
+      +_u = (cc + run : U32)
+      st
+    case False{}:
+      encode.ac.step(cc, run, st)
+
+# the AC coefficients in zigzag order. U32.is_eq, not a literal pattern, so a law reaches a symbolic coefficient.
 def encode.ac(zz: List<&2, U32>, +run: U32, st: Array<U32> & Put) -> Array<U32> & Put:
   match zz:
     case Nil{}:
       encode.eob.on(U32.is_gt(run, 0), st)
-    case 0 <> ct:
-      encode.ac(ct, (run + 1 : U32), st)
     case +c <> ct:
-      encode.ac(ct, 0, encode.ac.step(c, run, st))
+      encode.ac(ct, encode.ac.run(U32.is_eq(c, 0), run), encode.ac.at(U32.is_eq(c, 0), c, run, st))
 
 def encode.qnz(+qq: U32) -> U32:
   match qq:
@@ -436,17 +485,18 @@ def encode.block.dc(got: Array<U32> & Put, ac: Array<U32>, +dd: U32, rest: List<
   (dc2, p2) = got
   encode.block.join(encode.ac(rest, 0, (ac, p2)), dc2, dd)
 
-# the clipped DC is written and kept, so the next block can predict from it
+# the DC, clipped to T.81's 8-bit range and biased by 1024, is written as its difference from the last and kept,
+# so the next block can predict from it
 def encode.block.ac(book: Book, pp: Put, +pred: U32, +dc0: U32, rest: List<&2, U32>) -> Book & U32 & Put:
   match book:
     case Book{dc, ac}:
-      +d = encode.clip(dc0, 2047)
-      encode.block.dc(encode.dc(dc, pp, (d - pred : U32)), ac, d, rest)
+      +d = encode.dcbias(dc0)
+      encode.block.dc(encode.dcdiff(dc, pp, d, pred), ac, d, rest)
 
 def encode.block.go(book: Book, pp: Put, +pred: U32, zz: List<&2, U32>) -> Book & U32 & Put:
   match zz:
     case Nil{}:
-      (book, 0, pp)
+      (book, 1024, pp)
     case +dc0 <> rest:
       encode.block.ac(book, pp, pred, dc0, rest)
 
@@ -1198,8 +1248,8 @@ def encode.scan.dc(
 ) -> Book & U32 & Put:
   match book:
     case Book{dc, ac}:
-      +d = encode.clip(d0, 2047)
-      encode.scan.join(encode.dc(dc, pp, (d - pred : U32)), ac, d, rest, arr)
+      +d = encode.dcbias(d0)
+      encode.scan.join(encode.dcdiff(dc, pp, d, pred), ac, d, rest, arr)
 
 def encode.scan.open(
   rest: List<&2, U32>,
@@ -1214,7 +1264,7 @@ def encode.scan.open(
 def encode.scan.none(book: Book, pp: Put, arr: Array<U32>, +pred: U32) -> Book & U32 & Put:
   +_s = encode.pix.sink(arr)
   +_p = (pred - pred : U32)
-  (book, 0, pp)
+  (book, 1024, pp)
 
 # DC at the first zigzag index, then the AC run, both read from the frequency plane
 def encode.scan(book: Book, pp: Put, +pred: U32, arr: Array<U32>, zig: List<&2, U32>) -> Book & U32 & Put:
@@ -1548,7 +1598,7 @@ def encode.watch(left: Nat, xs: List<&2, U32>) -> U32 & U32 & List<&2, U32>:
 
 # low len bits of code join the open byte; a finished byte is stuffed
 def encode.pack.byte(+buf: U32, +len: U32, +code: U32) -> U32:
-  U32.or(U32.shln(buf, U32.to_nat(len)), code)
+  U32.or(code, U32.shln(buf, U32.to_nat(len)))
 
 def encode.pack.full(full: Bool, out: List<&2, U32>, +buf: U32, +nn: U32, +len: U32, +code: U32) -> Put:
   match full:
@@ -1565,8 +1615,8 @@ def encode.pack.keep(pp: Put, +lo: U32, +rest: U32) -> Put:
 def encode.pack.span(out: List<&2, U32>, +buf: U32, +nn: U32, +len: U32, +code: U32) -> Put:
   +room = (8 - nn : U32)
   +lo = (len - room : U32)
-  encode.pack.keep(encode.stuff(out, U32.or(U32.shln(buf, U32.to_nat(room)),
-    U32.shrn(code, U32.to_nat(lo)))), lo, U32.and(code, (U32.shln(1, U32.to_nat(lo)) - 1 : U32)))
+  encode.pack.keep(encode.stuff(out, U32.or(U32.shrn(code, U32.to_nat(lo)), U32.shln(buf,
+    U32.to_nat(room)))), lo, U32.and((U32.shln(1, U32.to_nat(lo)) - 1 : U32), code))
 
 def encode.pack.fit(fit: Bool, out: List<&2, U32>, +buf: U32, +nn: U32, +len: U32, +code: U32) -> Put:
   match fit:
@@ -1611,15 +1661,15 @@ def encode.solid.end(got: Array<U32> & Book & U32 & Put) -> Put:
 def encode.solid.cr(got: Array<U32> & Book & U32 & Put, +ctx: Ctx) -> Put:
   (a, book, +dc, bit) = got
   +_d = (dc - dc : U32)
-  encode.solid.end(encode.block(book, bit, 0, a, 1, 1, 0, 0, 2, ctx))
+  encode.solid.end(encode.block(book, bit, 1024, a, 1, 1, 0, 0, 2, ctx))
 
 def encode.solid.cb(got: Array<U32> & Book & U32 & Put, +ctx: Ctx) -> Put:
   (a, book, +dc, bit) = got
   +_d = (dc - dc : U32)
-  encode.solid.cr(encode.block(book, bit, 0, a, 1, 1, 0, 0, 1, ctx), ctx)
+  encode.solid.cr(encode.block(book, bit, 1024, a, 1, 1, 0, 0, 1, ctx), ctx)
 
 def encode.solid.y(aa: Array<U32>, book: Book, bit: Put, +ctx: Ctx) -> Put:
-  encode.solid.cb(encode.block(book, bit, 0, aa, 1, 1, 0, 0, 0, ctx), ctx)
+  encode.solid.cb(encode.block(book, bit, 1024, aa, 1, 1, 0, 0, 0, ctx), ctx)
 
 # one colour repeated. The first MCU is that block; every later MCU is three zero differences.
 # The result is the entropy-coded bytes.
@@ -1639,7 +1689,7 @@ def encode.go(+ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
   +area = (ww * hh : U32)
   book = encode.book(encode.dccounts(), encode.dcsyms(), encode.accounts(), encode.acsyms())
   encode.pad(encode.mcus(U32.to_nat((mw * mh : U32)),
-    (encode.pix.load(U32.to_nat(area), px, Jpeg.decode.plane(area), 0), book, 0, 0, 0,
+    (encode.pix.load(U32.to_nat(area), px, Jpeg.decode.plane(area), 0), book, 1024, 1024, 1024,
       encode.put0()), 0, 0, mw, ww, hh, encode.ctx()))
 
 # the entropy-coded bytes, by what the watch found: neutral, one solid colour, or anything else
