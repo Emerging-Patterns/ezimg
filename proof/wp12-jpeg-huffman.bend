@@ -3219,8 +3219,8 @@ def sim.run(
   +rr: List<&2, Bool>,
   +f1: {Bool.and(rshort(s1), roct8(s1)) == True{} : Bool},
   +er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, acbits(rest), rr)) : List<&2, Bool>},
-  +hk: RunOk(c1, c2, sym, ex),
-  +hr: RunRest(rest, kk, sym, pp),
+  hk: RunOk(c1, c2, sym, ex),
+  hr: RunRest(rest, kk, sym, pp),
   ih: IhAc(rest, pp, rr)
 ) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.run.b(c1, c2, U32.and(15, sym), (kk + U32.shrn(sym, 4n) : U32), rbits(s1,
   1), zz, 1), actb()), rr):
