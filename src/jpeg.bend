@@ -1210,12 +1210,18 @@ def decode.sink.p(pp: Array<U32> & U32) -> U32:
 def decode.sink(aa: Array<U32>) -> U32:
   decode.sink.p(Array.get(U32, aa, 0))
 
-def decode.depth(+nn: U32) -> Nat:
-  match nn:
-    case 0:
+# the depth of a plane of nn points: 0 for none, else log2(2 * nn - 1) in U32, so 2^depth >= nn while
+# 2 * nn does not wrap
+def decode.depth.of(zero: Bool, +nn: U32) -> Nat:
+  match zero:
+    case True{}:
       0n
-    case _:
+    case False{}:
       U32.log2((U32.shl(nn) - 1 : U32))
+
+# U32.is_eq, not a literal pattern, so a law reaches every nn
+def decode.depth(+nn: U32) -> Nat:
+  decode.depth.of(U32.is_eq(nn, 0), nn)
 
 def decode.plane(+nn: U32) -> Array<U32>:
   Array.new(U32, decode.depth(nn), 0)
