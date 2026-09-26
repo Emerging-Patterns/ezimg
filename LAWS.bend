@@ -3378,3 +3378,20 @@ law jpeg_scan_some:
     Nat}
   {jpg.psome(Jpeg.decode.run(jpg.enc.frame(ww, hh), jpg.enc.scan(), jpg.enc.tabs(), Jenc.encode.pad(jpg.feed(
     jpg.tbits(tt <> rest), Jenc.encode.put0())), 0)) == True{} : Bool}
+
+# ---- wp14-jpeg-encoder ----
+
+# LAW: for every well-formed raster with both sides from 1 to 65535, decode_jpeg of encode_jpeg's bytes is some
+# raster. Every path of encode.arm (neutral, solid, encode.go) writes, through the encoder's bit writer, three blocks
+# per MCU that the decoder reads whole (each DC clipped to T.81's 8-bit range, so its difference has at most 11
+# bits), and the MCU count times 3 is decode.nblocks of the encoder's frame with no U32 wrap, so jpeg_scan_some
+# applies. With jpeg_round_trip_sized (a raster of r's size) and jpeg_decode_opaque (alpha 255) this is IMG-JPG-3
+# IMG-JPG-3
+law jpeg_round_trip_some:
+  for +ww: U32
+  for +hh: U32
+  for +px: List<&2, U32>
+  for +h_good: {Png.enc.good(ww, hh, px) == True{} : Bool}
+  for +h_w: {U32.is_le(ww, 65535) == True{} : Bool}
+  for +h_h: {U32.is_le(hh, 65535) == True{} : Bool}
+  {Maybe.is_some(&2, Img.Raster, jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px}))) == True{} : Bool}
