@@ -5703,3 +5703,6 @@ def Laws.jpeg_huff_dc(pre, h_pre, sy, h_sy, post, h_post):
 
 def Laws.jpeg_huff_ac(pre, h_pre, sy, h_sy, post, h_post):
   W12.huff_law.ac(pre, h_pre, sy, h_sy, post, h_post)
+
+def Laws.jpeg_scan_some(tt, rest, ww, hh, h_w, h_h, h_wf, h_n):
+  W12.scan_some(tt, rest, ww, hh, h_w, h_h, h_wf, h_n)

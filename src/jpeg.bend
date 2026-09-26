@@ -642,7 +642,7 @@ def decode.ac.run.b(zzz: Bool, over: Bool, +sz: U32, +nk: U32, bits: Bits, zz: L
           decode.ac.store(decode.read.n(sz, bits), sz, nk, zz, ok)
 
 def decode.ac.run(+sym: U32, bits: Bits, +kk: U32, zz: List<&2, U32>, +ok: U32) -> Ac:
-  +sz = U32.and(sym, 15)
+  +sz = U32.and(15, sym)
   +nk = (kk + U32.shrn(sym, 4n) : U32)
   decode.ac.run.b(U32.is_eq(sz, 0), U32.is_ge(nk, 64), sz, nk, bits, zz, ok)
 
@@ -663,14 +663,24 @@ def decode.ac.zrl.k(more: Bool, +nk: U32, zz: List<&2, U32>, bits: Bits, +ok: U3
 def decode.ac.zrl(+kk: U32, zz: List<&2, U32>, bits: Bits, +ok: U32) -> Ac:
   decode.ac.zrl.k(U32.is_lt((kk + 16 : U32), 64), (kk + 16 : U32), zz, bits, ok)
 
-def decode.ac.sym(+sym: U32, bits: Bits, +kk: U32, zz: List<&2, U32>, +ok: U32) -> Ac:
-  match sym:
-    case 0:
+# an AC symbol: EOB (0), ZRL (240), or a run and size. U32.is_eq, not literal patterns, so a law reaches a
+# symbolic symbol.
+def decode.ac.sym.b(eob: Bool, zrl: Bool, +sym: U32, bits: Bits, +kk: U32, zz: List<&2, U32>, +ok: U32) -> Ac:
+  match eob:
+    case True{}:
+      +_s = sym
+      +_z = zrl
       Ac{kk, zz, bits, 1, ok}
-    case 240:
-      decode.ac.zrl(kk, zz, bits, ok)
-    case _:
-      decode.ac.run(sym, bits, kk, zz, ok)
+    case False{}:
+      match zrl:
+        case True{}:
+          +_s = sym
+          decode.ac.zrl(kk, zz, bits, ok)
+        case False{}:
+          decode.ac.run(sym, bits, kk, zz, ok)
+
+def decode.ac.sym(+sym: U32, bits: Bits, +kk: U32, zz: List<&2, U32>, +ok: U32) -> Ac:
+  decode.ac.sym.b(U32.is_eq(sym, 0), U32.is_eq(sym, 240), sym, bits, kk, zz, ok)
 
 def decode.ac.step(hit: Hit, +kk: U32, zz: List<&2, U32>, +ok: U32) -> Ac:
   match hit:
