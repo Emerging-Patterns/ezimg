@@ -8,10 +8,13 @@
     url = "github:bendlang/bend/777ee0b55c485afdd7e68bd917b3d23a88d77371";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  # ez and its bolt stay on the bend ez's own flake.lock records until ez
+  # releases on 2.0.34, so ez's inputs.bend is pinned, not followed. The
+  # package's own builds and its proofs (checks.proofs) run on 2.0.34.
   inputs.ez = {
     url = "github:Emerging-Patterns/ez";
     inputs.nixpkgs.follows = "nixpkgs";
-    inputs.bend.follows = "bend";
+    inputs.bend.url = "github:bendlang/bend/af569d4826913b2ce3557e9829ccad31fcf86f94";
   };
 
   outputs = { self, nixpkgs, ... }@inputs:
