@@ -1156,9 +1156,9 @@ def dvm(
   +hb0: {Nat.is_lt(0n, U32.to_nat(bu)) == True{} : Bool},
   +hb2: {Nat.is_le(Nat.add(U32.to_nat(bu), U32.to_nat(bu)), U32.to_nat(tu)) == True{} : Bool}
 ) -> dvm.ty(nu, bu):
-  match nu:
-    case U32{+aw}:
-      dvm.at(U32.is_zero(bu), aw, bu, tu, {==}, hb0, hb2)
+  match nu bu:
+    case U32{+aw} U32{+bw}:
+      dvm.at(U32.is_zero(U32{bw}), aw, U32{bw}, tu, {==}, hb0, hb2)
 
 # ---- E. adding without a carry out, and the block count ----
 

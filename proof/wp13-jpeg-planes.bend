@@ -92,83 +92,88 @@ def size_eq(tt: Tr) -> {Array.size(U32, arr(tt)) == (arr(tt), size(tt)) : Array<
       %ee : {Array.size.node(U32, arr(hi), _) == (ANode{arr(lo), arr(hi)}, U32.shl(size(lo))) : Array<U32> & U32}
       {==}
 
-# a read's step at a node: the half the index falls in, the other half kept
+# a read's tree walk, as get_eq says it: the half is the one the index falls in
+def GetHalf(+tt: Tr, +nn: U32, +ii: U32) -> Type:
+  {Array.get.go(U32, arr(tt), nn, ii, U32.is_lt(ii, U32.shr(nn))) == (arr(tt), get(tt, nn, ii)) : Array<U32> & U32}
+
+# a read's step at a node: the half zz picks read, the other half kept
 def get_if(
   +lo: Tr,
   +hi: Tr,
-  +hh: U32,
+  +nn: U32,
   +ii: U32,
   zz: Bool,
-  +el: {Array.get.go(U32, arr(lo), hh, ii) == (arr(lo), get(lo, hh, ii)) : Array<U32> & U32},
-  +eh: {Array.get.go(U32, arr(hi), hh, U32.sub(ii, hh)) == (arr(hi), get(hi, hh, U32.sub(ii, hh))) : Array<U32> & U32}
-) -> {Array.get.if(U32, arr(lo), arr(hi), hh, ii, zz) == (ANode{arr(lo), arr(hi)}, Bool.pick(U32, zz, get(lo, hh, ii),
-  get(hi, hh, U32.sub(ii, hh)))) : Array<U32> & U32}:
+  el: GetHalf(lo, U32.shr(nn), ii),
+  eh: GetHalf(hi, U32.shr(nn), U32.sub(ii, U32.shr(nn)))
+) -> {Array.get.go(U32, ANode{arr(lo), arr(hi)}, nn, ii, zz) == (ANode{arr(lo), arr(hi)}, Bool.pick(U32, zz, get(lo,
+  U32.shr(nn), ii), get(hi, U32.shr(nn), U32.sub(ii, U32.shr(nn))))) : Array<U32> & U32}:
   match zz:
     case True{}:
-      sl = Equal.sym(Array<U32> & U32, Array.get.go(U32, arr(lo), hh, ii), (arr(lo), get(lo, hh, ii)), el)
+      +hh = U32.shr(nn)
+      sl = Equal.sym(Array<U32> & U32, Array.get.go(U32, arr(lo), hh, ii, U32.is_lt(ii, U32.shr(hh))), (arr(lo),
+        get(lo, hh, ii)), el)
       %sl : {Array.swap.lo(U32, arr(hi), _) == (ANode{arr(lo), arr(hi)}, get(lo, hh, ii)) : Array<U32> & U32}
       {==}
     case False{}:
-      sh = Equal.sym(Array<U32> & U32, Array.get.go(U32, arr(hi), hh, U32.sub(ii, hh)), (arr(hi), get(hi, hh,
-        U32.sub(ii, hh))), eh)
-      %sh : {Array.swap.hi(U32, arr(lo), _) == (ANode{arr(lo), arr(hi)}, get(hi, hh, U32.sub(ii, hh))) :
-        Array<U32> & U32}
+      +hh = U32.shr(nn)
+      +jj = U32.sub(ii, hh)
+      sh = Equal.sym(Array<U32> & U32, Array.get.go(U32, arr(hi), hh, jj, U32.is_lt(jj, U32.shr(hh))), (arr(hi),
+        get(hi, hh, jj)), eh)
+      %sh : {Array.swap.hi(U32, arr(lo), _) == (ANode{arr(lo), arr(hi)}, get(hi, hh, jj)) : Array<U32> & U32}
       {==}
 
 # a read's tree walk hands the array back with the value the tree walk finds
-def get_eq(+tt: Tr, +nn: U32, +ii: U32) -> {Array.get.go(U32, arr(tt), nn, ii) == (arr(tt), get(tt, nn, ii)) :
-  Array<U32> & U32}:
+def get_eq(+tt: Tr, +nn: U32, +ii: U32) -> GetHalf(tt, nn, ii):
   match tt:
     case TLeaf{_xx}:
       {==}
     case TNode{lo, hi}:
       +hh = U32.shr(nn)
-      get_if(lo, hi, hh, ii, U32.is_lt(ii, hh), get_eq(lo, hh, ii), get_eq(hi, hh, U32.sub(ii, hh)))
+      get_if(lo, hi, nn, ii, U32.is_lt(ii, hh), get_eq(lo, hh, ii), get_eq(hi, hh, U32.sub(ii, hh)))
 
-# a write's tree walk, as swap_eq says it
-def SwapHalf(+tt: Tr, +hh: U32, +ii: U32, +vv: U32) -> Type:
-  {Array.swap.go(U32, arr(tt), hh, ii, vv) == (arr(put(tt, hh, ii, vv)), get(tt, hh, ii)) : Array<U32> & U32}
+# a write's tree walk, as swap_eq says it: the half is the one the index falls in
+def SwapHalf(+tt: Tr, +nn: U32, +ii: U32, +vv: U32) -> Type:
+  {Array.swap.go(U32, arr(tt), nn, ii, vv, U32.is_lt(ii, U32.shr(nn))) == (arr(put(tt, nn, ii, vv)), get(tt, nn, ii)) :
+    Array<U32> & U32}
 
-# a write's step at a node: the half the index falls in written, the other half kept
+# a write's step at a node: the half zz picks written, the other half kept
 def swap_if(
   +lo: Tr,
   +hi: Tr,
-  +hh: U32,
+  +nn: U32,
   +ii: U32,
   +vv: U32,
   zz: Bool,
-  el: SwapHalf(lo, hh, ii, vv),
-  eh: SwapHalf(hi, hh, U32.sub(ii, hh), vv)
-) -> {Array.swap.if(U32, arr(lo), arr(hi), hh, ii, vv, zz) == (arr(put.if(zz, lo, hi, put(lo, hh, ii, vv), put(hi, hh,
-  U32.sub(ii, hh), vv))), Bool.pick(U32, zz, get(lo, hh, ii), get(hi, hh, U32.sub(ii, hh)))) :
-  Array<U32> & U32}:
+  el: SwapHalf(lo, U32.shr(nn), ii, vv),
+  eh: SwapHalf(hi, U32.shr(nn), U32.sub(ii, U32.shr(nn)), vv)
+) -> {Array.swap.go(U32, ANode{arr(lo), arr(hi)}, nn, ii, vv, zz) == (arr(put.if(zz, lo, hi, put(lo, U32.shr(nn), ii,
+  vv), put(hi, U32.shr(nn), U32.sub(ii, U32.shr(nn)), vv))), Bool.pick(U32, zz, get(lo, U32.shr(nn), ii), get(hi,
+  U32.shr(nn), U32.sub(ii, U32.shr(nn))))) : Array<U32> & U32}:
   match zz:
     case True{}:
-      sl = Equal.sym(Array<U32> & U32, Array.swap.go(U32, arr(lo), hh, ii, vv), (arr(put(lo, hh, ii, vv)), get(lo, hh,
-        ii)), el)
+      +hh = U32.shr(nn)
+      sl = Equal.sym(Array<U32> & U32, Array.swap.go(U32, arr(lo), hh, ii, vv, U32.is_lt(ii, U32.shr(hh))),
+        (arr(put(lo, hh, ii, vv)), get(lo, hh, ii)), el)
       %sl : {Array.swap.lo(U32, arr(hi), _) == (ANode{arr(put(lo, hh, ii, vv)), arr(hi)}, get(lo, hh, ii)) :
         Array<U32> & U32}
       {==}
     case False{}:
-      sh = Equal.sym(Array<U32> & U32, Array.swap.go(U32, arr(hi), hh, U32.sub(ii, hh), vv), (arr(put(hi, hh,
-        U32.sub(ii, hh), vv)), get(hi, hh, U32.sub(ii, hh))), eh)
-      %sh : {Array.swap.hi(U32, arr(lo), _) == (ANode{arr(lo), arr(put(hi, hh, U32.sub(ii, hh), vv))}, get(hi, hh,
-        U32.sub(ii, hh))) : Array<U32> & U32}
+      +hh = U32.shr(nn)
+      +jj = U32.sub(ii, hh)
+      sh = Equal.sym(Array<U32> & U32, Array.swap.go(U32, arr(hi), hh, jj, vv, U32.is_lt(jj, U32.shr(hh))),
+        (arr(put(hi, hh, jj, vv)), get(hi, hh, jj)), eh)
+      %sh : {Array.swap.hi(U32, arr(lo), _) == (ANode{arr(lo), arr(put(hi, hh, jj, vv))}, get(hi, hh, jj)) :
+        Array<U32> & U32}
       {==}
 
 # a write's tree walk leaves the array of the tree put leaves, and hands back the value get finds
-def swap_eq(
-  +tt: Tr,
-  +nn: U32,
-  +ii: U32,
-  +vv: U32
-) -> {Array.swap.go(U32, arr(tt), nn, ii, vv) == (arr(put(tt, nn, ii, vv)), get(tt, nn, ii)) : Array<U32> & U32}:
+def swap_eq(+tt: Tr, +nn: U32, +ii: U32, +vv: U32) -> SwapHalf(tt, nn, ii, vv):
   match tt:
     case TLeaf{_xx}:
       {==}
     case TNode{lo, hi}:
       +hh = U32.shr(nn)
-      swap_if(lo, hi, hh, ii, vv, U32.is_lt(ii, hh), swap_eq(lo, hh, ii, vv), swap_eq(hi, hh, U32.sub(ii, hh), vv))
+      swap_if(lo, hi, nn, ii, vv, U32.is_lt(ii, hh), swap_eq(lo, hh, ii, vv), swap_eq(hi, hh, U32.sub(ii, hh), vv))
 
 # the index Array.get and Array.set walk to: the index masked by the size less one
 def mask(+ii: U32, +nn: U32) -> U32:
@@ -188,8 +193,9 @@ def set(+tt: Tr, +ii: U32, +vv: U32) -> Tr:
 # Array.set of a tree's array is the array of the tree set leaves
 def set_arr(+tt: Tr, +ii: U32, +vv: U32) -> {Array.set(U32, arr(tt), ii, vv) == arr(set(tt, ii, vv)) : Array<U32>}:
   ss = Equal.sym(Array<U32> & U32, Array.size(U32, arr(tt)), (arr(tt), size(tt)), size_eq(tt))
-  sw = Equal.sym(Array<U32> & U32, Array.swap.go(U32, arr(tt), size(tt), mask(ii, size(tt)), vv), (arr(set(tt, ii,
-    vv)), get(tt, size(tt), mask(ii, size(tt)))), swap_eq(tt, size(tt), mask(ii, size(tt)), vv))
+  +mm = mask(ii, size(tt))
+  sw = Equal.sym(Array<U32> & U32, Array.swap.go(U32, arr(tt), size(tt), mm, vv, U32.is_lt(mm, U32.shr(size(tt)))),
+    (arr(set(tt, ii, vv)), get(tt, size(tt), mm)), swap_eq(tt, size(tt), mm, vv))
   %ss : {Array.set.fin(U32, Array.swap.at(U32, ii, vv, _)) == arr(set(tt, ii, vv)) : Array<U32>}
   %sw : {Array.set.fin(U32, _) == arr(set(tt, ii, vv)) : Array<U32>}
   {==}
@@ -2034,147 +2040,6 @@ def half_le(+bb: Bool, +xx: Nat) -> {Nat.is_le(xx, Nat.add(R.bit(bb), Nat.double
         Nat.double(xx), Nat.add(xx, xx), R.double_add(xx)), R.le_add_more(xx, xx, xx, R.le_refl(xx))),
         R.le_succ(Nat.double(xx)))
 
-# a U32's shr is at most it
-def shr_le(+uu: U32) -> {Nat.is_le(U32.to_nat(U32.shr(uu)), U32.to_nat(uu)) == True{} : Bool}:
-  R.le_rw_r(U32.to_nat(U32.shr(uu)), Nat.add(R.bit(lowb(uu)), Nat.double(U32.to_nat(U32.shr(uu)))), U32.to_nat(uu),
-    Equal.sym(Nat, U32.to_nat(uu), Nat.add(R.bit(lowb(uu)), Nat.double(U32.to_nat(U32.shr(uu)))), shr_split(uu)),
-    half_le(lowb(uu), U32.to_nat(U32.shr(uu))))
-
-# the log2 walk never takes its count down
-def go_ge(+kk: Nat, +nn: U32, +dd: Nat) -> {Nat.is_le(dd, U32.log2.go(kk, nn, dd)) == True{} : Bool}:
-  match kk:
-    case 0n:
-      R.le_refl(dd)
-    case 1n+pp:
-      +d1 = Nat.add(dd, U32.to_nat(Bool.to_u32(U32.is_lt(1, nn))))
-      R.le_trans(dd, d1, U32.log2.go(pp, U32.shr(nn), d1), R.le_add_more(dd, dd, U32.to_nat(Bool.to_u32(U32.is_lt(1,
-        nn))), R.le_refl(dd)), go_ge(pp, U32.shr(nn), d1))
-
-# a number at least 2^(i+1) is above one
-def two_le(
-  +nn: U32,
-  +ii: Nat,
-  +hh: {Nat.is_le(Nat.pow(2n, 1n+ii), U32.to_nat(nn)) == True{} : Bool}
-) -> {U32.is_lt(1, nn) == True{} : Bool}:
-  +p2 = {R.lt_rw_r(1n, Nat.double(Nat.pow(2n, ii)), Nat.pow(2n, 1n+ii), Equal.sym(Nat, Nat.pow(2n, 1n+ii),
-    Nat.double(Nat.pow(2n, ii)), R.pow2_succ(ii)), dbl_pos(Nat.pow(2n, ii), pow_pos(ii))) : {Nat.is_lt(1n,
-    Nat.pow(2n, 1n+ii)) == True{} : Bool}}
-  Equal.trans(Bool, U32.is_lt(1, nn), Nat.is_lt(1n, U32.to_nat(nn)), True{}, R.u32_lt(1, nn), R.lt_le_trans(1n,
-    Nat.pow(2n, 1n+ii), U32.to_nat(nn), p2, hh))
-
-# the log2 walk counts at least j halvings of a number at least 2^j, when it walks at least j steps
-def le2(
-  +kk: Nat,
-  +jj: Nat,
-  +nn: U32,
-  +dd: Nat,
-  +hk: {Nat.is_le(jj, kk) == True{} : Bool},
-  +hn: {Nat.is_le(Nat.pow(2n, jj), U32.to_nat(nn)) == True{} : Bool}
-) -> {Nat.is_le(Nat.add(dd, jj), U32.log2.go(kk, nn, dd)) == True{} : Bool}:
-  match kk jj:
-    case _kk 0n:
-      R.le_rw_l(dd, Nat.add(dd, 0n), U32.log2.go(kk, nn, dd), Equal.sym(Nat, Nat.add(dd, 0n), dd, R.add_zero(dd)),
-        go_ge(kk, nn, dd))
-    case 0n 1n+ii:
-      Empty.absurd({Nat.is_le(Nat.add(dd, 1n+ii), dd) == True{} : Bool}, U32L.false_true(hk))
-    case 1n+pp 1n+ii:
-      +sh = U32.shr(nn)
-      +pw = Nat.pow(2n, ii)
-      +el = {Equal.cong(Bool, Nat, bb => U32.log2.go(pp, sh, Nat.add(dd, U32.to_nat(Bool.to_u32(bb)))), U32.is_lt(1,
-        nn), True{}, two_le(nn, ii, hn)) : {U32.log2.go(pp, sh, Nat.add(dd, U32.to_nat(Bool.to_u32(U32.is_lt(1, nn)))))
-        == U32.log2.go(pp, sh, Nat.add(dd, 1n)) : Nat}}
-      +h2 = {R.le_rw_r(Nat.double(pw), U32.to_nat(nn), Nat.add(R.bit(lowb(nn)), Nat.double(U32.to_nat(sh))),
-        shr_split(nn), R.le_rw_l(Nat.pow(2n, 1n+ii), Nat.double(pw), U32.to_nat(nn), R.pow2_succ(ii), hn)) :
-        {Nat.is_le(Nat.double(pw), Nat.add(R.bit(lowb(nn)), Nat.double(U32.to_nat(sh)))) == True{} : Bool}}
-      +ih = {le2(pp, ii, sh, Nat.add(dd, 1n), hk, R.le_half(lowb(nn), pw, U32.to_nat(sh), h2)) :
-        {Nat.is_le(Nat.add(Nat.add(dd, 1n), ii), U32.log2.go(pp, sh, Nat.add(dd, 1n))) == True{} : Bool}}
-      +ea = {Equal.trans(Nat, Nat.add(Nat.add(dd, 1n), ii), Nat.add(dd, Nat.add(1n, ii)), Nat.add(dd, 1n+ii),
-        R.add_assoc(dd, 1n, ii), {==}) : {Nat.add(Nat.add(dd, 1n), ii) == Nat.add(dd, 1n+ii) : Nat}}
-      R.le_rw_l(Nat.add(Nat.add(dd, 1n), ii), Nat.add(dd, 1n+ii), U32.log2.go(1n+pp, nn, dd), ea,
-        R.le_rw_r(Nat.add(Nat.add(dd,
-        1n), ii), U32.log2.go(pp, sh, Nat.add(dd, 1n)), U32.log2.go(1n+pp, nn, dd), Equal.sym(Nat,
-        U32.log2.go(1n+pp, nn, dd), U32.log2.go(pp, sh, Nat.add(dd, 1n)), el), ih))
-
-# the bound the log2 walk's next step needs: halved below 2^(1+i) when not above one, below 2^i when above
-def le1_hyp(
-  zz: Bool,
-  +ii: Nat,
-  +nn: U32,
-  +ez: {U32.is_lt(1, nn) == zz : Bool},
-  +hn: {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, 1n+ii)) == True{} : Bool}
-) -> {Nat.is_lt(U32.to_nat(U32.shr(nn)), Nat.pow(2n, 1n+Bool.pick(Nat, zz, pred(ii), ii))) == True{} : Bool}:
-  match zz ii:
-    case False{} _ii:
-      R.le_lt_trans(U32.to_nat(U32.shr(nn)), U32.to_nat(nn), Nat.pow(2n, 1n+ii), shr_le(nn), hn)
-    case True{} 0n:
-      +h1 = {Equal.trans(Bool, Nat.is_lt(1n, U32.to_nat(nn)), U32.is_lt(1, nn), True{}, Equal.sym(Bool, U32.is_lt(1,
-        nn),
-        Nat.is_lt(1n, U32.to_nat(nn)), R.u32_lt(1, nn)), ez) : {Nat.is_lt(1n, U32.to_nat(nn)) == True{} : Bool}}
-      +h2 = {Equal.trans(Bool, Nat.is_le(2n, U32.to_nat(nn)), Nat.is_lt(1n, U32.to_nat(nn)), True{}, Equal.sym(Bool,
-        Nat.is_lt(1n, U32.to_nat(nn)), Nat.is_le(2n, U32.to_nat(nn)), R.lt_le_succ(1n, U32.to_nat(nn))), h1) :
-        {Nat.is_le(2n, U32.to_nat(nn)) == True{} : Bool}}
-      Empty.absurd({Nat.is_lt(U32.to_nat(U32.shr(nn)), Nat.pow(2n, 1n+Bool.pick(Nat, True{}, pred(0n), 0n))) == True{} :
-        Bool}, U32L.false_true(Equal.trans(Bool, False{}, Nat.is_lt(2n, 2n), True{}, {==}, R.le_lt_trans(2n,
-        U32.to_nat(nn), 2n, h2, hn))))
-    case True{} 1n+jj:
-      +sh = U32.to_nat(U32.shr(nn))
-      +pw = Nat.pow(2n, 1n+jj)
-      +h2 = {R.lt_rw_r(Nat.add(R.bit(lowb(nn)), Nat.double(sh)), Nat.pow(2n, 2n+jj), Nat.double(pw), R.pow2_succ(1n+jj),
-        R.lt_rw_l(U32.to_nat(nn), Nat.add(R.bit(lowb(nn)), Nat.double(sh)), Nat.pow(2n, 2n+jj), shr_split(nn), hn)) :
-        {Nat.is_lt(Nat.add(R.bit(lowb(nn)), Nat.double(sh)), Nat.double(pw)) == True{} : Bool}}
-      R.lt_half(lowb(nn), sh, pw, h2)
-
-# a number above one and below 2^(1+i): i is not zero
-def two_pos(
-  +nn: U32,
-  +h1: {U32.is_lt(1, nn) == True{} : Bool},
-  +hn: {Nat.is_lt(U32.to_nat(nn), 2n) == True{} : Bool}
-) -> Empty:
-  +h2 = {Equal.trans(Bool, Nat.is_le(2n, U32.to_nat(nn)), Nat.is_lt(1n, U32.to_nat(nn)), True{}, Equal.sym(Bool,
-    Nat.is_lt(1n, U32.to_nat(nn)), Nat.is_le(2n, U32.to_nat(nn)), R.lt_le_succ(1n, U32.to_nat(nn))), Equal.trans(Bool,
-    Nat.is_lt(1n, U32.to_nat(nn)), U32.is_lt(1, nn), True{}, Equal.sym(Bool, U32.is_lt(1, nn), Nat.is_lt(1n,
-    U32.to_nat(nn)), R.u32_lt(1, nn)), h1)) : {Nat.is_le(2n, U32.to_nat(nn)) == True{} : Bool}}
-  U32L.false_true(Equal.trans(Bool, False{}, Nat.is_lt(2n, 2n), True{}, {==}, R.le_lt_trans(2n, U32.to_nat(nn), 2n, h2,
-    hn)))
-
-# the count and bound after the log2 walk's step fit the bound before it
-def le1_fin(
-  zz: Bool,
-  +ii: Nat,
-  +dd: Nat,
-  +nn: U32,
-  +ez: {U32.is_lt(1, nn) == zz : Bool},
-  +hn: {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, 1n+ii)) == True{} : Bool}
-) -> {Nat.is_le(Nat.add(Nat.add(dd, U32.to_nat(Bool.to_u32(zz))), Bool.pick(Nat, zz, pred(ii), ii)), Nat.add(dd, ii)) ==
-  True{} : Bool}:
-  match zz ii:
-    case False{} _ii:
-      R.le_rw_l(Nat.add(dd, ii), Nat.add(Nat.add(dd, 0n), ii), Nat.add(dd, ii), Equal.cong(Nat, Nat, xx => Nat.add(xx,
-        ii), dd, Nat.add(dd, 0n), Equal.sym(Nat, Nat.add(dd, 0n), dd, R.add_zero(dd))), R.le_refl(Nat.add(dd, ii)))
-    case True{} 0n:
-      Empty.absurd({Nat.is_le(Nat.add(Nat.add(dd, 1n), 0n), Nat.add(dd, 0n)) == True{} : Bool}, two_pos(nn, ez, hn))
-    case True{} 1n+jj:
-      R.le_rw_l(Nat.add(dd, 1n+jj), Nat.add(Nat.add(dd, 1n), jj), Nat.add(dd, 1n+jj), Equal.sym(Nat,
-        Nat.add(Nat.add(dd, 1n), jj), Nat.add(dd, 1n+jj), R.add_assoc(dd, 1n, jj)), R.le_refl(Nat.add(dd, 1n+jj)))
-
-# the log2 walk counts at most i halvings of a number below 2^(1+i)
-def le1(
-  +kk: Nat,
-  +ii: Nat,
-  +nn: U32,
-  +dd: Nat,
-  +hn: {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, 1n+ii)) == True{} : Bool}
-) -> {Nat.is_le(U32.log2.go(kk, nn, dd), Nat.add(dd, ii)) == True{} : Bool}:
-  match kk:
-    case 0n:
-      R.le_add_more(dd, dd, ii, R.le_refl(dd))
-    case 1n+pp:
-      +zz = U32.is_lt(1, nn)
-      +d1 = Nat.add(dd, U32.to_nat(Bool.to_u32(zz)))
-      +i1 = Bool.pick(Nat, zz, pred(ii), ii)
-      R.le_trans(U32.log2.go(pp, U32.shr(nn), d1), Nat.add(d1, i1), Nat.add(dd, ii), le1(pp, i1, U32.shr(nn), d1,
-        le1_hyp(zz, ii, nn, {==}, hn)), le1_fin(zz, ii, dd, nn, {==}, hn))
-
 # doubling keeps an order, at most
 def dbl_le(
   +xx: Nat,
@@ -2264,38 +2129,379 @@ def succ_nle(+xx: Nat) -> {Nat.is_le(1n+xx, xx) == False{} : Bool}:
     case 1n+pp:
       succ_nle(pp)
 
-# not at most is above
-def nle_lt(+aa: Nat, +bb: Nat, +hh: {Nat.is_le(aa, bb) == False{} : Bool}) -> {Nat.is_lt(bb, aa) == True{} : Bool}:
-  match aa bb:
-    case 0n _bb:
-      Empty.absurd({Nat.is_lt(bb, 0n) == True{} : Bool}, U32L.false_true(Equal.trans(Bool, False{}, Nat.is_le(0n, bb),
-        True{}, Equal.sym(Bool, Nat.is_le(0n, bb), False{}, hh), R.le_zero(bb))))
-    case 1n+_pp 0n:
-      {==}
-    case 1n+pp 1n+qq:
-      nle_lt(pp, qq, hh)
-
 # a walk count at most 31 is below 32
 def lt32(+dd: Nat, +hh: {Nat.is_le(dd, 31n) == True{} : Bool}) -> {Nat.is_lt(dd, 32n) == True{} : Bool}:
   Equal.trans(Bool, Nat.is_lt(dd, 32n), Nat.is_le(1n+dd, 32n), True{}, R.lt_le_succ(dd, 32n), hh)
 
-# a number is below 2^(1 + its log2), when the log2 is below 32
-def dep_up(
+# a number above zero is below its double
+def lt_dbl(+xx: Nat, +hh: {Nat.is_lt(0n, xx) == True{} : Bool}) -> {Nat.is_lt(xx, Nat.double(xx)) == True{} : Bool}:
+  R.lt_rw_l(Nat.add(xx, 0n), xx, Nat.double(xx), R.add_zero(xx), R.lt_rw_r(Nat.add(xx, 0n), Nat.add(xx, xx),
+    Nat.double(xx), Equal.sym(Nat, Nat.double(xx), Nat.add(xx, xx), R.double_add(xx)), R.lt_add_mono(xx, 0n, xx, hh)))
+
+# one more than twice a number below yy is below twice yy
+def lt_bd1(
+  +xx: Nat,
+  +yy: Nat,
+  +hh: {Nat.is_lt(xx, yy) == True{} : Bool}
+) -> {Nat.is_lt(1n+Nat.double(xx), Nat.double(yy)) == True{} : Bool}:
+  match xx yy:
+    case _xx 0n:
+      Empty.absurd({Nat.is_lt(1n+Nat.double(xx), 0n) == True{} : Bool}, U32L.false_true(Equal.trans(Bool, False{},
+        Nat.is_lt(xx, 0n), True{}, R.lt_zero_false(xx), hh)))
+    case 0n 1n+_qq:
+      {==}
+    case 1n+pp 1n+qq:
+      lt_bd1(pp, qq, hh)
+
+# the bit a U32 shr drops, plus twice a number below yy, is below twice yy
+def lt_bd(
+  +cc: Bool,
+  +xx: Nat,
+  +yy: Nat,
+  +hh: {Nat.is_lt(xx, yy) == True{} : Bool}
+) -> {Nat.is_lt(Nat.add(R.bit(cc), Nat.double(xx)), Nat.double(yy)) == True{} : Bool}:
+  match cc:
+    case False{}:
+      dbl_lt(xx, yy, hh)
+    case True{}:
+      lt_bd1(xx, yy, hh)
+
+# a U32 shifted right s times below 2^c: the U32 is below 2^(s + c)
+def shrn_up(
+  +ss: Nat,
+  +uu: U32,
+  +cc: Nat,
+  +hh: {Nat.is_lt(U32.to_nat(U32.shrn(uu, ss)), Nat.pow(2n, cc)) == True{} : Bool}
+) -> {Nat.is_lt(U32.to_nat(uu), Nat.pow(2n, Nat.add(ss, cc))) == True{} : Bool}:
+  match ss:
+    case 0n:
+      hh
+    case 1n+qq:
+      +vv = U32.shrn(uu, qq)
+      +sv = Nat.add(R.bit(lowb(vv)), Nat.double(U32.to_nat(U32.shr(vv))))
+      +h1 = {R.lt_rw_l(sv, U32.to_nat(vv), Nat.pow(2n, 1n+cc), Equal.sym(Nat, U32.to_nat(vv), sv, shr_split(vv)),
+        R.lt_rw_r(sv, Nat.double(Nat.pow(2n, cc)), Nat.pow(2n, 1n+cc), Equal.sym(Nat, Nat.pow(2n, 1n+cc),
+        Nat.double(Nat.pow(2n, cc)), R.pow2_succ(cc)), lt_bd(lowb(vv), U32.to_nat(U32.shr(vv)), Nat.pow(2n, cc),
+        hh))) : {Nat.is_lt(U32.to_nat(vv), Nat.pow(2n, 1n+cc)) == True{} : Bool}}
+      R.lt_rw_r(U32.to_nat(uu), Nat.pow(2n, Nat.add(qq, 1n+cc)), Nat.pow(2n, 1n+Nat.add(qq, cc)), Equal.cong(Nat, Nat,
+        xx => Nat.pow(2n, xx), Nat.add(qq, 1n+cc), 1n+Nat.add(qq, cc), R.add_succ(qq, cc)), shrn_up(qq, uu, 1n+cc, h1))
+
+# a U32 below 2^(s + c), shifted right s times, is below 2^c
+def shrn_dn(
+  +ss: Nat,
+  +uu: U32,
+  +cc: Nat,
+  +hh: {Nat.is_lt(U32.to_nat(uu), Nat.pow(2n, Nat.add(ss, cc))) == True{} : Bool}
+) -> {Nat.is_lt(U32.to_nat(U32.shrn(uu, ss)), Nat.pow(2n, cc)) == True{} : Bool}:
+  match ss:
+    case 0n:
+      hh
+    case 1n+qq:
+      +vv = U32.shrn(uu, qq)
+      +sv = Nat.add(R.bit(lowb(vv)), Nat.double(U32.to_nat(U32.shr(vv))))
+      +h0 = {R.lt_rw_r(U32.to_nat(uu), Nat.pow(2n, 1n+Nat.add(qq, cc)), Nat.pow(2n, Nat.add(qq, 1n+cc)), Equal.cong(Nat,
+        Nat, xx => Nat.pow(2n, xx), 1n+Nat.add(qq, cc), Nat.add(qq, 1n+cc), Equal.sym(Nat, Nat.add(qq, 1n+cc),
+        1n+Nat.add(qq, cc), R.add_succ(qq, cc))), hh) : {Nat.is_lt(U32.to_nat(uu), Nat.pow(2n, Nat.add(qq, 1n+cc))) ==
+        True{} : Bool}}
+      +h1 = {shrn_dn(qq, uu, 1n+cc, h0) : {Nat.is_lt(U32.to_nat(vv), Nat.pow(2n, 1n+cc)) == True{} : Bool}}
+      R.lt_half(lowb(vv), U32.to_nat(U32.shr(vv)), Nat.pow(2n, cc), R.lt_rw_r(sv, Nat.pow(2n, 1n+cc),
+        Nat.double(Nat.pow(2n, cc)), R.pow2_succ(cc), R.lt_rw_l(U32.to_nat(vv), sv, Nat.pow(2n, 1n+cc), shr_split(vv),
+        h1)))
+
+# a number not equal to zero is above zero
+def nz_lt(+nn: Nat, +hh: {Bool.not(Nat.is_eq(nn, 0n)) == True{} : Bool}) -> {Nat.is_lt(0n, nn) == True{} : Bool}:
+  match nn:
+    case 0n:
+      Empty.absurd({Nat.is_lt(0n, 0n) == True{} : Bool}, U32L.false_true(hh))
+    case 1n+_pp:
+      {==}
+
+# a U32 not equal to zero is above zero
+def ne_pos(+xx: U32, +hh: {U32.is_ne(xx, 0) == True{} : Bool}) -> {Nat.is_lt(0n, U32.to_nat(xx)) == True{} : Bool}:
+  nz_lt(U32.to_nat(xx), Equal.trans(Bool, Bool.not(Nat.is_eq(U32.to_nat(xx), 0n)), Bool.not(U32.is_eq(xx, 0)), True{},
+    Equal.cong(Bool, Bool, bb => Bool.not(bb), Nat.is_eq(U32.to_nat(xx), 0n), U32.is_eq(xx, 0), Equal.sym(Bool,
+    U32.is_eq(xx, 0), Nat.is_eq(U32.to_nat(xx), 0n), R.u32_eq(xx, 0))), hh))
+
+# a Bool whose not is false is true
+def not_false(+bb: Bool, +hh: {Bool.not(bb) == False{} : Bool}) -> {bb == True{} : Bool}:
+  match bb:
+    case False{}:
+      Empty.absurd({False{} == True{} : Bool}, U32L.false_true(Equal.sym(Bool, True{}, False{}, hh)))
+    case True{}:
+      {==}
+
+# a U32 equal to zero is below one
+def eq_zero(+xx: U32, +hh: {U32.is_ne(xx, 0) == False{} : Bool}) -> {Nat.is_lt(U32.to_nat(xx), 1n) == True{} : Bool}:
+  +he = {Equal.trans(Bool, Bool.not(Nat.is_eq(U32.to_nat(xx), 0n)), Bool.not(U32.is_eq(xx, 0)), False{},
+    Equal.cong(Bool, Bool, bb => Bool.not(bb), Nat.is_eq(U32.to_nat(xx), 0n), U32.is_eq(xx, 0), Equal.sym(Bool,
+    U32.is_eq(xx, 0), Nat.is_eq(U32.to_nat(xx), 0n), R.u32_eq(xx, 0))), hh) : {Bool.not(Nat.is_eq(U32.to_nat(xx), 0n))
+    == False{} : Bool}}
+  R.lt_rw_l(0n, U32.to_nat(xx), 1n, Equal.sym(Nat, U32.to_nat(xx), 0n, R.nat_eq_true(U32.to_nat(xx), 0n, not_false(
+    Nat.is_eq(U32.to_nat(xx), 0n), he))), {==})
+
+# a U32 whose s-fold shift right is not zero is at least 2^s, split on whether it is below 2^s
+def ge_case(
+  ww: Bool,
+  +ss: Nat,
+  +nn: U32,
+  +ew: {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, ss)) == ww : Bool},
+  +ez: {U32.is_ne(U32.shrn(nn, ss), 0) == True{} : Bool}
+) -> {Nat.is_le(Nat.pow(2n, ss), U32.to_nat(nn)) == True{} : Bool}:
+  match ww:
+    case False{}:
+      R.not_lt_le(U32.to_nat(nn), Nat.pow(2n, ss), ew)
+    case True{}:
+      +h0 = {shrn_dn(ss, nn, 0n, R.lt_rw_r(U32.to_nat(nn), Nat.pow(2n, ss), Nat.pow(2n, Nat.add(ss, 0n)),
+        Equal.cong(Nat, Nat, xx => Nat.pow(2n, xx), ss, Nat.add(ss, 0n), Equal.sym(Nat, Nat.add(ss, 0n), ss,
+        R.add_zero(ss))), ew)) : {Nat.is_lt(U32.to_nat(U32.shrn(nn, ss)), 1n) == True{} : Bool}}
+      +h1 = {Equal.trans(Bool, Nat.is_le(1n, U32.to_nat(U32.shrn(nn, ss))), Nat.is_lt(0n, U32.to_nat(U32.shrn(nn,
+        ss))), True{}, Equal.sym(Bool, Nat.is_lt(0n, U32.to_nat(U32.shrn(nn, ss))), Nat.is_le(1n,
+        U32.to_nat(U32.shrn(nn, ss))), R.lt_le_succ(0n, U32.to_nat(U32.shrn(nn, ss)))), ne_pos(U32.shrn(nn, ss), ez)) :
+        {Nat.is_le(1n, U32.to_nat(U32.shrn(nn, ss))) == True{} : Bool}}
+      Empty.absurd({Nat.is_le(Nat.pow(2n, ss), U32.to_nat(nn)) == True{} : Bool}, U32L.false_true(Equal.trans(Bool,
+        False{}, Nat.is_lt(1n, 1n), True{}, {==}, R.le_lt_trans(1n, U32.to_nat(U32.shrn(nn, ss)), 1n, h1, h0))))
+
+# two to a power below two to another: the power is below the other
+def pow_lt_rev(
+  ww: Bool,
+  +aa: Nat,
+  +bb: Nat,
+  +ew: {Nat.is_lt(aa, bb) == ww : Bool},
+  +hh: {Nat.is_lt(Nat.pow(2n, aa), Nat.pow(2n, bb)) == True{} : Bool}
+) -> {Nat.is_lt(aa, bb) == True{} : Bool}:
+  match ww:
+    case True{}:
+      ew
+    case False{}:
+      +hb = {R.le_lt_trans(Nat.pow(2n, bb), Nat.pow(2n, aa), Nat.pow(2n, bb), pow_le(bb, aa, R.not_lt_le(aa, bb, ew)),
+        hh) : {Nat.is_lt(Nat.pow(2n, bb), Nat.pow(2n, bb)) == True{} : Bool}}
+      Empty.absurd({Nat.is_lt(aa, bb) == True{} : Bool}, U32L.false_true(Equal.trans(Bool, False{},
+        Nat.is_lt(Nat.pow(2n, bb), Nat.pow(2n, bb)), True{}, Equal.trans(Bool, False{}, Nat.is_le(1n+Nat.pow(2n, bb),
+        Nat.pow(2n, bb)), Nat.is_lt(Nat.pow(2n, bb), Nat.pow(2n, bb)), Equal.sym(Bool, Nat.is_le(1n+Nat.pow(2n, bb),
+        Nat.pow(2n, bb)), False{}, succ_nle(Nat.pow(2n, bb))), Equal.sym(Bool, Nat.is_lt(Nat.pow(2n, bb), Nat.pow(2n,
+        bb)), Nat.is_le(1n+Nat.pow(2n, bb), Nat.pow(2n, bb)), R.lt_le_succ(Nat.pow(2n, bb), Nat.pow(2n, bb)))), hb)))
+
+# the log2 walk's step width at step p
+def sw(+pp: Nat) -> Nat:
+  U32.to_nat(U32.shln(1, pp))
+
+# a U32 below 2^(1+e) whose shift right by the step width is not zero: the width is at most e
+def sw_le(
+  +pp: Nat,
+  +ee: Nat,
+  +nn: U32,
+  +ez: {U32.is_ne(U32.shrn(nn, sw(pp)), 0) == True{} : Bool},
+  +hn: {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, 1n+ee)) == True{} : Bool}
+) -> {Nat.is_le(sw(pp), ee) == True{} : Bool}:
+  +hp = {R.le_lt_trans(Nat.pow(2n, sw(pp)), U32.to_nat(nn), Nat.pow(2n, 1n+ee), ge_case(Nat.is_lt(U32.to_nat(nn),
+    Nat.pow(2n, sw(pp))), sw(pp), nn, {==}, ez), hn) : {Nat.is_lt(Nat.pow(2n, sw(pp)), Nat.pow(2n, 1n+ee)) == True{} :
+    Bool}}
+  Equal.trans(Bool, Nat.is_le(1n+sw(pp), 1n+ee), Nat.is_lt(sw(pp), 1n+ee), True{}, Equal.sym(Bool, Nat.is_lt(sw(pp),
+    1n+ee), Nat.is_le(1n+sw(pp), 1n+ee), R.lt_le_succ(sw(pp), 1n+ee)), pow_lt_rev(Nat.is_lt(sw(pp), 1n+ee), sw(pp),
+    1n+ee, {==}, hp))
+
+# a number times one
+def mul_one(+ss: Nat) -> {Nat.mul(ss, 1n) == ss : Nat}:
+  Equal.trans(Nat, Nat.mul(ss, 1n), Nat.mul(1n, ss), ss, R.mul_comm(ss, 1n), R.add_zero(ss))
+
+# the width the log2 walk's step shifts by: the step width when the shifted number is not zero, else none
+def mul_pick(+ss: Nat, zz: Bool) -> {Nat.mul(ss, U32.to_nat(Bool.to_u32(zz))) == Bool.pick(Nat, zz, ss, 0n) : Nat}:
+  match zz:
+    case True{}:
+      mul_one(ss)
+    case False{}:
+      R.mul_zero(ss)
+
+# the shift the log2 walk's step takes
+def sp(+pp: Nat, +nn: U32) -> Nat:
+  Bool.pick(Nat, U32.is_ne(U32.shrn(nn, sw(pp)), 0), sw(pp), 0n)
+
+# a step of the log2 walk: shift by the step width, and count it, when the shifted number is not zero
+def go_z(
+  +pp: Nat,
+  +nn: U32,
+  +bb: Nat
+) -> {U32.log2.go(1n+pp, nn, bb) == U32.log2.go(pp, U32.shrn(nn, sp(pp, nn)), Nat.add(bb, sp(pp, nn))) : Nat}:
+  Equal.cong(Nat, Nat, xx => U32.log2.go(pp, U32.shrn(nn, xx), Nat.add(bb, xx)), Nat.mul(sw(pp),
+    U32.to_nat(Bool.to_u32(U32.is_ne(U32.shrn(nn, sw(pp)), 0)))), sp(pp, nn), mul_pick(sw(pp),
+    U32.is_ne(U32.shrn(nn, sw(pp)), 0)))
+
+# the log2 walk adds its count to the count it starts from
+def go_add(+kk: Nat, +nn: U32, +bb: Nat) -> {U32.log2.go(kk, nn, bb) == Nat.add(bb, U32.log2.go(kk, nn, 0n)) : Nat}:
+  match kk:
+    case 0n:
+      Equal.sym(Nat, Nat.add(bb, 0n), bb, R.add_zero(bb))
+    case 1n+pp:
+      +tt = sp(pp, nn)
+      +n1 = U32.shrn(nn, tt)
+      +g0 = U32.log2.go(pp, n1, 0n)
+      +e1 = {Equal.trans(Nat, U32.log2.go(1n+pp, nn, bb), U32.log2.go(pp, n1, Nat.add(bb, tt)), Nat.add(Nat.add(bb, tt),
+        g0), go_z(pp, nn, bb), go_add(pp, n1, Nat.add(bb, tt))) : {U32.log2.go(1n+pp, nn, bb) == Nat.add(Nat.add(bb,
+        tt), g0) : Nat}}
+      +e2 = {Equal.trans(Nat, U32.log2.go(1n+pp, nn, 0n), U32.log2.go(pp, n1, tt), Nat.add(tt, g0), go_z(pp, nn, 0n),
+        go_add(pp, n1, tt)) : {U32.log2.go(1n+pp, nn, 0n) == Nat.add(tt, g0) : Nat}}
+      +g1 = U32.log2.go(1n+pp, nn, 0n)
+      Equal.trans(Nat, U32.log2.go(1n+pp, nn, bb), Nat.add(Nat.add(bb, tt), g0), Nat.add(bb, g1), e1, Equal.trans(Nat,
+        Nat.add(Nat.add(bb, tt), g0), Nat.add(bb, Nat.add(tt, g0)), Nat.add(bb, g1), R.add_assoc(bb, tt, g0),
+        Equal.cong(Nat, Nat, xx => Nat.add(bb, xx), Nat.add(tt, g0), g1, Equal.sym(Nat, g1, Nat.add(tt, g0), e2))))
+
+# the bound the log2 walk's next step needs, for the upper bound: below 2^(1+e) less the shift
+def up_hyp(
   zz: Bool,
-  +mm: U32,
-  +ez: {Nat.is_le(Nat.pow(2n, 1n+U32.log2(mm)), U32.to_nat(mm)) == zz : Bool},
-  +h32: {Nat.is_lt(U32.log2(mm), 32n) == True{} : Bool}
-) -> {Nat.is_lt(U32.to_nat(mm), Nat.pow(2n, 1n+U32.log2(mm))) == True{} : Bool}:
+  +pp: Nat,
+  +ee: Nat,
+  +nn: U32,
+  +ez: {U32.is_ne(U32.shrn(nn, sw(pp)), 0) == zz : Bool},
+  +hn: {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, 1n+ee)) == True{} : Bool}
+) -> {Nat.is_lt(U32.to_nat(U32.shrn(nn, Bool.pick(Nat, zz, sw(pp), 0n))), Nat.pow(2n, 1n+Bool.pick(Nat, zz,
+  Nat.sub(ee, sw(pp)), ee))) == True{} : Bool}:
   match zz:
     case False{}:
-      nle_lt(Nat.pow(2n, 1n+U32.log2(mm)), U32.to_nat(mm), ez)
+      hn
     case True{}:
-      +dd = U32.log2(mm)
-      +hk = {Equal.trans(Bool, Nat.is_le(1n+dd, 32n), Nat.is_lt(dd, 32n), True{}, Equal.sym(Bool, Nat.is_lt(dd, 32n),
-        Nat.is_le(1n+dd, 32n), R.lt_le_succ(dd, 32n)), h32) : {Nat.is_le(1n+dd, 32n) == True{} : Bool}}
-      Empty.absurd({Nat.is_lt(U32.to_nat(mm), Nat.pow(2n, 1n+dd)) == True{} : Bool}, U32L.false_true(Equal.trans(Bool,
-        False{}, Nat.is_le(1n+dd, dd), True{}, Equal.sym(Bool, Nat.is_le(1n+dd, dd), False{}, succ_nle(dd)), le2(32n,
-        1n+dd, mm, 0n, hk, ez))))
+      +ss = sw(pp)
+      +dd = Nat.sub(ee, ss)
+      +ea = {R.add_sub(ss, ee, sw_le(pp, ee, nn, ez, hn)) : {Nat.add(ss, dd) == ee : Nat}}
+      +eb = {Equal.trans(Nat, 1n+ee, 1n+Nat.add(ss, dd), Nat.add(ss, 1n+dd), Equal.cong(Nat, Nat, xx => 1n+xx, ee,
+        Nat.add(ss, dd), Equal.sym(Nat, Nat.add(ss, dd), ee, ea)), Equal.sym(Nat, Nat.add(ss, 1n+dd), 1n+Nat.add(ss,
+        dd), R.add_succ(ss, dd))) : {1n+ee == Nat.add(ss, 1n+dd) : Nat}}
+      shrn_dn(ss, nn, 1n+dd, R.lt_rw_r(U32.to_nat(nn), Nat.pow(2n, 1n+ee), Nat.pow(2n, Nat.add(ss, 1n+dd)),
+        Equal.cong(Nat, Nat, xx => Nat.pow(2n, xx), 1n+ee, Nat.add(ss, 1n+dd), eb), hn))
+
+# the count and bound after the log2 walk's step fit the bound before it
+def up_fin(
+  zz: Bool,
+  +pp: Nat,
+  +ee: Nat,
+  +nn: U32,
+  +bb: Nat,
+  +ez: {U32.is_ne(U32.shrn(nn, sw(pp)), 0) == zz : Bool},
+  +hn: {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, 1n+ee)) == True{} : Bool}
+) -> {Nat.is_le(Nat.add(Nat.add(bb, Bool.pick(Nat, zz, sw(pp), 0n)), Bool.pick(Nat, zz, Nat.sub(ee, sw(pp)), ee)),
+  Nat.add(bb, ee)) == True{} : Bool}:
+  match zz:
+    case False{}:
+      R.le_rw_l(Nat.add(bb, ee), Nat.add(Nat.add(bb, 0n), ee), Nat.add(bb, ee), Equal.cong(Nat, Nat, xx => Nat.add(xx,
+        ee), bb, Nat.add(bb, 0n), Equal.sym(Nat, Nat.add(bb, 0n), bb, R.add_zero(bb))), R.le_refl(Nat.add(bb, ee)))
+    case True{}:
+      +ss = sw(pp)
+      +dd = Nat.sub(ee, ss)
+      +ea = {Equal.trans(Nat, Nat.add(Nat.add(bb, ss), dd), Nat.add(bb, Nat.add(ss, dd)), Nat.add(bb, ee),
+        R.add_assoc(bb, ss, dd), Equal.cong(Nat, Nat, xx => Nat.add(bb, xx), Nat.add(ss, dd), ee, R.add_sub(ss, ee,
+        sw_le(pp, ee, nn, ez, hn)))) : {Nat.add(Nat.add(bb, ss), dd) == Nat.add(bb, ee) : Nat}}
+      R.le_rw_l(Nat.add(bb, ee), Nat.add(Nat.add(bb, ss), dd), Nat.add(bb, ee), Equal.sym(Nat, Nat.add(Nat.add(bb, ss),
+        dd), Nat.add(bb, ee), ea), R.le_refl(Nat.add(bb, ee)))
+
+# the log2 walk counts at most e more of a number below 2^(1+e)
+def up(
+  +kk: Nat,
+  +ee: Nat,
+  +nn: U32,
+  +bb: Nat,
+  +hn: {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, 1n+ee)) == True{} : Bool}
+) -> {Nat.is_le(U32.log2.go(kk, nn, bb), Nat.add(bb, ee)) == True{} : Bool}:
+  match kk:
+    case 0n:
+      R.le_add_more(bb, bb, ee, R.le_refl(bb))
+    case 1n+pp:
+      +zz = U32.is_ne(U32.shrn(nn, sw(pp)), 0)
+      +tt = sp(pp, nn)
+      +e1 = Bool.pick(Nat, zz, Nat.sub(ee, sw(pp)), ee)
+      +ih = {up(pp, e1, U32.shrn(nn, tt), Nat.add(bb, tt), up_hyp(zz, pp, ee, nn, {==}, hn)) :
+        {Nat.is_le(U32.log2.go(pp, U32.shrn(nn, tt), Nat.add(bb, tt)), Nat.add(Nat.add(bb, tt), e1)) == True{} : Bool}}
+      R.le_rw_l(U32.log2.go(pp, U32.shrn(nn, tt), Nat.add(bb, tt)), U32.log2.go(1n+pp, nn, bb), Nat.add(bb, ee),
+        Equal.sym(Nat, U32.log2.go(1n+pp, nn, bb), U32.log2.go(pp, U32.shrn(nn, tt), Nat.add(bb, tt)), go_z(pp, nn,
+        bb)), R.le_trans(U32.log2.go(pp, U32.shrn(nn, tt), Nat.add(bb, tt)), Nat.add(Nat.add(bb, tt), e1),
+        Nat.add(bb, ee), ih, up_fin(zz, pp, ee, nn, bb, {==}, hn)))
+
+# the step width at step p is 2^p, p at most 31
+def sw_pow(+pp: Nat, +hp: {Nat.is_le(pp, 31n) == True{} : Bool}) -> {sw(pp) == Nat.pow(2n, pp) : Nat}:
+  match pp:
+    case 0n:
+      {==}
+    case 1n+qq:
+      +ih = {sw_pow(qq, R.le_trans(qq, 30n, 31n, hp, {==})) : {sw(qq) == Nat.pow(2n, qq) : Nat}}
+      +pw = Nat.pow(2n, qq)
+      +h1 = {R.lt_rw_l(pw, sw(qq), Nat.pow(2n, 1n+qq), Equal.sym(Nat, sw(qq), pw, ih), R.lt_rw_r(pw, Nat.double(pw),
+        Nat.pow(2n, 1n+qq), Equal.sym(Nat, Nat.pow(2n, 1n+qq), Nat.double(pw), R.pow2_succ(qq)), lt_dbl(pw,
+        pow_pos(qq)))) : {Nat.is_lt(sw(qq), Nat.pow(2n, 1n+qq)) == True{} : Bool}}
+      Equal.trans(Nat, U32.to_nat(U32.shl(U32.shln(1, qq))), Nat.double(sw(qq)), Nat.pow(2n, 1n+qq), shl_u(U32.shln(1,
+        qq), 1n+qq, h1, hp), Equal.trans(Nat, Nat.double(sw(qq)), Nat.double(pw), Nat.pow(2n, 1n+qq), Equal.cong(Nat,
+        Nat, xx => Nat.double(xx), sw(qq), pw, ih), Equal.sym(Nat, Nat.pow(2n, 1n+qq), Nat.double(pw),
+        R.pow2_succ(qq))))
+
+# the bound the log2 walk's next step needs, for the lower bound: below 2^(the step width) after the shift
+def lo_hyp(
+  zz: Bool,
+  +pp: Nat,
+  +ee: Nat,
+  +nn: U32,
+  +ez: {U32.is_ne(U32.shrn(nn, sw(pp)), 0) == zz : Bool},
+  +hp: {Nat.is_le(pp, 31n) == True{} : Bool},
+  +he: {Nat.is_le(ee, Nat.pow(2n, 1n+pp)) == True{} : Bool},
+  +hn: {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, ee)) == True{} : Bool}
+) -> {Nat.is_lt(U32.to_nat(U32.shrn(nn, Bool.pick(Nat, zz, sw(pp), 0n))), Nat.pow(2n, sw(pp))) == True{} : Bool}:
+  match zz:
+    case False{}:
+      +ss = sw(pp)
+      R.lt_rw_r(U32.to_nat(nn), Nat.pow(2n, Nat.add(ss, 0n)), Nat.pow(2n, ss), Equal.cong(Nat, Nat, xx => Nat.pow(2n,
+        xx), Nat.add(ss, 0n), ss, R.add_zero(ss)), shrn_up(ss, nn, 0n, eq_zero(U32.shrn(nn, ss), ez)))
+    case True{}:
+      +ss = sw(pp)
+      +es = {Equal.trans(Nat, Nat.pow(2n, 1n+pp), Nat.double(ss), Nat.add(ss, ss), Equal.trans(Nat, Nat.pow(2n, 1n+pp),
+        Nat.double(Nat.pow(2n, pp)), Nat.double(ss), R.pow2_succ(pp), Equal.cong(Nat, Nat, xx => Nat.double(xx),
+        Nat.pow(2n, pp), ss, Equal.sym(Nat, ss, Nat.pow(2n, pp), sw_pow(pp, hp)))), R.double_add(ss)) :
+        {Nat.pow(2n, 1n+pp) == Nat.add(ss, ss) : Nat}}
+      shrn_dn(ss, nn, ss, R.lt_le_trans(U32.to_nat(nn), Nat.pow(2n, ee), Nat.pow(2n, Nat.add(ss, ss)), hn, pow_le(ee,
+        Nat.add(ss, ss), R.le_rw_r(ee, Nat.pow(2n, 1n+pp), Nat.add(ss, ss), es, he))))
+
+# the number the log2 walk's step leaves, zz saying whether it shifts
+def nx(zz: Bool, +pp: Nat, +nn: U32) -> U32:
+  U32.shrn(nn, Bool.pick(Nat, zz, sw(pp), 0n))
+
+# the bound after the log2 walk's step gives the bound before it
+def lo_fin(
+  zz: Bool,
+  +pp: Nat,
+  +nn: U32,
+  +ih: {Nat.is_lt(U32.to_nat(nx(zz, pp, nn)), Nat.pow(2n, 1n+U32.log2.go(pp, nx(zz, pp, nn), 0n))) == True{} : Bool}
+) -> {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, 1n+Nat.add(Bool.pick(Nat, zz, sw(pp), 0n), U32.log2.go(pp, nx(zz, pp,
+  nn), 0n)))) == True{} : Bool}:
+  match zz:
+    case False{}:
+      ih
+    case True{}:
+      +ss = sw(pp)
+      +gg = U32.log2.go(pp, U32.shrn(nn, ss), 0n)
+      R.lt_rw_r(U32.to_nat(nn), Nat.pow(2n, Nat.add(ss, 1n+gg)), Nat.pow(2n, 1n+Nat.add(ss, gg)), Equal.cong(Nat, Nat,
+        xx => Nat.pow(2n, xx), Nat.add(ss, 1n+gg), 1n+Nat.add(ss, gg), R.add_succ(ss, gg)), shrn_up(ss, nn, 1n+gg, ih))
+
+# a number below 2^e, e at most 2^k, is below 2^(1 + the count of k steps of the log2 walk), k at most 5
+def lo(
+  +kk: Nat,
+  +ee: Nat,
+  +nn: U32,
+  +hk: {Nat.is_le(kk, 5n) == True{} : Bool},
+  +he: {Nat.is_le(ee, Nat.pow(2n, kk)) == True{} : Bool},
+  +hn: {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, ee)) == True{} : Bool}
+) -> {Nat.is_lt(U32.to_nat(nn), Nat.pow(2n, 1n+U32.log2.go(kk, nn, 0n))) == True{} : Bool}:
+  match kk:
+    case 0n:
+      R.lt_le_trans(U32.to_nat(nn), Nat.pow(2n, ee), Nat.pow(2n, 1n), hn, pow_le(ee, 1n, he))
+    case 1n+pp:
+      +zz = U32.is_ne(U32.shrn(nn, sw(pp)), 0)
+      +tt = sp(pp, nn)
+      +n1 = U32.shrn(nn, tt)
+      +g0 = U32.log2.go(pp, n1, 0n)
+      +hp = {R.le_trans(pp, 4n, 31n, hk, {==}) : {Nat.is_le(pp, 31n) == True{} : Bool}}
+      +ih = {lo(pp, sw(pp), n1, R.le_trans(pp, 4n, 5n, hk, {==}), R.le_rw_r(sw(pp), sw(pp), Nat.pow(2n, pp), sw_pow(pp,
+        hp), R.le_refl(sw(pp))), lo_hyp(zz, pp, ee, nn, {==}, hp, he, hn)) : {Nat.is_lt(U32.to_nat(n1), Nat.pow(2n,
+        1n+g0)) == True{} : Bool}}
+      +eg = {Equal.trans(Nat, U32.log2.go(1n+pp, nn, 0n), U32.log2.go(pp, n1, tt), Nat.add(tt, g0), go_z(pp, nn, 0n),
+        go_add(pp, n1, tt)) : {U32.log2.go(1n+pp, nn, 0n) == Nat.add(tt, g0) : Nat}}
+      R.lt_rw_r(U32.to_nat(nn), Nat.pow(2n, 1n+Nat.add(tt, g0)), Nat.pow(2n, 1n+U32.log2.go(1n+pp, nn, 0n)),
+        Equal.cong(Nat, Nat, xx => Nat.pow(2n, 1n+xx), Nat.add(tt, g0), U32.log2.go(1n+pp, nn, 0n), Equal.sym(Nat,
+        U32.log2.go(1n+pp, nn, 0n), Nat.add(tt, g0), eg)), lo_fin(zz, pp, nn, ih))
 
 # the plane's depth, for nn from 1 below 2^e, e at most 31: at most e, and 2^depth at least nn
 def dep_a(
@@ -2324,9 +2530,8 @@ def dep_a(
     R.pow2_succ(ee)), dbl_lt(U32.to_nat(nn), Nat.pow(2n, ee), hlt)))) : {Nat.is_lt(U32.to_nat(mm), Nat.pow(2n,
     1n+ee)) ==
     True{} : Bool}}
-  +hd = {le1(32n, ee, mm, 0n, hm) : {Nat.is_le(dd, ee) == True{} : Bool}}
-  +hup = {dep_up(Nat.is_le(Nat.pow(2n, 1n+dd), U32.to_nat(mm)), mm, {==}, lt32(dd, R.le_trans(dd, ee, 31n, hd,
-    he))) : {Nat.is_lt(U32.to_nat(mm), Nat.pow(2n, 1n+dd)) == True{} : Bool}}
+  +hd = {up(5n, ee, mm, 0n, hm) : {Nat.is_le(dd, ee) == True{} : Bool}}
+  +hup = {lo(5n, 1n+ee, mm, {==}, he, hm) : {Nat.is_lt(U32.to_nat(mm), Nat.pow(2n, 1n+dd)) == True{} : Bool}}
   +hup2 = {R.lt_rw_r(Nat.sub(n2, 1n), Nat.pow(2n, 1n+dd), Nat.double(Nat.pow(2n, dd)), R.pow2_succ(dd), R.lt_rw_l(
     U32.to_nat(mm), Nat.sub(n2, 1n), Nat.pow(2n, 1n+dd), em, hup)) : {Nat.is_lt(Nat.sub(n2, 1n), Nat.double(Nat.pow(2n,
     dd))) == True{} : Bool}}
@@ -2347,11 +2552,6 @@ def u32_nat_eq(+aa: U32, +bb: U32, +ee: {U32.to_nat(aa) == U32.to_nat(bb) : Nat}
     R.u32_eq(aa, bb), Equal.trans(Bool, Nat.is_eq(U32.to_nat(aa), U32.to_nat(bb)), Nat.is_eq(U32.to_nat(bb),
     U32.to_nat(bb)), True{}, Equal.cong(Nat, Bool, xx => Nat.is_eq(xx, U32.to_nat(bb)), U32.to_nat(aa), U32.to_nat(bb),
     ee), R.nat_eq_refl(U32.to_nat(bb)))))
-
-# a number above zero is below its double
-def lt_dbl(+xx: Nat, +hh: {Nat.is_lt(0n, xx) == True{} : Bool}) -> {Nat.is_lt(xx, Nat.double(xx)) == True{} : Bool}:
-  R.lt_rw_l(Nat.add(xx, 0n), xx, Nat.double(xx), R.add_zero(xx), R.lt_rw_r(Nat.add(xx, 0n), Nat.add(xx, xx),
-    Nat.double(xx), Equal.sym(Nat, Nat.double(xx), Nat.add(xx, xx), R.double_add(xx)), R.lt_add_mono(xx, 0n, xx, hh)))
 
 # the plane's depth is below 32 when it is at most e and e at most 31, and 2^depth is at least nn
 def dep_fin(

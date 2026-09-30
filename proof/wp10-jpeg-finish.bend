@@ -371,54 +371,44 @@ def dup(aa: Array<U32>) -> Dup(aa):
     case ANode{xs, ys}:
       dup.node(xs, ys, dup(xs), dup(ys))
 
-# the result of a read of the tree walk keeps the array: the reads below a node hand the node back
-def getif.eq(
-  -xs: Array<U32>,
-  -ys: Array<U32>,
-  +hh: U32,
-  +ii: U32,
-  zz: Bool,
-  ihx: {Array.get.go(U32, xs, hh, ii) == (xs, Laws.jpg.val(Array.get.go(U32, xs, hh, ii))) : Array<U32> & U32},
-  ihy: {Array.get.go(U32, ys, hh, U32.sub(ii, hh)) == (ys, Laws.jpg.val(Array.get.go(U32, ys, hh, U32.sub(ii, hh)))) :
-    Array<U32> & U32}
-) -> {Array.get.if(U32, xs, ys, hh, ii, zz) == (ANode{xs, ys}, Laws.jpg.val(Array.get.if(U32, xs, ys, hh, ii, zz))) :
-  Array<U32> & U32}:
-  match zz:
-    case True{}:
-      sx = Equal.sym(Array<U32> & U32, Array.get.go(U32, xs, hh, ii), (xs, Laws.jpg.val(Array.get.go(U32, xs, hh,
-        ii))), ihx)
-      %sx : {Array.swap.lo(U32, ys, _) == (ANode{xs, ys}, Laws.jpg.val(Array.swap.lo(U32, ys, _))) : Array<U32> & U32}
-      {==}
-    case False{}:
-      sy = Equal.sym(Array<U32> & U32, Array.get.go(U32, ys, hh, U32.sub(ii, hh)),
-        (ys, Laws.jpg.val(Array.get.go(U32, ys, hh, U32.sub(ii, hh)))), ihy)
-      %sy : {Array.swap.hi(U32, xs, _) == (ANode{xs, ys}, Laws.jpg.val(Array.swap.hi(U32, xs, _))) : Array<U32> & U32}
-      {==}
-
-# the tree walk of a read hands the array back
+# the tree walk of a read hands the array back, whichever half zz sends it to
 def getgo.eq(
   aa: Array<U32>,
   +nn: U32,
-  +ii: U32
-) -> {Array.get.go(U32, aa, nn, ii) == (aa, Laws.jpg.val(Array.get.go(U32, aa, nn, ii))) : Array<U32> & U32}:
-  match aa:
-    case ALeaf{+_xx}:
+  +ii: U32,
+  zz: Bool
+) -> {Array.get.go(U32, aa, nn, ii, zz) == (aa, Laws.jpg.val(Array.get.go(U32, aa, nn, ii, zz))) : Array<U32> & U32}:
+  match aa zz:
+    case ALeaf{+_xx} _:
       {==}
-    case ANode{xs, ys}:
-      getif.eq(xs, ys, U32.shr(nn), ii, U32.is_lt(ii, U32.shr(nn)), getgo.eq(xs, U32.shr(nn), ii),
-        getgo.eq(ys, U32.shr(nn), U32.sub(ii, U32.shr(nn))))
+    case ANode{xs, ys} True{}:
+      +hh = U32.shr(nn)
+      +zx = U32.is_lt(ii, U32.shr(hh))
+      sx = Equal.sym(Array<U32> & U32, Array.get.go(U32, xs, hh, ii, zx), (xs, Laws.jpg.val(Array.get.go(U32, xs, hh,
+        ii, zx))), getgo.eq(xs, hh, ii, zx))
+      %sx : {Array.swap.lo(U32, ys, _) == (ANode{xs, ys}, Laws.jpg.val(Array.swap.lo(U32, ys, _))) : Array<U32> & U32}
+      {==}
+    case ANode{xs, ys} False{}:
+      +hh = U32.shr(nn)
+      +jj = U32.sub(ii, hh)
+      +zy = U32.is_lt(jj, U32.shr(hh))
+      sy = Equal.sym(Array<U32> & U32, Array.get.go(U32, ys, hh, jj, zy), (ys, Laws.jpg.val(Array.get.go(U32, ys, hh,
+        jj, zy))), getgo.eq(ys, hh, jj, zy))
+      %sy : {Array.swap.hi(U32, xs, _) == (ANode{xs, ys}, Laws.jpg.val(Array.swap.hi(U32, xs, _))) : Array<U32> & U32}
+      {==}
+
+# the tree walk of a read of bb, at the size read from cc and the masked index, hands bb back
+def GoAt2(-bb: Array<U32>, -cc: Array<U32>, +ii: U32) -> Type:
+  {Array.get.go(U32, bb, Laws.jpg.val(Array.size(U32, cc)), U32.and(ii, U32.sub(Laws.jpg.val(Array.size(U32, cc)), 1)),
+    U32.is_lt(U32.and(ii, U32.sub(Laws.jpg.val(Array.size(U32, cc)), 1)), U32.shr(Laws.jpg.val(Array.size(U32,
+    cc))))) ==
+    (bb, Laws.jpg.val(Array.get.go(U32, bb, Laws.jpg.val(Array.size(U32, cc)), U32.and(ii,
+    U32.sub(Laws.jpg.val(Array.size(U32, cc)), 1)), U32.is_lt(U32.and(ii, U32.sub(Laws.jpg.val(Array.size(U32, cc)),
+    1)), U32.shr(Laws.jpg.val(Array.size(U32, cc))))))) : Array<U32> & U32}
 
 # the tree walk of a read, at the array's own size and the masked index, hands the array back
 def GoAt(-aa: Array<U32>, +ii: U32) -> Type:
-  {Array.get.go(U32, aa, Laws.jpg.val(Array.size(U32, aa)), U32.and(ii, U32.sub(Laws.jpg.val(Array.size(U32, aa)),
-    1))) == (aa, Laws.jpg.val(Array.get.go(U32, aa, Laws.jpg.val(Array.size(U32, aa)), U32.and(ii,
-    U32.sub(Laws.jpg.val(Array.size(U32, aa)), 1))))) : Array<U32> & U32}
-
-# the tree walk of a read of bb, at the size read from cc, hands bb back
-def GoAt2(-bb: Array<U32>, -cc: Array<U32>, +ii: U32) -> Type:
-  {Array.get.go(U32, bb, Laws.jpg.val(Array.size(U32, cc)), U32.and(ii, U32.sub(Laws.jpg.val(Array.size(U32, cc)),
-    1))) == (bb, Laws.jpg.val(Array.get.go(U32, bb, Laws.jpg.val(Array.size(U32, cc)), U32.and(ii,
-    U32.sub(Laws.jpg.val(Array.size(U32, cc)), 1))))) : Array<U32> & U32}
+  GoAt2(aa, aa, ii)
 
 # the size walk's statement moved along an equality of arrays
 def size.tr(
@@ -436,10 +426,11 @@ def getgo.tr(
   -aa: Array<U32>,
   +nn: U32,
   +ii: U32,
+  zz: Bool,
   ee: {bb == aa : Array<U32>},
-  hh: {Array.get.go(U32, bb, nn, ii) == (bb, Laws.jpg.val(Array.get.go(U32, bb, nn, ii))) : Array<U32> & U32}
-) -> {Array.get.go(U32, aa, nn, ii) == (aa, Laws.jpg.val(Array.get.go(U32, aa, nn, ii))) : Array<U32> & U32}:
-  %ee : {Array.get.go(U32, _, nn, ii) == (_, Laws.jpg.val(Array.get.go(U32, _, nn, ii))) : Array<U32> & U32}
+  hh: {Array.get.go(U32, bb, nn, ii, zz) == (bb, Laws.jpg.val(Array.get.go(U32, bb, nn, ii, zz))) : Array<U32> & U32}
+) -> {Array.get.go(U32, aa, nn, ii, zz) == (aa, Laws.jpg.val(Array.get.go(U32, aa, nn, ii, zz))) : Array<U32> & U32}:
+  %ee : {Array.get.go(U32, _, nn, ii, zz) == (_, Laws.jpg.val(Array.get.go(U32, _, nn, ii, zz))) : Array<U32> & U32}
   hh
 
 # a read, once the size walk has handed the array back, hands it back too
@@ -463,16 +454,8 @@ def getgo.tr2(
   ec: {cc == aa : Array<U32>},
   hh: GoAt2(bb, cc, ii)
 ) -> GoAt(aa, ii):
-  %eb : {Array.get.go(U32, _, Laws.jpg.val(Array.size(U32, aa)), U32.and(ii, U32.sub(Laws.jpg.val(Array.size(U32,
-    aa)), 1))) ==
-    (_, Laws.jpg.val(Array.get.go(U32, _, Laws.jpg.val(Array.size(U32, aa)), U32.and(ii,
-      U32.sub(Laws.jpg.val(Array.size(U32, aa)),
-    1))))) : Array<U32> & U32}
-  %ec : {Array.get.go(U32, bb, Laws.jpg.val(Array.size(U32, _)), U32.and(ii, U32.sub(Laws.jpg.val(Array.size(U32,
-    _)), 1))) ==
-    (bb, Laws.jpg.val(Array.get.go(U32, bb, Laws.jpg.val(Array.size(U32, _)), U32.and(ii,
-      U32.sub(Laws.jpg.val(Array.size(U32, _)),
-    1))))) : Array<U32> & U32}
+  %eb : GoAt2(_, aa, ii)
+  %ec : GoAt2(bb, _, ii)
   hh
 
 # the tree walk hands the array back, at the size read from a second copy
@@ -483,7 +466,8 @@ def getgo.at(
 ) -> GoAt(aa, ii):
   (c1, c2, e1, e2) = dd
   +nn = Laws.jpg.val(Array.size(U32, c2))
-  getgo.tr2(c1, c2, aa, ii, e1, e2, getgo.eq(c1, nn, U32.and(ii, U32.sub(nn, 1))))
+  +jj = U32.and(ii, U32.sub(nn, 1))
+  getgo.tr2(c1, c2, aa, ii, e1, e2, getgo.eq(c1, nn, jj, U32.is_lt(jj, U32.shr(nn))))
 
 # a read hands the array back, from copies of it
 def get.eq.d(
