@@ -24,7 +24,7 @@
       ez = inputs.ez.lib.${system};
       ezBin = inputs.ez.packages.${system}.default;
       bend = inputs.bend.packages.${system}.default;
-      bolt = ez.toolPackage { name = "bolt"; src = self; wrapFlags = [ "--gpu" "off" ]; };
+      bolt = ez.toolPackage { name = "bolt"; src = self; inherit bend; wrapFlags = [ "--gpu" "off" ]; };
       bend-cc = ez.bend-cc;
 
       bench = import ./bench {
@@ -41,21 +41,7 @@
       apps.${system} = bench.apps;
 
       checks.${system} = {
-        # every PROOF.bend on this flake's bend: its first line must be
-        # ALL PROOFS CHECK.
-        proofs = pkgs.runCommand "ezimg-proofs" {
-          nativeBuildInputs = [ bend ];
-          BEND_LIB = ez.bendLib ./ez.lock.toml;
-        } ''
-          export HOME=$TMPDIR
-          cp -r ${self} src && chmod -R u+w src && cd src
-          for p in $(find . -name PROOF.bend -not -path './.ez/*' | sort); do
-            first=$(cd "$(dirname "$p")" && bend "$(basename "$p")" | head -n 1)
-            echo "$p: $first"
-            [ "$first" = "ALL PROOFS CHECK" ] || exit 1
-          done
-          touch $out
-        '';
+        proofs = ez.mkProofs { ez = ezBin; src = self; };
         lint = ez.mkLint { src = self; };
       } // bench.checks;
 

@@ -4,14 +4,19 @@ Images for [Bend 2](https://github.com/bendlang/bend).
 
 ## Install
 
-With [Bend](https://github.com/bendlang/bend) alone there is nothing to
-install: import ezimg by its hub name and `bend` fetches it from
+ezimg is built and checked on bend 2.0.34.
+
+With [Bend](https://github.com/bendlang/bend) alone there is no install
+step: import ezimg by its hub name and `bend` fetches it from
 [the hub](https://hub.bend-lang.com) into `~/.bend/lib` on the first run.
-`0xde7817074d0d382dc55dfca454298427` is ezimg v1.1.0.
+`emerging-ezimg@1.2.0.0` is ezimg v1.2.0:
 
 ```
-import 0xde7817074d0d382dc55dfca454298427/main.bend as Img
+import emerging-ezimg@1.2.0.0/main.bend as Img
 ```
+
+That name resolves to `0x57618559b9b26dd8415f821176a3e692`.
+To pin by content instead, import `0x57618559b9b26dd8415f821176a3e692/main.bend`.
 
 Or with [ez](https://github.com/Emerging-Patterns/ez), which records the
 package in `ez.toml` (`ez init` makes one):
@@ -35,7 +40,7 @@ repeats its level in R, G and B.
 `height`, `size`, `count`, and `fill` are the pixel helpers.
 
 ```
-import 0xde7817074d0d382dc55dfca454298427/main.bend as Img
+import emerging-ezimg@1.2.0.0/main.bend as Img
 
 def main() -> U32:
   Img.width(Img.raster(2, 3, [0, 1, 2, 3, 4, 5]))
