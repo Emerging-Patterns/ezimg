@@ -8,13 +8,12 @@
     url = "github:bendlang/bend/777ee0b55c485afdd7e68bd917b3d23a88d77371";
     inputs.nixpkgs.follows = "nixpkgs";
   };
-  # ez and its bolt stay on the bend ez's own flake.lock records until ez
-  # releases on 2.0.34, so ez's inputs.bend is pinned, not followed. The
-  # package's own builds and its proofs (checks.proofs) run on 2.0.34.
+  # ez is Emerging-Patterns/ez master (1.3.0). Its bend follows this flake's
+  # bend, so ez, `ez prove`, and bolt all build on 2.0.34.
   inputs.ez = {
     url = "github:Emerging-Patterns/ez";
     inputs.nixpkgs.follows = "nixpkgs";
-    inputs.bend.url = "github:bendlang/bend/af569d4826913b2ce3557e9829ccad31fcf86f94";
+    inputs.bend.follows = "bend";
   };
 
   outputs = { self, nixpkgs, ... }@inputs:
@@ -43,7 +42,7 @@
 
       checks.${system} = {
         # every PROOF.bend on this flake's bend: its first line must be
-        # ALL PROOFS CHECK. ez.mkProofs comes back when ez runs on 2.0.34.
+        # ALL PROOFS CHECK.
         proofs = pkgs.runCommand "ezimg-proofs" {
           nativeBuildInputs = [ bend ];
           BEND_LIB = ez.bendLib ./ez.lock.toml;
