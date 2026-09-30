@@ -2,7 +2,7 @@
 
 This is the list of every behavior ezimg guarantees, each under a stable requirement ID. The public interface is `main.bend`; the modules under `src/` are internal and carry no promise of their own, except where a row names them.
 
-Every requirement has one of two levels. A **Proved** requirement holds for every input, and is backed by a quantified law (a `for` or `exs` binder) in `LAWS.bend` that passes the proof gate. A **Trusted** requirement is an assumption ezimg cannot check from inside its own gate, and it is listed in the trust boundary below. A Proved requirement whose laws have not all landed has status **pending**: we intend to prove it, and until then it is not guaranteed. The proof gate is this check: the first line `bend PROOF.bend` prints is exactly `All terms check.` Tests and fixtures, the Pillow comparison in `bench/` included, are never evidence for a requirement.
+Every requirement has one of two levels. A **Proved** requirement holds for every input, and is backed by a quantified law (a `for` or `exs` binder) in `LAWS.bend` that passes the proof gate. A **Trusted** requirement is an assumption ezimg cannot check from inside its own gate, and it is listed in the trust boundary below. A Proved requirement whose laws have not all landed has status **pending**: we intend to prove it, and until then it is not guaranteed. The proof gate is this check: the first line `bend PROOF.bend` prints, on bend 2.0.34, is exactly `ALL PROOFS CHECK`. Tests and fixtures, the Pillow comparison in `bench/` included, are never evidence for a requirement.
 
 A raster is **well formed** when its sample count equals `w * h` computed as a natural number. A **sample** is one `U32`, packed `0xAARRGGBB`.
 
@@ -91,8 +91,8 @@ These assumptions sit outside the proofs. They are the complete list of Trusted 
 
 | ID | Assumption | Why it is trusted |
 | :---- | :---- | :---- |
-| IMG-TRUST-1 | The Bend checker (bend 2.0.25) accepts only proofs of true statements. | The gate is the checker; nothing checks it. |
-| IMG-TRUST-2 | `ez test` reports a PROOF.bend as passing only when its first line is exactly `All terms check.` | The runner is the pinned ez's code, proved in ez, not here. |
+| IMG-TRUST-1 | The Bend checker (bend 2.0.34) accepts only proofs of true statements. | The gate is the checker; nothing checks it. |
+| IMG-TRUST-2 | The flake's `checks.proofs` reports a PROOF.bend as passing only when its first line is exactly `ALL PROOFS CHECK`. | The runner is a shell step in `flake.nix` (ez's `mkProofs` returns when ez runs on bend 2.0.34), not proved here. |
 | IMG-PNG-10 | decode_png reads other encoders' DEFLATE streams. | Needs a reference compressor for dynamic Huffman; exercised by the Pillow check, which is a test. |
 | IMG-JPG-6 | Jpeg.rgb is T.871 rounded and clamped for every input 0 to 255. | Checked outside the gate: a Python copy of `Jpeg.rgb.bits`'s U32 arithmetic, compared with T.871 computed in exact rationals over all 2^24 inputs, differs on none. A proof in the gate needs U32 division and products near 10^9, which the Nat lemmas reach only through unary numerals the checker cannot hold in memory. |
 | IMG-JPG-7 | decode_jpeg reads other encoders' baseline files within T.81 accuracy. | Needs the other encoder; exercised by the Pillow check. |
