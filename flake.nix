@@ -8,7 +8,7 @@
     url = "github:bendlang/bend/eebc18cd04daeade06c3f68c3c96c1faefd3462f";
     inputs.nixpkgs.follows = "nixpkgs";
   };
-  # ez is Emerging-Patterns/ez master (1.3.0). Its bend follows this flake's
+  # ez is Emerging-Patterns/ez master (1.5.0). Its bend follows this flake's
   # bend, so ez, `ez prove`, and bolt all build on 2.0.36.
   inputs.ez = {
     url = "github:Emerging-Patterns/ez";
