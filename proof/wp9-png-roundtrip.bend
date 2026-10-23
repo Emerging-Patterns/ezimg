@@ -1999,6 +1999,14 @@ def bytes.scan(
 
 # ---- G. the samples back, and the counts in range ----
 
+# Base's List.all steps through List.all.if, which is Bool.and of its hit and the rest
+def all.if.and(hit: Bool, rest: Bool) -> {List.all.if(_u => rest, hit) == Bool.and(hit, rest) : Bool}:
+  match hit:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
 # opaque samples: their red, green and blue, packed with alpha 255, are the samples
 def rgb.back(
   +px: List<&2, U32>,
@@ -2008,8 +2016,13 @@ def rgb.back(
     case Nil{}:
       {==}
     case +cc <> +tl:
-      +ho = U32L.and_left(Laws.opaque(cc), Laws.all_opaque(tl), hop)
-      +ht = U32L.and_right(Laws.opaque(cc), Laws.all_opaque(tl), hop)
+      +hand = {Equal.trans(Bool, Bool.and(Laws.opaque(cc), Laws.all_opaque(tl)),
+        List.all.if(_u => Laws.all_opaque(tl), Laws.opaque(cc)), True{},
+        Equal.sym(Bool, List.all.if(_u => Laws.all_opaque(tl), Laws.opaque(cc)),
+          Bool.and(Laws.opaque(cc), Laws.all_opaque(tl)), all.if.and(Laws.opaque(cc), Laws.all_opaque(tl))),
+        hop) : {Bool.and(Laws.opaque(cc), Laws.all_opaque(tl)) == True{} : Bool}}
+      +ho = U32L.and_left(Laws.opaque(cc), Laws.all_opaque(tl), hand)
+      +ht = U32L.and_right(Laws.opaque(cc), Laws.all_opaque(tl), hand)
       +e_sh = U32L.ueq(U32.shrn(cc, 24n), 255, ho)
       +pk = Laws.spec.argb(255, Png.enc.r(cc), Png.enc.g(cc), Png.enc.b(cc))
       +e_a = {Equal.trans(U32, Png.enc.a(cc), U32.shrn(cc, 24n), 255, alpha.top(cc), e_sh) : {Png.enc.a(cc) == 255 :

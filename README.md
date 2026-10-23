@@ -4,7 +4,7 @@ Images for [Bend 2](https://github.com/bendlang/bend).
 
 ## Install
 
-ezimg is built and checked on bend 2.0.34.
+ezimg is built and checked on bend 2.0.38.
 
 With [Bend](https://github.com/bendlang/bend) alone there is no install
 step: import ezimg by its hub name and `bend` fetches it from
