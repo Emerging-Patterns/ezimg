@@ -4093,14 +4093,18 @@ def opaque.all(
       {==}
     case _cc <> _tl False{}:
       {==}
-    case +cc <> tl True{}:
+    case +cc <> +tl True{}:
       +ea = Equal.cong(U32, Bool, uu => U32.is_eq(uu, 255), Png.enc.a(cc), U32.shrn(cc, 24n), alpha.mask(cc))
       Equal.trans(Bool, Png.enc.opaque(tl, U32.is_eq(Png.enc.a(cc), 255)),
-        Bool.and(U32.is_eq(Png.enc.a(cc), 255), Laws.all_opaque(tl)),
-        Bool.and(Laws.opaque(cc), Laws.all_opaque(tl)),
-        opaque.all(tl, U32.is_eq(Png.enc.a(cc), 255)),
-        Equal.cong(Bool, Bool, bb => Bool.and(bb, Laws.all_opaque(tl)), U32.is_eq(Png.enc.a(cc), 255),
-          Laws.opaque(cc), ea))
+        Bool.and(Laws.opaque(cc), Laws.all_opaque(tl)), Laws.all_opaque(cc <> tl),
+        Equal.trans(Bool, Png.enc.opaque(tl, U32.is_eq(Png.enc.a(cc), 255)),
+          Bool.and(U32.is_eq(Png.enc.a(cc), 255), Laws.all_opaque(tl)),
+          Bool.and(Laws.opaque(cc), Laws.all_opaque(tl)),
+          opaque.all(tl, U32.is_eq(Png.enc.a(cc), 255)),
+          Equal.cong(Bool, Bool, bb => Bool.and(bb, Laws.all_opaque(tl)), U32.is_eq(Png.enc.a(cc), 255),
+            Laws.opaque(cc), ea)),
+        Equal.sym(Bool, Laws.all_opaque(cc <> tl), Bool.and(Laws.opaque(cc), Laws.all_opaque(tl)),
+          W9.all.if.and(Laws.opaque(cc), Laws.all_opaque(tl))))
 
 # out opens with the signature and an IHDR of colour type ct
 def head.ty(+ww: U32, +hh: U32, +ct: U32, out: List<&2, U32>) -> Type:
