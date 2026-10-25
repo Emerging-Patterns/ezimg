@@ -16,44 +16,55 @@
 
   outputs = { self, nixpkgs, ... }@inputs:
     let
-      system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
-      version = "1.2.0"; # x-release-please-version
-      ez = inputs.ez.lib.${system};
-      ezBin = inputs.ez.packages.${system}.default;
-      bend = inputs.bend.packages.${system}.default;
-      bolt = ez.toolPackage { name = "bolt"; src = self; inherit bend; wrapFlags = ez.rtsFlags bend [ "--gpu" "off" ]; };
-      bend-cc = ez.bend-cc;
+      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
+      forEach = nixpkgs.lib.genAttrs systems;
+      outputsFor = system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          version = "1.2.0"; # x-release-please-version
+          ez = inputs.ez.lib.${system};
+          ezBin = inputs.ez.packages.${system}.default;
+          bend = inputs.bend.packages.${system}.default;
+          bolt = ez.toolPackage { name = "bolt"; src = self; inherit bend; wrapFlags = ez.rtsFlags bend [ "--gpu" "off" ]; };
+          bend-cc = ez.bend-cc;
 
-      bench = import ./bench {
-        inherit pkgs bend bend-cc self;
-        lib = pkgs.lib;
-      };
+          bench = import ./bench {
+            inherit pkgs bend bend-cc self;
+            lib = pkgs.lib;
+          };
+        in {
+          packages = {
+            inherit bend bend-cc;
+            ez = ezBin;
+            inherit bolt;
+          } // bench.packages;
+
+          apps = bench.apps;
+
+          checks = {
+            proofs = ez.mkProofs { ez = ezBin; src = self; };
+            lint = ez.mkLint { src = self; };
+          } // bench.checks;
+
+          devShells.default = ez.mkShell {
+            src = self;
+            packages = [
+              bend
+              bend-cc
+              ezBin
+              (pkgs.python3.withPackages (ps: [ ps.pillow ]))
+              bench.packages.ezimg-bench-drv
+              bench.packages.ezimg-pillow-check
+              bench.packages.ezimg-pillow-bench
+            ];
+          };
+        };
+      perSystem = forEach outputsFor;
+      each = name: forEach (system: perSystem.${system}.${name});
     in {
-      packages.${system} = {
-        inherit bend bend-cc;
-        ez = ezBin;
-        inherit bolt;
-      } // bench.packages;
-
-      apps.${system} = bench.apps;
-
-      checks.${system} = {
-        proofs = ez.mkProofs { ez = ezBin; src = self; };
-        lint = ez.mkLint { src = self; };
-      } // bench.checks;
-
-      devShells.${system}.default = ez.mkShell {
-        src = self;
-        packages = [
-          bend
-          bend-cc
-          ezBin
-          (pkgs.python3.withPackages (ps: [ ps.pillow ]))
-          bench.packages.ezimg-bench-drv
-          bench.packages.ezimg-pillow-check
-          bench.packages.ezimg-pillow-bench
-        ];
-      };
+      packages = each "packages";
+      checks = each "checks";
+      apps = each "apps";
+      devShells = each "devShells";
     };
 }
