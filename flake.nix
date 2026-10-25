@@ -21,7 +21,7 @@
       outputsFor = system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          version = "1.2.0"; # x-release-please-version
+          version = "1.3.0"; # x-release-please-version
           ez = inputs.ez.lib.${system};
           ezBin = inputs.ez.packages.${system}.default;
           bend = inputs.bend.packages.${system}.default;
