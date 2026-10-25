@@ -1,4 +1,4 @@
-result
+result*
 bin/
 .ez/*
 !.ez/lib
