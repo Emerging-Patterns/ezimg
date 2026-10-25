@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/Emerging-Patterns/ezimg/compare/v1.2.0...v1.3.0) (2026-10-25)
+
+
+### Features
+
+* **nix:** build and check on x86_64-linux, aarch64-linux and aarch64-darwin ([#84](https://github.com/Emerging-Patterns/ezimg/issues/84)) ([968ad88](https://github.com/Emerging-Patterns/ezimg/commit/968ad88d642acabe5197bd9c56b2a9e8c9838887))
+
 ## [1.2.0](https://github.com/Emerging-Patterns/ezimg/compare/v1.1.0...v1.2.0) (2026-09-30)
 
 
