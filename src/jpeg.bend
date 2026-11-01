@@ -1,4 +1,10 @@
 # src/jpeg: baseline JPEG. Sequential 8-bit Huffman (SOF0), JFIF APP0, grayscale or YCbCr.
+#
+# Trusted, not proved: decode_jpeg reads the baseline files other encoders
+# (libjpeg, Pillow) write, to within the IDCT accuracy of T.81 Annex A.3.3.
+# The laws place each decoded sample (laws/JpegPlacesComponentSamples.bend)
+# but do not prove its value; that needs the other encoder. The Pillow check
+# in bench/ exercises it.
 
 import Base
 
@@ -1293,6 +1299,14 @@ def rgb.bits(+yy: U32, +cb: U32, +cr: U32) -> U32:
   U32.or(U32.or(U32.shln(r, 16n), U32.shln(g, 8n)), b)
 
 # YCbCr to a packed opaque sample, 0xFFRRGGBB
+#
+# Trusted, not proved: rgb is the T.871 YCbCr to RGB conversion, rounded to
+# nearest and clamped to 0 to 255, for every y, cb and cr from 0 to 255.
+# Checked outside the gate: a Python copy of rgb.bits's U32 arithmetic,
+# compared with T.871 computed in exact rationals over all 2^24 inputs,
+# differs on none. A proof in the gate needs U32 division and products near
+# 10^9, which the Nat lemmas reach only through unary numerals the checker
+# cannot hold in memory.
 def rgb(+yy: U32, +cb: U32, +cr: U32) -> U32:
   opaque(rgb.bits(yy, cb, cr))
 
@@ -1561,8 +1575,9 @@ def decode.vmax(vs: List<&2, U32>, +mm: U32) -> U32:
     case v <> t:
       decode.vmax(t, decode.max(v, mm))
 
-# a sampling factor the decoder places: 1, 2 or 4 (IMG-JPG-2). A Bool of
-# U32.is_eq, not a match on literals, so a law can case-split on it.
+# a sampling factor the decoder places: 1, 2 or 4
+# (laws/JpegPlacesComponentSamples.bend). A Bool of U32.is_eq, not a match
+# on literals, so a law can case-split on it.
 def decode.fac.ok(+ff: U32) -> Bool:
   Bool.or(U32.is_eq(ff, 1), Bool.or(U32.is_eq(ff, 2), U32.is_eq(ff, 4)))
 

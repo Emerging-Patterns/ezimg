@@ -285,7 +285,7 @@ def correct_jpeg():
         add_case("D pillow→ezimg jpeg", f"16x16 gradient {label}", "PASS" if ok else "FAIL", f"max luma diff={dl:.2f}")
 
     # A JPEG decoded by ezimg and saved as PNG by ezimg keeps its colour and is
-    # opaque: one sample format for every decoder and encoder (IMG-PIX-1).
+    # opaque: one sample format for every decoder and encoder (laws/DecodedSamplesPackArgb.bend).
     for name, im, kw in (("RGB 8x8 red 4:4:4", Image.new("RGB", (8, 8), (220, 40, 40)), {"subsampling": 0}),
                          ("L 8x8 gray128", Image.new("L", (8, 8), 128), {})):
         path = os.path.join(WORK, "x_" + name.replace(" ", "_").replace(":", "") + ".jpg")

@@ -48,16 +48,15 @@ def main() -> U32:
 
 ## Compliance
 
-[SPEC.md](SPEC.md) lists every behavior ezimg guarantees, each under a stable
-ID, against [ISO/IEC 15948](https://www.iso.org/standard/29581.html) and the
-[W3C PNG specification](https://www.w3.org/TR/png/) for PNG, and
+[LAWS.bend](LAWS.bend) lists every behavior ezimg guarantees, one file under
+[laws/](laws/) each, against [ISO/IEC 15948](https://www.iso.org/standard/29581.html)
+and the [W3C PNG specification](https://www.w3.org/TR/png/) for PNG, and
 [ISO/IEC 10918-1](https://www.iso.org/standard/18902.html) | ITU-T T.81 with
-JFIF (ITU-T T.871) for JPEG. A requirement is either Proved, by a quantified
-law in `LAWS.bend` that `bend PROOF.bend` checks, or Trusted, with the reason
-in SPEC.md's trust boundary. Every Proved row is pending today: the laws that
-stood here each checked one fixed input and were retired, and the quantified
-laws are landing row by row. The plan and the audit behind it are in
-[docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md).
+JFIF (ITU-T T.871) for JPEG. Each is proved by the file of the same name
+under [proofs/](proofs/) and checked by `bend PROOF.bend` (the first line
+must be `ALL PROOFS CHECK`). What ezimg trusts rather than proves, such as
+reading other encoders' files, is said on the code that assumes it. The plan
+and the audit behind them are in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md).
 
 Scope today: PNG decode reads 8-bit colour types 0, 2, 3, 4 and 6 without
 interlace, and refuses anything else; PNG encode writes colour type 2 or 6.
