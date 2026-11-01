@@ -6,13 +6,13 @@
 # evidence for a guarantee; what ezimg cannot prove is said where it is
 # assumed, on the code.
 #
-# The public interface is main.bend. There are four families: the raster
-# type and its helpers, one sample format, PNG (ISO/IEC 15948 and the W3C PNG
+# The public interface is main.bend. There are four families: the raster type
+# and its helpers, one sample format, PNG (ISO/IEC 15948 and the W3C PNG
 # specification: decode_png, encode_png, parse_signature, and the CRC-32 and
 # inflate they rest on) and JPEG (ISO/IEC 10918-1 / ITU-T T.81 baseline
-# sequential, and JFIF, ITU-T T.871: decode_jpeg and encode_jpeg). The
-# modules under src/ are internal and carry no promise of their own, except
-# where a guarantee names them.
+# sequential, and JFIF, ITU-T T.871: decode_jpeg and encode_jpeg). The modules
+# under src/ are internal: a law about one holds it in place without making it
+# interface.
 #
 # A raster is well formed when its sample count equals `w * h` computed as a
 # natural number (laws/defs/WellFormed.bend). A sample is one `U32`, packed
