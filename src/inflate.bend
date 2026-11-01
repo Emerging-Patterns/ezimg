@@ -1,5 +1,11 @@
 # src/inflate: zlib-wrapped DEFLATE for a PNG IDAT stream (compression
 # method 0). Blocks are stored, fixed Huffman, or dynamic Huffman.
+#
+# Trusted, not proved: decode_png reads the fixed and dynamic Huffman
+# DEFLATE streams other encoders (zlib, libpng) write. Only stored blocks are
+# proved (laws/InflateReadsStoredBlocks.bend); a proof for dynamic Huffman
+# needs a reference compressor. The Pillow check in bench/ exercises it,
+# which is a test.
 import Base
 
 # where the bit reader is
