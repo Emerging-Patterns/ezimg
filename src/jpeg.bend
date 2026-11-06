@@ -2,7 +2,8 @@
 # as coded when an Adobe APP14 or the component ids say so (libjpeg's rule).
 #
 # Trusted, not proved: decode_jpeg reads the baseline files other encoders
-# (libjpeg, Pillow) write, to within the IDCT accuracy of T.81 Annex A.3.3.
+# (libjpeg, Pillow) write, to within the IDCT accuracy T.83 asks of a decoder
+# (decode.qs says how that was measured).
 # The laws place each decoded sample (laws/JpegPlacesComponentSamples.bend)
 # but do not prove its value; that needs the other encoder. The Pillow check
 # in bench/ exercises it.
@@ -191,10 +192,66 @@ def decode.q17.pos(pos: Bool, +hh: U32, +ll: U32) -> U32:
 def decode.q17(+hh: U32, +ll: U32) -> U32:
   decode.q17.pos(U32.is_lt(hh, 2147483648), hh, ll)
 
-def decode.dot.end(+lo: U32, +ah: U32, +ph: U32, +al: U32) -> U32:
-  decode.q17((ah + ph + decode.carry(al, lo) : U32), lo)
+# a 64-bit dot product (hh, ll), in units of 2^-16, as the pass's result. The row pass halves it and keeps four
+# fraction bits (a shift by 13), so the column pass rounds once, at the end, from what the row pass computed; the
+# column pass takes those four bits off with its half (a shift by 21). Rounding to the nearest, half away from 0.
+# Rounding after each pass instead fails the IDCT accuracy test of IEEE 1180-1990 that ITU-T T.83 (ISO/IEC
+# 10918-2) sets for decoders (overall mean square error 0.2 against at most 0.02, peak error 2 against at most 1);
+# with four fraction bits it passes, peak error 1 and overall mean square error at most 0.0092, measured on a
+# copy of this arithmetic outside the gate (a test, not a proof).
+def decode.qs.res(fine: Bool, +hh: U32, +ll: U32) -> U32:
+  match fine:
+    case True{}:
+      U32.or(U32.shrn(ll, 13n), U32.shln(U32.and(hh, 8191), 19n))
+    case False{}:
+      U32.or(U32.shrn(ll, 21n), U32.shln(U32.and(hh, 2097151), 11n))
 
-def decode.dot(cs: List<&2, U32>, ks: List<&2, U32>, have: Bool, prod: U32 & U32, +ah: U32, +al: U32) -> U32:
+# half the pass's last unit, added before the shift so the shift rounds
+def decode.qs.half(fine: Bool) -> U32:
+  match fine:
+    case True{}:
+      4096
+    case False{}:
+      1048576
+
+def decode.qs.sign2(neg: Bool, +res: U32) -> U32:
+  match neg:
+    case False{}:
+      res
+    case True{}:
+      decode.neg32(res)
+
+def decode.qs.div(+hh: U32, +ll: U32, neg: Bool, +fine: Bool) -> U32:
+  +l2 = (ll + decode.qs.half(fine) : U32)
+  +h2 = (hh + decode.carry(ll, l2) : U32)
+  decode.qs.sign2(neg, decode.qs.res(fine, h2, l2))
+
+def decode.qs.neg(pp: U32 & U32, +fine: Bool) -> U32:
+  (h, l) = pp
+  decode.qs.div(h, l, True{}, fine)
+
+def decode.qs.pos(pos: Bool, +hh: U32, +ll: U32, +fine: Bool) -> U32:
+  match pos:
+    case True{}:
+      decode.qs.div(hh, ll, False{}, fine)
+    case False{}:
+      decode.qs.neg(decode.neg64(hh, ll), fine)
+
+def decode.qs(+hh: U32, +ll: U32, +fine: Bool) -> U32:
+  decode.qs.pos(U32.is_lt(hh, 2147483648), hh, ll, fine)
+
+def decode.dot.end(+lo: U32, +ah: U32, +ph: U32, +al: U32, +fine: Bool) -> U32:
+  decode.qs((ah + ph + decode.carry(al, lo) : U32), lo, fine)
+
+def decode.dot(
+  cs: List<&2, U32>,
+  ks: List<&2, U32>,
+  have: Bool,
+  prod: U32 & U32,
+  +ah: U32,
+  +al: U32,
+  +fine: Bool
+) -> U32:
   match cs:
     case Nil{}:
       match ks:
@@ -202,29 +259,29 @@ def decode.dot(cs: List<&2, U32>, ks: List<&2, U32>, have: Bool, prod: U32 & U32
           match have:
             case False{}:
               (_ph, _pl) = prod
-              decode.q17(ah, al)
+              decode.qs(ah, al, fine)
             case True{}:
               (ph, pl) = prod
-              decode.dot.end((al + pl : U32), ah, ph, al)
+              decode.dot.end((al + pl : U32), ah, ph, al, fine)
     case c <> ct:
       match ks:
         case Nil{}:
           match have:
             case False{}:
               (_ph, _pl) = prod
-              decode.q17(ah, al)
+              decode.qs(ah, al, fine)
             case True{}:
               (ph, pl) = prod
-              decode.dot.end((al + pl : U32), ah, ph, al)
+              decode.dot.end((al + pl : U32), ah, ph, al, fine)
         case k <> kt:
           match have:
             case False{}:
               (_ph, _pl) = prod
-              decode.dot(ct, kt, True{}, decode.widemul(c, k), ah, al)
+              decode.dot(ct, kt, True{}, decode.widemul(c, k), ah, al, fine)
             case True{}:
               (+ph, +pl) = prod
               decode.dot(ct, kt, True{}, decode.widemul(c, k),
-                (ah + ph + decode.carry(al, (al + pl : U32)) : U32), (al + pl : U32))
+                (ah + ph + decode.carry(al, (al + pl : U32)) : U32), (al + pl : U32), fine)
 
 def decode.at.m(mm: Maybe<&2, U32>) -> U32:
   match mm:
@@ -247,13 +304,14 @@ def decode.cols(+cs: List<&2, U32>) -> Cols:
   Cols{decode.column(cs, 0), decode.column(cs, 1), decode.column(cs, 2), decode.column(cs, 3),
     decode.column(cs, 4), decode.column(cs, 5), decode.column(cs, 6), decode.column(cs, 7)}
 
-def decode.row8(+row: List<&2, U32>, +cols: Cols) -> List<&2, U32>:
+# one 1-D pass over eight values: fine for the row pass, which keeps four fraction bits for the column pass
+def decode.row8(+row: List<&2, U32>, +cols: Cols, +fine: Bool) -> List<&2, U32>:
   match cols:
     case Cols{+c0, +c1, +c2, +c3, +c4, +c5, +c6, +c7}:
-      [decode.dot(row, c0, False{}, (0, 0), 0, 0), decode.dot(row, c1, False{}, (0, 0), 0, 0),
-        decode.dot(row, c2, False{}, (0, 0), 0, 0), decode.dot(row, c3, False{}, (0, 0), 0, 0),
-        decode.dot(row, c4, False{}, (0, 0), 0, 0), decode.dot(row, c5, False{}, (0, 0), 0, 0),
-        decode.dot(row, c6, False{}, (0, 0), 0, 0), decode.dot(row, c7, False{}, (0, 0), 0, 0)]
+      [decode.dot(row, c0, False{}, (0, 0), 0, 0, fine), decode.dot(row, c1, False{}, (0, 0), 0, 0, fine),
+        decode.dot(row, c2, False{}, (0, 0), 0, 0, fine), decode.dot(row, c3, False{}, (0, 0), 0, 0, fine),
+        decode.dot(row, c4, False{}, (0, 0), 0, 0, fine), decode.dot(row, c5, False{}, (0, 0), 0, 0, fine),
+        decode.dot(row, c6, False{}, (0, 0), 0, 0, fine), decode.dot(row, c7, False{}, (0, 0), 0, 0, fine)]
 
 def decode.cos() -> List<&2, U32>:
   [46341, 64277, 60547, 54491, 46341, 36410, 25080, 12785, 46341, 54491, 25080, 4294954511, 4294920955,
@@ -275,7 +333,7 @@ def decode.pass(
     case 1n+p:
       match coeffs:
         case a <> b <> c <> d <> e <> f <> g <> h <> rest:
-          decode.pass(p, rest, cols, decode.row8([a, b, c, d, e, f, g, h], cols) <> acc)
+          decode.pass(p, rest, cols, decode.row8([a, b, c, d, e, f, g, h], cols, True{}) <> acc)
         case _:
           List.reverse(&2, List<&2, U32>, acc)
 
@@ -287,10 +345,10 @@ def decode.col(+rows: List<&2, List<&2, U32>>, +xx: U32, acc: List<&2, U32>) -> 
       decode.col(t, xx, decode.at(h, xx) <> acc)
 
 def decode.backs(+rows: List<&2, List<&2, U32>>, +cols: Cols) -> List<&2, List<&2, U32>>:
-  [decode.row8(decode.col(rows, 0, []), cols), decode.row8(decode.col(rows, 1, []), cols),
-    decode.row8(decode.col(rows, 2, []), cols), decode.row8(decode.col(rows, 3, []), cols),
-    decode.row8(decode.col(rows, 4, []), cols), decode.row8(decode.col(rows, 5, []), cols),
-    decode.row8(decode.col(rows, 6, []), cols), decode.row8(decode.col(rows, 7, []), cols)]
+  [decode.row8(decode.col(rows, 0, []), cols, False{}), decode.row8(decode.col(rows, 1, []), cols, False{}),
+    decode.row8(decode.col(rows, 2, []), cols, False{}), decode.row8(decode.col(rows, 3, []), cols, False{}),
+    decode.row8(decode.col(rows, 4, []), cols, False{}), decode.row8(decode.col(rows, 5, []), cols, False{}),
+    decode.row8(decode.col(rows, 6, []), cols, False{}), decode.row8(decode.col(rows, 7, []), cols, False{})]
 
 def decode.rows.of(+backs: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
   [decode.col(backs, 0, []), decode.col(backs, 1, []), decode.col(backs, 2, []),

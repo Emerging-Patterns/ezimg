@@ -531,10 +531,11 @@ def encode_jpeg.good(+ww: U32, +hh: U32, px: List<&2, U32>) -> Bool:
 #
 # Trusted, not proved: for every raster encode_jpeg writes, every colour
 # channel of decode_jpeg(encode_jpeg(r)) is within 8 of r's. Measured, not
-# proved: the largest error over about 15,000 rasters (random, gradients,
-# saturated colours, checkerboards, sizes 1 to 64) is 7; libjpeg with the same
-# settings (all-ones quantisation, 4:4:4) reaches 4. A proof needs error
-# bounds on the fixed-point DCT and IDCT.
+# proved: the largest error over 2,000 rasters (random, gradients, saturated
+# colours, checkerboards, sizes 1 to 64) is 4, as libjpeg's with the same
+# settings (all-ones quantisation, 4:4:4); rounding after each DCT pass, as
+# the codec did before it kept fraction bits between passes, reached 6 on the
+# same rasters. A proof needs error bounds on the fixed-point DCT and IDCT.
 def encode_jpeg(img: Raster) -> Maybe<&2, List<&2, U32>>:
   match img:
     case Raster{+w, +h, +px}:
