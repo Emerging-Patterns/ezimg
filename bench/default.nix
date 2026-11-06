@@ -51,6 +51,7 @@ let
     text = ''
       set -euo pipefail
       export EZIMG_BENCH_DRV=${drv}/bin/ezimg-bench
+      export EZIMG_JPEGTRAN=${pkgs.libjpeg_turbo.bin}/bin/jpegtran
       export EZIMG_BENCH_WORK="''${EZIMG_BENCH_WORK:-$(mktemp -d)}"
       export EZIMG_BENCH_MODE=${mode}
       mkdir -p "$EZIMG_BENCH_WORK"

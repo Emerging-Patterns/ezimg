@@ -423,11 +423,104 @@ def fph.pk(
     case False{}:
       none.pk()
 
+# the passes end in decode.done, whose samples are packed
+def pdone.pk(
+  got: U32 & Array<U32> & Array<U32> & Array<U32>,
+  frame: Jpeg.Frame,
+  rgb: Bool
+) -> pk.Ty(pic.px(Jpeg.decode.passes.done(got, frame, rgb))):
+  (ok, yy, cb, cr) = got
+  dok.pk(U32.is_eq(ok, 0), frame, rgb, yy, cb, cr)
+
+# scans the passes refuse have no samples; others are painted and packed
+def pfit.pk(
+  fit: Bool,
+  +frame: Jpeg.Frame,
+  passes: List<&2, Jpeg.Pass>,
+  +ww: U32,
+  +hh: U32,
+  rgb: Bool
+) -> pk.Ty(pic.px(Jpeg.decode.passes.fit(fit, frame, passes, ww, hh, rgb))):
+  match fit:
+    case False{}:
+      none.pk()
+    case True{}:
+      pdone.pk(Jpeg.decode.passes.go(passes, frame, (1, Jpeg.decode.plane((ww * hh : U32)),
+        Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)))), frame, rgb)
+
+# the picture of a frame's passes is packed
+def passes.pk(
+  frame: Jpeg.Frame,
+  +passes: List<&2, Jpeg.Pass>,
+  rgb: Bool
+) -> pk.Ty(pic.px(Jpeg.decode.passes(frame, passes, rgb))):
+  match frame:
+    case Jpeg.Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
+      +fr = {Jpeg.Frame{w, h, nf, ids, hs, vs, tq, hmax, vmax} : Jpeg.Frame}
+      pfit.pk(Bool.and(Bool.not(Bool.or(U32.is_eq(w, 0), U32.is_eq(h, 0))), Bool.and(Jpeg.decode.area.ok(w, h),
+        Jpeg.decode.passes.ok(passes, fr, 0, True{}))), fr, passes, w, h, rgb)
+
+def multigo.pk(
+  ok: Bool,
+  passes: List<&2, Jpeg.Pass>,
+  frame: Jpeg.Frame,
+  rgb: Bool
+) -> pk.Ty(pic.px(Jpeg.decode.multi.go(ok, passes, frame, rgb))):
+  match ok:
+    case False{}:
+      none.pk()
+    case True{}:
+      passes.pk(frame, List.reverse(&2, Jpeg.Pass, passes), rgb)
+
+# the picture of a file of several scans is packed
+def multi.pk(
+  chain: Jpeg.Chain,
+  +frame: Jpeg.Frame,
+  +facts: U32
+) -> pk.Ty(pic.px(Jpeg.decode.multi(chain, frame, facts))):
+  match chain:
+    case Jpeg.Chain{+ok, +passes}:
+      multigo.pk(Bool.and(ok, Jpeg.decode.facts.soi(facts)), passes, frame, Jpeg.decode.rgb.of(facts, frame))
+
+# whatever the phase a walk ends in, the picture is packed
+def fat.pk(
+  phase: Jpeg.Phase,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32,
+  +facts: U32
+) -> pk.Ty(pic.px(Jpeg.decode.finish.at(phase, frame, scan, tabs, ent, ri, kind, bad, facts))):
+  match phase:
+    case Jpeg.Rest{+mark, +acc}:
+      +st = {Jpeg.St{Jpeg.Rest{mark, acc}, frame, scan, tabs, ent, ri, kind, bad} : Jpeg.St}
+      multi.pk(Jpeg.decode.chain(1n+1n+List.length(&2, U32, acc), Jpeg.decode.st.good(st), st, []), frame,
+        facts)
+    case Jpeg.Stop{}:
+      fph.pk(True{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case Jpeg.Ent{}:
+      fph.pk(True{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case Jpeg.EntFF{}:
+      fph.pk(True{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case Jpeg.Seek{}:
+      fph.pk(False{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case Jpeg.Mark{}:
+      fph.pk(False{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case Jpeg.LenHi{_m}:
+      fph.pk(False{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case Jpeg.LenLo{_m, _h}:
+      fph.pk(False{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case Jpeg.Pay{_m, _l, _a}:
+      fph.pk(False{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+
 # whatever the walk's state and the facts, the picture decode finishes with is packed
 def finish.pk(st: Jpeg.St, +facts: U32) -> pk.Ty(pic.px(Jpeg.decode.finish(st, facts))):
   match st:
     case Jpeg.St{+phase, +frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
-      fph.pk(Jpeg.decode.ph.end(phase), frame, scan, tabs, ent, ri, kind, bad, facts)
+      fat.pk(phase, frame, scan, tabs, ent, ri, kind, bad, facts)
 
 # the samples of a raster, or none
 def raster.px(mr: Maybe<&2, Img.Raster>) -> List<&2, U32>:

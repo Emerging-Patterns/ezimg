@@ -39,17 +39,17 @@ law jpeg_enc_stuffed:
 def jpg.dctab(+cls: Bool) -> Jpeg.Huff:
   match cls:
     case False{}:
-      Jpeg.decode.canon(272n, 0n, Jenc.encode.dccounts(), Jenc.encode.dcsyms(), 0, 0, [], [], [])
+      Jpeg.decode.canon(Jenc.encode.dccounts(), Jenc.encode.dcsyms())
     case True{}:
-      Jpeg.decode.canon(272n, 0n, Jenc.encode.cdccounts(), Jenc.encode.dcsyms(), 0, 0, [], [], [])
+      Jpeg.decode.canon(Jenc.encode.cdccounts(), Jenc.encode.dcsyms())
 
 # the decoder's AC table a class's DHT counts and symbols build: K.5, or K.6 when cls is set
 def jpg.actab(+cls: Bool) -> Jpeg.Huff:
   match cls:
     case False{}:
-      Jpeg.decode.canon(272n, 0n, Jenc.encode.accounts(), Jenc.encode.acsyms(), 0, 0, [], [], [])
+      Jpeg.decode.canon(Jenc.encode.accounts(), Jenc.encode.acsyms())
     case True{}:
-      Jpeg.decode.canon(272n, 0n, Jenc.encode.caccounts(), Jenc.encode.cacsyms(), 0, 0, [], [], [])
+      Jpeg.decode.canon(Jenc.encode.caccounts(), Jenc.encode.cacsyms())
 
 # the tables the decoder holds after reading encode_jpeg's DQT and two DHT segments at quality qq: Annex K's
 # tables K.1 and K.2 at that quality, in zigzag order, as quantisation tables 0 and 1, and the Annex K luminance
@@ -383,12 +383,11 @@ def jpg.sym.back(
   +sy: U32,
   +post: List<&2, List<&2, Bool>>
 ) -> U32 & (List<&2, U32> & U32) & U32:
-  jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, jpg.skip(pre, Jpeg.Bits{0, 1, 0, jpg.sym.bytes(pre, book, sy,
-    post)})}, tab), post)
+  jpg.hit(Jpeg.decode.huff(16n, tab, jpg.skip(pre, Jpeg.Bits{0, 1, 0, jpg.sym.bytes(pre, book, sy, post)})), post)
 
 # LAW: the Annex K DC tables, luminance and chrominance: for every DC symbol, the code the encoder's book for the
 # class (encode.dcof) holds for it, written at any bit offset between any codes, is decoded by the decoder's
-# Huffman lookup in the table decode.canon builds from the class's DHT counts (decode.look) to that symbol, the
+# Huffman lookup in the table decode.canon builds from the class's DHT counts (its code tree) to that symbol, the
 # reader left exactly after the code, ok still 1
 law jpeg_huff_dc:
   for +cls: Bool

@@ -141,10 +141,72 @@ def cv.py(
       cv.py(pp, Jpeg.decode.splat.px(U32.to_nat(pw), plane, x0, (y0 + py : U32), 0, ww, hh, vv), x0, y0,
         (py + 1 : U32), pw, ww, hh, vv)
 
-# the decoder's block row is jpg.cover.col's, sample for sample
+# the first entry after n more of a list is the list's entry n
+def nth_skip(
+  nn: Nat,
+  xs: List<&2, U32>
+) -> {Jpeg.decode.nth(0n, Jpeg.decode.skip(nn, xs)) == Jpeg.decode.at.m(List.get(&2, U32, xs, nn)) : U32}:
+  match nn:
+    case 0n:
+      match xs:
+        case Nil{}:
+          {==}
+        case _h <> _t:
+          {==}
+    case 1n+pp:
+      match xs:
+        case Nil{}:
+          {==}
+        case _h <> tt:
+          nth_skip(pp, tt)
+
+# nothing is left of no entries
+def skip_nil(aa: Nat) -> {Jpeg.decode.skip(aa, []) == [] : List<&2, U32>}:
+  match aa:
+    case 0n:
+      {==}
+    case 1n+_p:
+      {==}
+
+# the entries after a more of the entries after b more are the entries after b + a more
+def skip_skip(
+  bb: Nat,
+  xs: List<&2, U32>,
+  +aa: Nat
+) -> {Jpeg.decode.skip(aa, Jpeg.decode.skip(bb, xs)) == Jpeg.decode.skip(Nat.add(bb, aa), xs) : List<&2, U32>}:
+  match bb:
+    case 0n:
+      {==}
+    case 1n+pp:
+      match xs:
+        case Nil{}:
+          skip_nil(aa)
+        case _h <> tt:
+          skip_skip(pp, tt, aa)
+
+# the places of a block row's samples from column col on, left of them: entry kn of the block's samples is sample
+# row * 8 + col, the next entry the next column's
+def KIdx(left: Nat, +row: U32, +col: U32, +kn: Nat) -> Type:
+  match left:
+    case 0n:
+      Unit
+    case 1n+pp:
+      {U32.to_nat((row * 8 + col : U32)) == kn : Nat} & KIdx(pp, row, (col + 1 : U32), Nat.add(kn, 1n))
+
+# the places of a block's rows from row on, left of them, eight samples to a row
+def RIdx(left: Nat, +row: U32, +kn: Nat) -> Type:
+  match left:
+    case 0n:
+      Unit
+    case 1n+pp:
+      KIdx(8n, row, 0, kn) & RIdx(pp, (row + 1 : U32), Nat.add(kn, 8n))
+
+# the decoder's block row, reading its samples in order from xs, is jpg.cover.col's, which reads sample
+# row * 8 + col of the block's samples: xs is the samples after kn, and KIdx places them
 def cv.col(
   left: Nat,
   -plane: Array<U32>,
+  +xs: List<&2, U32>,
   +samples: List<&2, U32>,
   +row: U32,
   +col: U32,
@@ -153,26 +215,54 @@ def cv.col(
   +pw: U32,
   +ph: U32,
   +ww: U32,
-  +hh: U32
-) -> {Jpeg.decode.splat.col(left, plane, samples, row, col, ox, oy, pw, ph, ww, hh) ==
+  +hh: U32,
+  +kn: Nat,
+  +hx: {xs == Jpeg.decode.skip(kn, samples) : List<&2, U32>},
+  hk: KIdx(left, row, col, kn)
+) -> {Jpeg.decode.splat.col(left, plane, xs, row, col, ox, oy, pw, ph, ww, hh) ==
   Laws.jpg.cover.col(left, plane, samples, row, col, ox, oy, pw, ph, ww, hh) : Array<U32>}:
   match left:
     case 0n:
       {==}
     case 1n+pp:
-      ee = cv.py(U32.to_nat(ph), plane, (ox + col * pw : U32), (oy + row * ph : U32), 0, pw, ww, hh,
-        Jpeg.decode.at(samples, (row * 8 + col : U32)))
-      %ee : {Jpeg.decode.splat.col(pp, Jpeg.decode.splat.py(U32.to_nat(ph), plane, (ox + col * pw : U32),
-        (oy + row * ph : U32), 0, pw, ww, hh, Jpeg.decode.at(samples, (row * 8 + col : U32))), samples, row,
-        (col + 1 : U32), ox, oy, pw, ph, ww, hh) == Laws.jpg.cover.col(pp, _, samples, row, (col + 1 : U32), ox, oy,
-        pw, ph, ww, hh) : Array<U32>}
-      cv.col(pp, Jpeg.decode.splat.py(U32.to_nat(ph), plane, (ox + col * pw : U32), (oy + row * ph : U32), 0, pw,
-        ww, hh, Jpeg.decode.at(samples, (row * 8 + col : U32))), samples, row, (col + 1 : U32), ox, oy, pw, ph, ww, hh)
+      (ek, hr) = hk
+      +x0 = (ox + col * pw : U32)
+      +y0 = (oy + row * ph : U32)
+      +nh = U32.to_nat(ph)
+      +vd = Jpeg.decode.nth(0n, xs)
+      +vc = Jpeg.decode.at(samples, (row * 8 + col : U32))
+      +ev = {Equal.trans(U32, vd, Jpeg.decode.nth(0n, Jpeg.decode.skip(kn, samples)), vc, Equal.cong(List<&2, U32>, U32,
+        ys => Jpeg.decode.nth(0n, ys), xs, Jpeg.decode.skip(kn, samples), hx), Equal.trans(U32, Jpeg.decode.nth(0n,
+        Jpeg.decode.skip(kn, samples)), Jpeg.decode.at.m(List.get(&2, U32, samples, kn)), vc, nth_skip(kn, samples),
+        Equal.cong(Nat, U32, nn => Jpeg.decode.at.m(List.get(&2, U32, samples, nn)), kn, U32.to_nat((row * 8 + col :
+        U32)), Equal.sym(Nat, U32.to_nat((row * 8 + col : U32)), kn, ek)))) : {vd == vc : U32}}
+      +ep = {Equal.trans(Array<U32>, Jpeg.decode.splat.py(nh, plane, x0, y0, 0, pw, ww, hh, vd),
+        Jpeg.decode.splat.py(nh, plane, x0, y0, 0, pw, ww, hh, vc), Laws.jpg.cover.py(nh, plane, x0, y0, 0, pw, ww,
+          hh, vc),
+        Equal.cong(U32, Array<U32>, vv => Jpeg.decode.splat.py(nh, plane, x0, y0, 0, pw, ww, hh, vv), vd, vc, ev),
+        cv.py(nh, plane, x0, y0, 0, pw, ww, hh, vc)) : {Jpeg.decode.splat.py(nh, plane, x0, y0, 0, pw, ww, hh,
+          vd) == Laws.jpg.cover.py(nh, plane, x0, y0, 0, pw, ww, hh, vc) : Array<U32>}}
+      +el = {Equal.trans(List<&2, U32>, Jpeg.decode.skip(1n, xs), Jpeg.decode.skip(1n, Jpeg.decode.skip(kn, samples)),
+        Jpeg.decode.skip(Nat.add(kn, 1n), samples), Equal.cong(List<&2, U32>, List<&2, U32>, ys =>
+        Jpeg.decode.skip(1n, ys), xs, Jpeg.decode.skip(kn, samples), hx), skip_skip(kn, samples, 1n)) :
+        {Jpeg.decode.skip(1n, xs) == Jpeg.decode.skip(Nat.add(kn, 1n), samples) : List<&2, U32>}}
+      Equal.trans(Array<U32>, Jpeg.decode.splat.col(pp, Jpeg.decode.splat.py(nh, plane, x0, y0, 0, pw, ww, hh, vd),
+        Jpeg.decode.skip(1n, xs), row, (col + 1 : U32), ox, oy,
+        pw, ph, ww, hh), Jpeg.decode.splat.col(pp, Laws.jpg.cover.py(nh, plane, x0, y0, 0, pw, ww, hh, vc),
+          Jpeg.decode.skip(1n, xs), row, (col + 1 : U32), ox, oy, pw, ph,
+        ww, hh), Laws.jpg.cover.col(pp, Laws.jpg.cover.py(nh, plane, x0, y0, 0, pw, ww, hh, vc), samples, row,
+          (col + 1 : U32), ox, oy, pw, ph, ww, hh),
+        Equal.cong(Array<U32>, Array<U32>, pl => Jpeg.decode.splat.col(pp, pl, Jpeg.decode.skip(1n, xs), row,
+        (col + 1 : U32), ox, oy, pw, ph, ww, hh), Jpeg.decode.splat.py(nh, plane, x0, y0, 0, pw, ww, hh, vd),
+          Laws.jpg.cover.py(nh, plane, x0, y0, 0, pw, ww, hh, vc), ep), cv.col(pp, Laws.jpg.cover.py(nh, plane, x0,
+            y0, 0, pw, ww, hh, vc), Jpeg.decode.skip(1n, xs), samples, row,
+        (col + 1 : U32), ox, oy, pw, ph, ww, hh, Nat.add(kn, 1n), el, hr))
 
-# the decoder's block is jpg.cover's, row for row
+# the decoder's block, reading its samples in order, is jpg.cover's, row for row
 def cv.all(
   left: Nat,
   -plane: Array<U32>,
+  +xs: List<&2, U32>,
   +samples: List<&2, U32>,
   +row: U32,
   +ox: U32,
@@ -180,19 +270,56 @@ def cv.all(
   +pw: U32,
   +ph: U32,
   +ww: U32,
-  +hh: U32
-) -> {Jpeg.decode.splat(left, plane, samples, row, ox, oy, pw, ph, ww, hh) ==
+  +hh: U32,
+  +kn: Nat,
+  +hx: {xs == Jpeg.decode.skip(kn, samples) : List<&2, U32>},
+  hk: RIdx(left, row, kn)
+) -> {Jpeg.decode.splat(left, plane, xs, row, ox, oy, pw, ph, ww, hh) ==
   Laws.jpg.cover(left, plane, samples, row, ox, oy, pw, ph, ww, hh) : Array<U32>}:
   match left:
     case 0n:
       {==}
     case 1n+pp:
-      ee = cv.col(8n, plane, samples, row, 0, ox, oy, pw, ph, ww, hh)
-      %ee : {Jpeg.decode.splat(pp, Jpeg.decode.splat.col(8n, plane, samples, row, 0, ox, oy, pw, ph, ww, hh), samples,
-        (row + 1 : U32), ox, oy, pw, ph, ww, hh) == Laws.jpg.cover(pp, _, samples, (row + 1 : U32), ox, oy, pw, ph, ww,
-        hh) : Array<U32>}
-      cv.all(pp, Jpeg.decode.splat.col(8n, plane, samples, row, 0, ox, oy, pw, ph, ww, hh), samples,
-        (row + 1 : U32), ox, oy, pw, ph, ww, hh)
+      (k8, hr) = hk
+      +el = {Equal.trans(List<&2, U32>, Jpeg.decode.skip(8n, xs), Jpeg.decode.skip(8n, Jpeg.decode.skip(kn, samples)),
+        Jpeg.decode.skip(Nat.add(kn, 8n), samples), Equal.cong(List<&2, U32>, List<&2, U32>, ys =>
+        Jpeg.decode.skip(8n, ys), xs, Jpeg.decode.skip(kn, samples), hx), skip_skip(kn, samples, 8n)) :
+        {Jpeg.decode.skip(8n, xs) == Jpeg.decode.skip(Nat.add(kn, 8n), samples) : List<&2, U32>}}
+      Equal.trans(Array<U32>, Jpeg.decode.splat(pp, Jpeg.decode.splat.col(8n, plane, xs, row, 0, ox, oy, pw, ph, ww,
+        hh), Jpeg.decode.skip(8n, xs), (row + 1 : U32), ox, oy, pw, ph,
+        ww, hh), Jpeg.decode.splat(pp, Laws.jpg.cover.col(8n, plane, samples, row, 0, ox, oy, pw, ph, ww, hh),
+          Jpeg.decode.skip(8n, xs), (row + 1 : U32), ox, oy, pw, ph, ww, hh),
+        Laws.jpg.cover(pp, Laws.jpg.cover.col(8n, plane, samples, row, 0, ox, oy, pw, ph, ww, hh), samples,
+          (row + 1 : U32), ox, oy, pw, ph, ww, hh), Equal.cong(Array<U32>, Array<U32>,
+        pl => Jpeg.decode.splat(pp, pl, Jpeg.decode.skip(8n, xs), (row + 1 : U32), ox, oy, pw, ph, ww, hh),
+          Jpeg.decode.splat.col(8n, plane, xs, row, 0, ox, oy, pw, ph, ww, hh), Laws.jpg.cover.col(8n, plane, samples,
+            row, 0, ox, oy, pw, ph, ww, hh),
+        cv.col(8n, plane, xs, samples, row, 0, ox, oy, pw, ph, ww, hh, kn, hx, k8)), cv.all(pp, Laws.jpg.cover.col(8n,
+          plane, samples, row, 0, ox, oy, pw, ph, ww, hh),
+        Jpeg.decode.skip(8n, xs), samples, (row + 1 : U32), ox, oy, pw, ph, ww, hh, Nat.add(kn, 8n), el, hr))
+
+# the places of a whole block's samples: sample row * 8 + col is entry row * 8 + col, every row and column
+def ridx0() -> RIdx(8n, 0, 0n):
+  (({==}, ({==}, ({==}, ({==}, ({==}, ({==}, ({==}, ({==}, Unit{})))))))), (({==}, ({==}, ({==}, ({==}, ({==}, ({==},
+    ({==}, ({==}, Unit{})))))))), (({==}, ({==}, ({==}, ({==}, ({==}, ({==}, ({==}, ({==}, Unit{})))))))), (({==},
+    ({==}, ({==}, ({==}, ({==}, ({==}, ({==}, ({==}, Unit{})))))))), (({==}, ({==}, ({==}, ({==}, ({==}, ({==}, ({==},
+    ({==}, Unit{})))))))), (({==}, ({==}, ({==}, ({==}, ({==}, ({==}, ({==}, ({==}, Unit{})))))))), (({==}, ({==},
+    ({==}, ({==}, ({==}, ({==}, ({==}, ({==}, Unit{})))))))), (({==}, ({==}, ({==}, ({==}, ({==}, ({==}, ({==}, ({==},
+    Unit{})))))))), Unit{}))))))))
+
+# the decoder's block from its first row is jpg.cover's
+def cv.block(
+  -plane: Array<U32>,
+  +samples: List<&2, U32>,
+  +ox: U32,
+  +oy: U32,
+  +pw: U32,
+  +ph: U32,
+  +ww: U32,
+  +hh: U32
+) -> {Jpeg.decode.splat(8n, plane, samples, 0, ox, oy, pw, ph, ww, hh) == Laws.jpg.cover(8n, plane, samples, 0, ox,
+  oy, pw, ph, ww, hh) : Array<U32>}:
+  cv.all(8n, plane, samples, samples, 0, ox, oy, pw, ph, ww, hh, 0n, {==}, ridx0())
 
 # ---- placement of any scan component (laws/JpegPlacesComponentSamples.bend) ----
 
@@ -2820,6 +2947,25 @@ def arr_py(
         (py + 1 : U32), pw, ww, hh, vv)) : Array<U32>}
       arr_py(pp, t1, x0, y0, (py + 1 : U32), pw, ww, hh, vv)
 
+# jpg.cover.py on a tree's array is the tree's
+def arr_pyL(
+  +left: Nat,
+  +tt: M1.Tr,
+  +x0: U32,
+  +y0: U32,
+  +py: U32,
+  +pw: U32,
+  +ww: U32,
+  +hh: U32,
+  +vv: U32
+) -> {Laws.jpg.cover.py(left, M1.arr(tt), x0, y0, py, pw, ww, hh, vv) == M1.arr(pyT(left, tt, x0, y0, py, pw, ww, hh,
+  vv)) : Array<U32>}:
+  Equal.trans(Array<U32>, Laws.jpg.cover.py(left, M1.arr(tt), x0, y0, py, pw, ww, hh, vv),
+    Jpeg.decode.splat.py(left, M1.arr(tt), x0, y0, py, pw, ww, hh, vv), M1.arr(pyT(left, tt, x0, y0, py, pw, ww, hh,
+    vv)), Equal.sym(Array<U32>, Jpeg.decode.splat.py(left, M1.arr(tt), x0, y0, py, pw, ww, hh, vv),
+    Laws.jpg.cover.py(left, M1.arr(tt), x0, y0, py, pw, ww, hh, vv), cv.py(left, M1.arr(tt), x0, y0, py, pw, ww, hh,
+    vv)), arr_py(left, tt, x0, y0, py, pw, ww, hh, vv))
+
 # the decoder's block row on a tree's array is the tree's
 def arr_col(
   left: Nat,
@@ -2833,7 +2979,7 @@ def arr_col(
   +ph: U32,
   +ww: U32,
   +hh: U32
-) -> {Jpeg.decode.splat.col(left, M1.arr(tt), samples, row, col, ox, oy, pw, ph, ww, hh) == M1.arr(colT(left, tt,
+) -> {Laws.jpg.cover.col(left, M1.arr(tt), samples, row, col, ox, oy, pw, ph, ww, hh) == M1.arr(colT(left, tt,
     samples,
   row, col, ox, oy, pw, ph, ww, hh)) : Array<U32>}:
   match left:
@@ -2844,10 +2990,10 @@ def arr_col(
       +y0 = (oy + row * ph : U32)
       +vv = Jpeg.decode.at(samples, (row * 8 + col : U32))
       +t1 = pyT(U32.to_nat(ph), tt, x0, y0, 0, pw, ww, hh, vv)
-      se = Equal.sym(Array<U32>, Jpeg.decode.splat.py(U32.to_nat(ph), M1.arr(tt), x0, y0, 0, pw, ww, hh, vv),
+      se = Equal.sym(Array<U32>, Laws.jpg.cover.py(U32.to_nat(ph), M1.arr(tt), x0, y0, 0, pw, ww, hh, vv),
           M1.arr(t1),
-        arr_py(U32.to_nat(ph), tt, x0, y0, 0, pw, ww, hh, vv))
-      %se : {Jpeg.decode.splat.col(pp, _, samples, row, (col + 1 : U32), ox, oy, pw, ph, ww, hh) == M1.arr(colT(pp, t1,
+        arr_pyL(U32.to_nat(ph), tt, x0, y0, 0, pw, ww, hh, vv))
+      %se : {Laws.jpg.cover.col(pp, _, samples, row, (col + 1 : U32), ox, oy, pw, ph, ww, hh) == M1.arr(colT(pp, t1,
         samples, row, (col + 1 : U32), ox, oy, pw, ph, ww, hh)) : Array<U32>}
       arr_col(pp, t1, samples, row, (col + 1 : U32), ox, oy, pw, ph, ww, hh)
 
@@ -2863,7 +3009,7 @@ def arr_cv(
   +ph: U32,
   +ww: U32,
   +hh: U32
-) -> {Jpeg.decode.splat(left, M1.arr(tt), samples, row, ox, oy, pw, ph, ww, hh) == M1.arr(cvT(left, tt, samples, row,
+) -> {Laws.jpg.cover(left, M1.arr(tt), samples, row, ox, oy, pw, ph, ww, hh) == M1.arr(cvT(left, tt, samples, row,
     ox, oy,
   pw, ph, ww, hh)) : Array<U32>}:
   match left:
@@ -2871,12 +3017,28 @@ def arr_cv(
       {==}
     case 1n+pp:
       +t1 = colT(8n, tt, samples, row, 0, ox, oy, pw, ph, ww, hh)
-      se = Equal.sym(Array<U32>, Jpeg.decode.splat.col(8n, M1.arr(tt), samples, row, 0, ox, oy, pw, ph, ww, hh),
+      se = Equal.sym(Array<U32>, Laws.jpg.cover.col(8n, M1.arr(tt), samples, row, 0, ox, oy, pw, ph, ww, hh),
           M1.arr(t1),
         arr_col(8n, tt, samples, row, 0, ox, oy, pw, ph, ww, hh))
-      %se : {Jpeg.decode.splat(pp, _, samples, (row + 1 : U32), ox, oy, pw, ph, ww, hh) == M1.arr(cvT(pp, t1, samples,
+      %se : {Laws.jpg.cover(pp, _, samples, (row + 1 : U32), ox, oy, pw, ph, ww, hh) == M1.arr(cvT(pp, t1, samples,
         (row + 1 : U32), ox, oy, pw, ph, ww, hh)) : Array<U32>}
       arr_cv(pp, t1, samples, (row + 1 : U32), ox, oy, pw, ph, ww, hh)
+
+# the decoder's block on a tree's array is the tree's
+def arr_cv8(
+  +tt: M1.Tr,
+  +samples: List<&2, U32>,
+  +ox: U32,
+  +oy: U32,
+  +pw: U32,
+  +ph: U32,
+  +ww: U32,
+  +hh: U32
+) -> {Jpeg.decode.splat(8n, M1.arr(tt), samples, 0, ox, oy, pw, ph, ww, hh) == M1.arr(cvT(8n, tt, samples, 0, ox, oy,
+  pw, ph, ww, hh)) : Array<U32>}:
+  Equal.trans(Array<U32>, Jpeg.decode.splat(8n, M1.arr(tt), samples, 0, ox, oy, pw, ph, ww, hh), Laws.jpg.cover(8n,
+    M1.arr(tt), samples, 0, ox, oy, pw, ph, ww, hh), M1.arr(cvT(8n, tt, samples, 0, ox, oy, pw, ph, ww, hh)),
+    cv.block(M1.arr(tt), samples, ox, oy, pw, ph, ww, hh), arr_cv(8n, tt, samples, 0, ox, oy, pw, ph, ww, hh))
 
 # a pixel write keeps a tree perfect
 def pf_in(
@@ -3497,8 +3659,7 @@ def paint_at_of(
       kk)),
     D1.jpg.val(Array.get(U32, M1.arr(cv), kk)), Laws.jpg.blk(8n, samples, 0, ox, oy, pw, ph, xx, yy,
     D1.jpg.val(Array.get(U32, M1.arr(tt), kk))), Equal.cong(Array<U32>, U32, aa => D1.jpg.val(Array.get(U32, aa, kk)),
-    Jpeg.decode.splat(8n, M1.arr(tt), samples, 0, ox, oy, pw, ph, ww, hh), M1.arr(cv), arr_cv(8n, tt, samples, 0, ox,
-        oy,
+    Jpeg.decode.splat(8n, M1.arr(tt), samples, 0, ox, oy, pw, ph, ww, hh), M1.arr(cv), arr_cv8(tt, samples, ox, oy,
     pw, ph, ww, hh)), Equal.trans(U32, D1.jpg.val(Array.get(U32, M1.arr(cv), kk)), M1.at(cv, kk), Laws.jpg.blk(8n,
     samples, 0, ox, oy, pw, ph, xx, yy, D1.jpg.val(Array.get(U32, M1.arr(tt), kk))), val_at(cv, kk), Equal.trans(U32,
     M1.at(cv, kk), Laws.jpg.blk(8n, samples, 0, ox, oy, pw, ph, xx, yy, M1.at(tt, kk)), Laws.jpg.blk(8n, samples, 0,
@@ -4021,7 +4182,7 @@ def arr_pu(
 ) -> {Jpeg.decode.paint.use(gg, which, samples, M1.arr(tt)) == M1.arr(puT(which, gg, samples, tt)) : Array<U32>}:
   match which gg:
     case True{} Jpeg.Geom{+ox, +oy, +pw, +ph, +ww, +hh}:
-      arr_cv(8n, tt, samples, 0, ox, oy, pw, ph, ww, hh)
+      arr_cv8(tt, samples, ox, oy, pw, ph, ww, hh)
     case False{} Jpeg.Geom{+_ox, +_oy, +_pw, +_ph, +_ww, +_hh}:
       {==}
 
@@ -4707,10 +4868,10 @@ def Laws.jpeg_walk_mcu(
     hmax, ns, ri, h_last, h_end)
 
 def Laws.jpeg_block_cover_all(pw, ph, ox, oy, ww, hh, samples, plane):
-  cv.all(8n, plane, samples, 0, ox, oy, pw, ph, ww, hh)
+  cv.block(plane, samples, ox, oy, pw, ph, ww, hh)
 
 def Laws.jpeg_block_cover(pw, ph, _h_pw, _h_ph, _h_44, ox, oy, ww, hh, samples, nn):
-  cv.all(8n, Jpeg.decode.plane(nn), samples, 0, ox, oy, pw, ph, ww, hh)
+  cv.block(Jpeg.decode.plane(nn), samples, ox, oy, pw, ph, ww, hh)
 
 def Laws.jpeg_mcu_grid_comp(comp, sids, ids, hs, vs, h_hi, h_vi, mx, my, hmax, vmax, ww, hh):
   +hi = Laws.jpg.fac.of(comp, sids, ids, hs)

@@ -1934,47 +1934,33 @@ def one_canon(ss: RS, +ok: U32) -> {Jpeg.decode.one(rbits(ss, ok)) == canon(1n, 
     case RS{_qq, _os}:
       {==}
 
-# the ask of one bit, once the bit is read
-def ask.of(
-  +cs: List<&2, U32>,
-  +ls: List<&2, U32>,
-  +ys: List<&2, U32>,
-  +code: U32,
-  +len: U32,
-  bits: Jpeg.Bits,
-  +bb: Bool
-) -> {Jpeg.decode.ask.bit(Jpeg.Huff{cs, ls, ys}, (bits, M6.vstep(0, bb)), code, len) == Jpeg.Ask{Jpeg.decode.look(cs,
-    ls,
-  ys, M6.vstep(code, bb), (len + 1 : U32)), M6.vstep(code, bb), (len + 1 : U32), bits} : Jpeg.Ask}:
-  Equal.cong(U32, Jpeg.Ask, xx => Jpeg.Ask{Jpeg.decode.look(cs, ls, ys, xx, (len + 1 : U32)), xx, (len + 1 : U32),
-    bits}, U32.or(U32.shl(code), Laws.jpg.ubit(bb)), M6.vstep(code, bb), M2.or_shl_u(code, bb))
-
-# one bit asked of the table from the model reader
-def ask_step(
+# one bit read from the model's reader: the reader after it, and the bit as 0 or 1
+def one_step(
   +ss: RS,
   +ok: U32,
-  +code: U32,
-  +len: U32,
-  +cs: List<&2, U32>,
-  +ls: List<&2, U32>,
-  +ys: List<&2, U32>,
   hs: {rshort(ss) == True{} : Bool},
   h8: {roct8(ss) == True{} : Bool},
   hn: {rsome(ss) == True{} : Bool}
-) -> {Jpeg.decode.ask(rbits(ss, ok), code, len, Jpeg.Huff{cs, ls, ys}) == Jpeg.Ask{Jpeg.decode.look(cs, ls, ys,
-  M6.vstep(code, rhead(ss)), (len + 1 : U32)), M6.vstep(code, rhead(ss)), (len + 1 : U32), rbits(rnext(ss), ok)} : Jpeg.Ask}:  # noqa: S002
-  +hh = {Jpeg.Huff{cs, ls, ys} : Jpeg.Huff}
+) -> {Jpeg.decode.one(rbits(ss, ok)) == (rbits(rnext(ss), ok), M6.vstep(0, rhead(ss))) : Jpeg.Bits & U32}:
   +nx = rnext(ss)
-  +bb = rhead(ss)
-  Equal.trans(Jpeg.Ask, Jpeg.decode.ask.bit(hh, Jpeg.decode.one(rbits(ss, ok)), code, len),
-    Jpeg.decode.ask.bit(hh, (rbits(nx, ok), M6.vstep(0, bb)), code, len), Jpeg.Ask{Jpeg.decode.look(cs, ls, ys,
-    M6.vstep(code, bb), (len + 1 : U32)), M6.vstep(code, bb), (len + 1 : U32), rbits(nx, ok)},
-    Equal.cong(Jpeg.Bits & U32, Jpeg.Ask, gg => Jpeg.decode.ask.bit(hh, gg, code, len), Jpeg.decode.one(rbits(ss,
-    ok)), (rbits(nx, ok), M6.vstep(0, bb)), Equal.trans(Jpeg.Bits & U32, Jpeg.decode.one(rbits(ss, ok)),
-    canon(1n, ss, ok, 0), (rbits(nx, ok), M6.vstep(0, bb)), one_canon(ss, ok), Equal.trans(Jpeg.Bits & U32,
-    canon(1n, ss, ok, 0), canon(0n, nx, ok, M6.vstep(0, bb)), (rbits(nx, ok), M6.vstep(0, bb)),
-    rstep(0n, ss, ok, 0, hs, h8, hn), canon0(nx, ok, M6.vstep(0, bb))))),
-    ask.of(cs, ls, ys, code, len, rbits(nx, ok), bb))
+  +bv = M6.vstep(0, rhead(ss))
+  Equal.trans(Jpeg.Bits & U32, Jpeg.decode.one(rbits(ss, ok)), canon(1n, ss, ok, 0), (rbits(nx, ok), bv),
+    one_canon(ss, ok), Equal.trans(Jpeg.Bits & U32, canon(1n, ss, ok, 0), canon(0n, nx, ok, bv), (rbits(nx, ok), bv),
+    rstep(0n, ss, ok, 0, hs, h8, hn), canon0(nx, ok, bv)))
+
+# the walk after one bit read: the side of a node the bit leads to, the reader after the bit
+def side_eq(
+  bb: Bool,
+  +bits: Jpeg.Bits,
+  +zero: Jpeg.Huff,
+  +one: Jpeg.Huff
+) -> {Jpeg.decode.huff.next((bits, M6.vstep(0, bb)), zero, one) == Jpeg.Walk{M6.hw.side(bb, zero, one), bits} :
+  Jpeg.Walk}:
+  match bb:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
 
 # the head of a list of bits, False when empty
 def lhead(xs: List<&2, Bool>) -> Bool:
@@ -2000,7 +1986,7 @@ def hwres(rr: M6.HW, ss: RS, +ok: U32) -> Jpeg.Hit:
     case M6.HWMiss{}:
       Jpeg.Hit{0, rbits(ss, ok), 0}
 
-# a walk that hits within left asks
+# a walk that hits within left bits
 def hw.fits(rr: M6.HW, +left: Nat) -> Bool:
   match rr:
     case M6.HWHit{_s, +nn}:
@@ -2008,61 +1994,102 @@ def hw.fits(rr: M6.HW, +left: Nat) -> Bool:
     case M6.HWMiss{}:
       False{}
 
-# a hit's symbol handed on with the model's reader
-def use_some(
+# a leaf of the code tree is its symbol, the model's reader where it is
+def hleaf(
+  left: Nat,
   +sym: U32,
   ss: RS,
   +ok: U32
-) -> {Jpeg.decode.huff.use(Some{sym}, rbits(ss, ok)) == Jpeg.Hit{sym, rbits(ss, ok), ok} : Jpeg.Hit}:
-  match ss:
-    case RS{_qq, _os}:
-      {==}
+) -> {Jpeg.decode.huff(left, Jpeg.HLeaf{sym}, rbits(ss, ok)) == hwres(M6.HWHit{sym, 0n}, ss, ok) : Jpeg.Hit}:
+  match left:
+    case 0n:
+      match ss:
+        case RS{_qq, _os}:
+          {==}
+    case 1n+_p:
+      match ss:
+        case RS{_qq, _os}:
+          {==}
 
-# no walk fits in zero asks
-def pick_pos(look: Maybe<&2, U32>, rest: M6.HW, hf: {hw.fits(M6.hw.pick(look, rest), 0n) == True{} : Bool}) -> Empty:
-  match look:
-    case Some{_s}:
+# no walk one bit longer fits in no bits
+def inc_fits0(rr: M6.HW, hf: {hw.fits(M6.hw.inc(rr), 0n) == True{} : Bool}) -> Empty:
+  match rr:
+    case M6.HWHit{_s, _n}:
       M1.huf.false_true(hf)
-    case None{}:
-      match rest:
-        case M6.HWHit{_s, _n}:
-          M1.huf.false_true(hf)
-        case M6.HWMiss{}:
-          M1.huf.false_true(hf)
+    case M6.HWMiss{}:
+      M1.huf.false_true(hf)
 
-# the walk over the bits after the first, as the lookup after one bit needs it
-def HwIh(-rest: M6.HW, +_lf: Nat, -s0: RS, +_ok: U32, +_cd: U32, +_ln: U32, -tab: Jpeg.Huff) -> Type:
-  @hr: {hw.fits(rest, _lf) == True{} : Bool} -> {Jpeg.decode.huff(_lf, Jpeg.Ask{None{}, _cd, _ln,
-    rbits(rnext(s0), _ok)}, tab) == hwres(rest, rnext(s0), _ok) : Jpeg.Hit}
+# a walk one bit longer that fits in one more bit fits
+def inc_fits(
+  rr: M6.HW,
+  +left: Nat,
+  hf: {hw.fits(M6.hw.inc(rr), 1n+left) == True{} : Bool}
+) -> {hw.fits(rr, left) == True{} : Bool}:
+  match rr:
+    case M6.HWHit{_s, _n}:
+      hf
+    case M6.HWMiss{}:
+      Empty.absurd({hw.fits(M6.HWMiss{}, left) == True{} : Bool}, M1.huf.false_true(hf))
 
-# the decoder's lookup after one bit, by the table's answer at that length
-def hw.case(
-  look: Maybe<&2, U32>,
-  rest: M6.HW,
-  left: Nat,
-  +s0: RS,
+# a hit one bit longer is the hit from the reader one bit on
+def hwres_inc(
+  rr: M6.HW,
+  +ss: RS,
   +ok: U32,
-  +code: U32,
-  +len: U32,
-  +tab: Jpeg.Huff,
-  hf: {hw.fits(M6.hw.pick(look, rest), 1n+left) == True{} : Bool},
-  ih: HwIh(rest, left, s0, ok, code, len, tab)
-) -> {Jpeg.decode.huff(left, Jpeg.Ask{look, code, len, rbits(rnext(s0), ok)}, tab) == hwres(M6.hw.pick(look, rest), s0,
-  ok) : Jpeg.Hit}:
-  match look:
-    case Some{+sym}:
-      match left:
-        case 0n:
-          use_some(sym, rnext(s0), ok)
-        case 1n+_q:
-          use_some(sym, rnext(s0), ok)
-    case None{}:
-      match rest:
-        case M6.HWHit{+s2, +nn}:
-          ih(hf)
-        case M6.HWMiss{}:
-          Empty.absurd({Jpeg.decode.huff(left, Jpeg.Ask{None{}, code, len, rbits(rnext(s0), ok)}, tab) ==
-            hwres(M6.HWMiss{}, s0, ok) : Jpeg.Hit}, M1.huf.false_true(hf))
+  +left: Nat,
+  hf: {hw.fits(M6.hw.inc(rr), left) == True{} : Bool}
+) -> {hwres(rr, rnext(ss), ok) == hwres(M6.hw.inc(rr), ss, ok) : Jpeg.Hit}:
+  match rr:
+    case M6.HWHit{_s, _n}:
+      {==}
+    case M6.HWMiss{}:
+      Empty.absurd({hwres(M6.HWMiss{}, rnext(ss), ok) == hwres(M6.HWMiss{}, ss, ok) : Jpeg.Hit},
+        M1.huf.false_true(hf))
+
+# the lookup after a node's bit, from the side the bit leads to, is the walk from there
+def NodeIh(+bb: Bool, +rest: List<&2, Bool>, +pp: Nat, +ss: RS, +ok: U32, +zero: Jpeg.Huff, +one: Jpeg.Huff) -> Type:
+  {Jpeg.decode.huff(pp, M6.hw.side(bb, zero, one), rbits(rnext(ss), ok)) == hwres(M6.hw(rest, M6.hw.side(bb, zero,
+    one)), rnext(ss), ok) : Jpeg.Hit}
+
+# the decoder's lookup at a node, one bit on: the walk from the side the model reader's next bit leads to
+def hnode(
+  +bb: Bool,
+  +rest: List<&2, Bool>,
+  +pp: Nat,
+  +ss: RS,
+  +ok: U32,
+  +zero: Jpeg.Huff,
+  +one: Jpeg.Huff,
+  +tl: List<&2, Bool>,
+  +hs: {rshort(ss) == True{} : Bool},
+  +h8: {roct8(ss) == True{} : Bool},
+  +he: {rem(ss) == List.append(&2, Bool, bb <> rest, tl) : List<&2, Bool>},
+  ih: NodeIh(bb, rest, pp, ss, ok, zero, one),
+  +hf: {hw.fits(M6.hw(bb <> rest, Jpeg.HNode{zero, one}), 1n+pp) == True{} : Bool}
+) -> {Jpeg.decode.huff(1n+pp, Jpeg.HNode{zero, one}, rbits(ss, ok)) == hwres(M6.hw(bb <> rest, Jpeg.HNode{zero, one}),
+  ss, ok) : Jpeg.Hit}:
+  +nx = rnext(ss)
+  +sd = M6.hw.side(bb, zero, one)
+  +rr = M6.hw(rest, sd)
+  +hn = {Equal.cong(List<&2, Bool>, Bool, xs => Nat.is_lt(0n, List.length(&2, Bool, xs)), rem(ss),
+    bb <> List.append(&2, Bool, rest, tl), he) : {rsome(ss) == True{} : Bool}}
+  +ec = {Equal.trans(List<&2, Bool>, rhead(ss) <> rem(nx), rem(ss), bb <> List.append(&2, Bool, rest, tl),
+    Equal.sym(List<&2, Bool>, rem(ss), rhead(ss) <> rem(nx), rem_cons(ss, h8, hn)), he) :
+    {rhead(ss) <> rem(nx) == bb <> List.append(&2, Bool, rest, tl) : List<&2, Bool>}}
+  +eh = {Equal.cong(List<&2, Bool>, Bool, xs => lhead(xs), rhead(ss) <> rem(nx), bb <> List.append(&2, Bool, rest,
+    tl), ec) : {rhead(ss) == bb : Bool}}
+  +wa = Jpeg.decode.huff.next(Jpeg.decode.one(rbits(ss, ok)), zero, one)
+  +wb = Jpeg.decode.huff.next((rbits(nx, ok), M6.vstep(0, rhead(ss))), zero, one)
+  +wc = Jpeg.decode.huff.next((rbits(nx, ok), M6.vstep(0, bb)), zero, one)
+  +ew = {Equal.trans(Jpeg.Walk, wa, wb, Jpeg.Walk{sd, rbits(nx, ok)}, Equal.cong(Jpeg.Bits & U32, Jpeg.Walk, gg =>
+    Jpeg.decode.huff.next(gg, zero, one), Jpeg.decode.one(rbits(ss, ok)), (rbits(nx, ok), M6.vstep(0, rhead(ss))),
+    one_step(ss, ok, hs, h8, hn)), Equal.trans(Jpeg.Walk, wb, wc, Jpeg.Walk{sd, rbits(nx, ok)}, Equal.cong(Bool,
+    Jpeg.Walk, xb => Jpeg.decode.huff.next((rbits(nx, ok), M6.vstep(0, xb)), zero, one), rhead(ss), bb, eh),
+    side_eq(bb, rbits(nx, ok), zero, one))) : {wa == Jpeg.Walk{sd, rbits(nx, ok)} : Jpeg.Walk}}
+  Equal.trans(Jpeg.Hit, Jpeg.decode.huff.walk(pp, wa), Jpeg.decode.huff.walk(pp, Jpeg.Walk{sd, rbits(nx, ok)}),
+    hwres(M6.hw.inc(rr), ss, ok), Equal.cong(Jpeg.Walk, Jpeg.Hit, ww => Jpeg.decode.huff.walk(pp, ww), wa,
+    Jpeg.Walk{sd, rbits(nx, ok)}, ew), Equal.trans(Jpeg.Hit, Jpeg.decode.huff(pp, sd, rbits(nx, ok)), hwres(rr, nx,
+    ok), hwres(M6.hw.inc(rr), ss, ok), ih, hwres_inc(rr, ss, ok, 1n+pp, hf)))
 
 # the decoder's Huffman lookup from the model's reader holding bits bs and more is the walk over bs
 def hwalk(
@@ -2070,347 +2097,55 @@ def hwalk(
   left: Nat,
   +ss: RS,
   +ok: U32,
-  +code: U32,
-  +len: U32,
-  +cs: List<&2, U32>,
-  +ls: List<&2, U32>,
-  +ys: List<&2, U32>,
+  +tab: Jpeg.Huff,
   +tl: List<&2, Bool>,
   +hs: {rshort(ss) == True{} : Bool},
   +h8: {roct8(ss) == True{} : Bool},
   +he: {rem(ss) == List.append(&2, Bool, bs, tl) : List<&2, Bool>},
-  hf: {hw.fits(M6.hw(bs, Jpeg.Huff{cs, ls, ys}, code, len), left) == True{} : Bool}
-) -> {Jpeg.decode.huff(left, Jpeg.Ask{None{}, code, len, rbits(ss, ok)}, Jpeg.Huff{cs, ls, ys}) == hwres(M6.hw(bs,
-  Jpeg.Huff{cs, ls, ys}, code, len), ss, ok) : Jpeg.Hit}:
+  +hf: {hw.fits(M6.hw(bs, tab), left) == True{} : Bool}
+) -> {Jpeg.decode.huff(left, tab, rbits(ss, ok)) == hwres(M6.hw(bs, tab), ss, ok) : Jpeg.Hit}:
   match bs:
     case Nil{}:
-      Empty.absurd({Jpeg.decode.huff(left, Jpeg.Ask{None{}, code, len, rbits(ss, ok)}, Jpeg.Huff{cs, ls, ys}) ==
-        hwres(M6.HWMiss{}, ss, ok) : Jpeg.Hit}, M1.huf.false_true(hf))
+      match tab:
+        case Jpeg.HLeaf{+sym}:
+          hleaf(left, sym, ss, ok)
+        case Jpeg.HGap{}:
+          Empty.absurd({Jpeg.decode.huff(left, Jpeg.HGap{}, rbits(ss, ok)) == hwres(M6.HWMiss{}, ss, ok) : Jpeg.Hit},
+            M1.huf.false_true(hf))
+        case Jpeg.HNode{+zero, +one}:
+          Empty.absurd({Jpeg.decode.huff(left, Jpeg.HNode{zero, one}, rbits(ss, ok)) == hwres(M6.HWMiss{}, ss, ok) :
+            Jpeg.Hit}, M1.huf.false_true(hf))
     case +bb <> +rest:
       match left:
         case 0n:
-          +tab = {Jpeg.Huff{cs, ls, ys} : Jpeg.Huff}
-          +c2 = M6.vstep(code, bb)
-          +l2 = (len + 1 : U32)
-          Empty.absurd({Jpeg.decode.huff(0n, Jpeg.Ask{None{}, code, len, rbits(ss, ok)}, tab) ==
-            hwres(M6.hw(bb <> rest, tab, code, len), ss, ok) : Jpeg.Hit}, pick_pos(Jpeg.decode.look(cs, ls, ys, c2, l2),
-            M6.hw(rest, tab, c2, l2), hf))
+          match tab:
+            case Jpeg.HLeaf{+sym}:
+              hleaf(0n, sym, ss, ok)
+            case Jpeg.HGap{}:
+              Empty.absurd({Jpeg.decode.huff(0n, Jpeg.HGap{}, rbits(ss, ok)) == hwres(M6.HWMiss{}, ss, ok) :
+                Jpeg.Hit}, M1.huf.false_true(hf))
+            case Jpeg.HNode{+zero, +one}:
+              Empty.absurd({Jpeg.decode.huff(0n, Jpeg.HNode{zero, one}, rbits(ss, ok)) == hwres(M6.hw(bb <> rest,
+                Jpeg.HNode{zero, one}), ss, ok) : Jpeg.Hit}, inc_fits0(M6.hw(rest, M6.hw.side(bb, zero, one)), hf))
         case 1n+ +pp:
-          +tab = {Jpeg.Huff{cs, ls, ys} : Jpeg.Huff}
-          +c2 = M6.vstep(code, bb)
-          +l2 = (len + 1 : U32)
-          +lk = Jpeg.decode.look(cs, ls, ys, c2, l2)
-          +nx = rnext(ss)
-          +hn = {Equal.cong(List<&2, Bool>, Bool, xs => Nat.is_lt(0n, List.length(&2, Bool, xs)), rem(ss),
-            bb <> List.append(&2, Bool, rest, tl), he) : {rsome(ss) == True{} : Bool}}
-          +ec = {Equal.trans(List<&2, Bool>, rhead(ss) <> rem(nx), rem(ss), bb <> List.append(&2, Bool, rest,
-            tl), Equal.sym(List<&2, Bool>, rem(ss), rhead(ss) <> rem(nx), rem_cons(ss, h8, hn)), he) :
-            {rhead(ss) <> rem(nx) == bb <> List.append(&2, Bool, rest, tl) : List<&2, Bool>}}
-          +eh = {Equal.cong(List<&2, Bool>, Bool, xs => lhead(xs), rhead(ss) <> rem(nx), bb <> List.append(&2,
-            Bool, rest, tl), ec) : {rhead(ss) == bb : Bool}}
-          +et = {Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => ltail(xs), rhead(ss) <> rem(nx), bb <>
-            List.append(&2, Bool, rest, tl), ec) : {rem(nx) == List.append(&2, Bool, rest, tl) : List<&2, Bool>}}
-          Equal.trans(Jpeg.Hit, Jpeg.decode.huff(pp, Jpeg.decode.ask(rbits(ss, ok), code, len, tab), tab),
-            Jpeg.decode.huff(pp, Jpeg.Ask{lk, c2, l2, rbits(nx, ok)}, tab), hwres(M6.hw(bb <> rest, tab, code, len), ss,
-            ok), Equal.cong(Jpeg.Ask, Jpeg.Hit, aa => Jpeg.decode.huff(pp, aa, tab), Jpeg.decode.ask(rbits(ss, ok),
-            code, len, tab), Jpeg.Ask{lk, c2, l2, rbits(nx, ok)}, Equal.trans(Jpeg.Ask, Jpeg.decode.ask(rbits(ss,
-            ok), code, len, tab), Jpeg.Ask{Jpeg.decode.look(cs, ls, ys, M6.vstep(code, rhead(ss)), l2),
-            M6.vstep(code, rhead(ss)), l2, rbits(nx, ok)}, Jpeg.Ask{lk, c2, l2, rbits(nx, ok)},
-            ask_step(ss, ok, code, len, cs, ls, ys, hs, h8, hn), Equal.cong(Bool, Jpeg.Ask, xb =>
-            Jpeg.Ask{Jpeg.decode.look(cs, ls, ys, M6.vstep(code, xb), l2), M6.vstep(code, xb), l2, rbits(nx, ok)},
-            rhead(ss), bb, eh))),
-            hw.case(lk, M6.hw(rest, tab, c2, l2), pp, ss, ok, c2, l2, tab, hf, hr => hwalk(rest, pp, nx, ok, c2, l2, cs,
-            ls, ys, tl, rnext_short(ss, hs, h8), rnext_oct8(ss, h8), et, hr)))
-
-# the first answer, else the second
-def orelse(aa: Maybe<&2, U32>, bb: Maybe<&2, U32>) -> Maybe<&2, U32>:
-  match aa:
-    case Some{+vv}:
-      match bb:
-        case _b:
-          Some{vv}
-    case None{}:
-      bb
-
-# three lists of one length
-def sm3(cs: List<&2, U32>, ls: List<&2, U32>, ys: List<&2, U32>) -> Bool:
-  match cs ls ys:
-    case Nil{} Nil{} Nil{}:
-      True{}
-    case _c <> ct _l <> lt _y <> yt:
-      sm3(ct, lt, yt)
-    case _ _ _:
-      False{}
-
-# none second is the first
-def orelse_none(aa: Maybe<&2, U32>) -> {aa == orelse(aa, None{}) : Maybe<&2, U32>}:
-  match aa:
-    case Some{_v}:
-      {==}
-    case None{}:
-      {==}
-
-# a lookup's answer before one more entry, over a join
-def pref_orelse(
-  aa: Maybe<&2, U32>,
-  bb: Maybe<&2, U32>,
-  eqc: Bool,
-  eql: Bool,
-  +ss: U32
-) -> {Jpeg.decode.look.pref(orelse(aa, bb), eqc, eql, ss) == orelse(aa, Jpeg.decode.look.pref(bb, eqc, eql,
-  ss)) : Maybe<&2, U32>}:
-  match aa:
-    case Some{_v}:
-      match bb:
-        case Some{_w}:
-          match eqc:
-            case True{}:
-              match eql:
-                case True{}:
-                  {==}
-                case False{}:
-                  {==}
-            case False{}:
-              match eql:
-                case True{}:
-                  {==}
-                case False{}:
-                  {==}
-        case None{}:
-          match eqc:
-            case True{}:
-              match eql:
-                case True{}:
-                  {==}
-                case False{}:
-                  {==}
-            case False{}:
-              match eql:
-                case True{}:
-                  {==}
-                case False{}:
-                  {==}
-    case None{}:
-      {==}
-
-# the decoder's lookup over joined lists: the later lists' answer, else the earlier ones'
-def look_app(
-  c1: List<&2, U32>,
-  l1: List<&2, U32>,
-  s1: List<&2, U32>,
-  +c2: List<&2, U32>,
-  +l2: List<&2, U32>,
-  +s2: List<&2, U32>,
-  +code: U32,
-  +len: U32,
-  hh: {sm3(c1, l1, s1) == True{} : Bool}
-) -> {Jpeg.decode.look(List.append(&2, U32, c1, c2), List.append(&2, U32, l1, l2), List.append(&2, U32, s1, s2), code,
-  len) == orelse(Jpeg.decode.look(c2, l2, s2, code, len), Jpeg.decode.look(c1, l1, s1, code, len)) : Maybe<&2, U32>}:
-  match c1:
-    case Nil{}:
-      match l1:
-        case Nil{}:
-          match s1:
-            case Nil{}:
-              orelse_none(Jpeg.decode.look(c2, l2, s2, code, len))
-            case _y <> _yt:
-              Empty.absurd({Jpeg.decode.look(c2, l2, List.append(&2, U32, _y <> _yt, s2), code, len) ==
-                orelse(Jpeg.decode.look(c2, l2, s2, code, len), None{}) : Maybe<&2, U32>}, M1.huf.false_true(hh))
-        case _l <> _lt:
-          Empty.absurd({Jpeg.decode.look(c2, List.append(&2, U32, _l <> _lt, l2), List.append(&2, U32, s1, s2), code,
-            len) == orelse(Jpeg.decode.look(c2, l2, s2, code, len), Jpeg.decode.look([], _l <> _lt, s1, code, len)) :
-            Maybe<&2, U32>}, M1.huf.false_true(hh))
-    case +cc <> +ct:
-      match l1:
-        case Nil{}:
-          Empty.absurd({Jpeg.decode.look(cc <> List.append(&2, U32, ct, c2), l2, List.append(&2, U32, s1, s2), code,
-            len) == orelse(Jpeg.decode.look(c2, l2, s2, code, len), Jpeg.decode.look(cc <> ct, [], s1, code, len)) :
-            Maybe<&2, U32>}, M1.huf.false_true(hh))
-        case +ll <> +lt:
-          match s1:
-            case Nil{}:
-              Empty.absurd({Jpeg.decode.look(cc <> List.append(&2, U32, ct, c2), ll <> List.append(&2, U32, lt, l2),
-                s2, code, len) == orelse(Jpeg.decode.look(c2, l2, s2, code, len), Jpeg.decode.look(cc <> ct, ll <> lt,
-                [], code, len)) : Maybe<&2, U32>}, M1.huf.false_true(hh))
-            case +sy <> +st:
-              +eqc = U32.is_eq(cc, code)
-              +eql = U32.is_eq(ll, len)
-              +aa = Jpeg.decode.look(c2, l2, s2, code, len)
-              +bb = Jpeg.decode.look(ct, lt, st, code, len)
-              Equal.trans(Maybe<&2, U32>, Jpeg.decode.look.pref(Jpeg.decode.look(List.append(&2, U32, ct, c2),
-                List.append(&2, U32, lt, l2), List.append(&2, U32, st, s2), code, len), eqc, eql, sy),
-                Jpeg.decode.look.pref(orelse(aa, bb), eqc, eql, sy), orelse(aa, Jpeg.decode.look.pref(bb, eqc, eql,
-                sy)), Equal.cong(Maybe<&2, U32>, Maybe<&2, U32>, mm => Jpeg.decode.look.pref(mm, eqc, eql, sy),
-                Jpeg.decode.look(List.append(&2, U32, ct, c2), List.append(&2, U32, lt, l2), List.append(&2, U32, st,
-                s2), code, len), orelse(aa, bb), look_app(ct, lt, st, c2, l2, s2, code, len, hh)),
-                pref_orelse(aa, bb, eqc, eql, sy))
-
-# the groups' codes
-def gc(gs: List<&2, M1.HG>) -> List<&2, U32>:
-  match gs:
-    case Nil{}:
-      []
-    case M1.HG{_l, cs, _y} <> rest:
-      List.append(&2, U32, cs, gc(rest))
-
-# the groups' symbols
-def gsy(gs: List<&2, M1.HG>) -> List<&2, U32>:
-  match gs:
-    case Nil{}:
-      []
-    case M1.HG{_l, _c, ys} <> rest:
-      List.append(&2, U32, ys, gsy(rest))
-
-# every group has as many symbols as codes
-def wfg(gs: List<&2, M1.HG>) -> Bool:
-  match gs:
-    case Nil{}:
-      True{}
-    case M1.HG{+ln, +cs, ys} <> rest:
-      Laws.jpg.also(sm3(cs, List.replicate(U32, List.length(&2, U32, cs), ln), ys), wfg(rest))
-
-# one group's answer: asked only when its length is the one sought
-def lookgrp(eq: Bool, +ln: U32, cs: List<&2, U32>, ys: List<&2, U32>, +code: U32, +len: U32) -> Maybe<&2, U32>:
-  match eq:
-    case True{}:
-      +cc = cs
-      Jpeg.decode.look(cc, List.replicate(U32, List.length(&2, U32, cc), ln), ys, code, len)
-    case False{}:
-      match cs:
-        case _c:
-          match ys:
-            case _y:
-              None{}
-
-# the lookup over groups: the later groups' answer, else this group's
-def lookg(gs: List<&2, M1.HG>, +code: U32, +len: U32) -> Maybe<&2, U32>:
-  match gs:
-    case Nil{}:
-      None{}
-    case M1.HG{+ln, cs, ys} <> rest:
-      orelse(lookg(rest, code, len), lookgrp(U32.is_eq(ln, len), ln, cs, ys, code, len))
-
-# no entry of another length answers
-def pref_nf(eqc: Bool, +ss: U32) -> {Jpeg.decode.look.pref(None{}, eqc, False{}, ss) == None{} : Maybe<&2, U32>}:
-  match eqc:
-    case True{}:
-      {==}
-    case False{}:
-      {==}
-
-# a lookup over codes all of another length finds nothing
-def look_rep_none(
-  cs: List<&2, U32>,
-  ys: List<&2, U32>,
-  +ln: U32,
-  +code: U32,
-  +len: U32,
-  +hh: {U32.is_eq(ln, len) == False{} : Bool}
-) -> {Jpeg.decode.look(cs, List.replicate(U32, List.length(&2, U32, cs), ln), ys, code, len) == None{} : Maybe<&2,
-  U32>}:
-  match cs:
-    case Nil{}:
-      match ys:
-        case Nil{}:
-          {==}
-        case _y <> _t:
-          {==}
-    case +cc <> ct:
-      match ys:
-        case Nil{}:
-          +_c = ct
-          {==}
-        case +sy <> st:
-          +ih = look_rep_none(ct, st, ln, code, len, hh)
-          Equal.trans(Maybe<&2, U32>, Jpeg.decode.look.pref(Jpeg.decode.look(ct, List.replicate(U32, List.length(&2,
-            U32, ct), ln), st, code, len), U32.is_eq(cc, code), U32.is_eq(ln, len), sy),
-            Jpeg.decode.look.pref(None{}, U32.is_eq(cc, code), False{}, sy), None{},
-            Equal.trans(Maybe<&2, U32>, Jpeg.decode.look.pref(Jpeg.decode.look(ct, List.replicate(U32,
-            List.length(&2, U32, ct), ln), st, code, len), U32.is_eq(cc, code), U32.is_eq(ln, len), sy),
-            Jpeg.decode.look.pref(None{}, U32.is_eq(cc, code), U32.is_eq(ln, len), sy),
-            Jpeg.decode.look.pref(None{}, U32.is_eq(cc, code), False{}, sy), Equal.cong(Maybe<&2, U32>,
-            Maybe<&2, U32>, mm => Jpeg.decode.look.pref(mm, U32.is_eq(cc, code), U32.is_eq(ln, len), sy),
-            Jpeg.decode.look(ct, List.replicate(U32, List.length(&2, U32, ct), ln), st, code, len), None{}, ih),
-            Equal.cong(Bool, Maybe<&2, U32>, bb => Jpeg.decode.look.pref(None{}, U32.is_eq(cc, code), bb, sy),
-            U32.is_eq(ln, len), False{}, hh)), pref_nf(U32.is_eq(cc, code), sy))
-
-# one group's answer is the lookup over its codes
-def lookgrp_eq(
-  eq: Bool,
-  +ln: U32,
-  +cs: List<&2, U32>,
-  +ys: List<&2, U32>,
-  +code: U32,
-  +len: U32,
-  +he: {U32.is_eq(ln, len) == eq : Bool}
-) -> {Jpeg.decode.look(cs, List.replicate(U32, List.length(&2, U32, cs), ln), ys, code, len) == lookgrp(eq, ln, cs,
-  ys, code, len) : Maybe<&2, U32>}:
-  match eq:
-    case True{}:
-      {==}
-    case False{}:
-      look_rep_none(cs, ys, ln, code, len, he)
-
-# the decoder's lookup over a table in groups is the lookup over groups
-def look_g(
-  gs: List<&2, M1.HG>,
-  +code: U32,
-  +len: U32,
-  +hh: {wfg(gs) == True{} : Bool}
-) -> {Jpeg.decode.look(gc(gs), M1.gl(gs), gsy(gs), code, len) == lookg(gs, code, len) : Maybe<&2, U32>}:
-  match gs:
-    case Nil{}:
-      {==}
-    case M1.HG{+ln, +cs, +ys} <> +rest:
-      +rp = List.replicate(U32, List.length(&2, U32, cs), ln)
-      Equal.trans(Maybe<&2, U32>, Jpeg.decode.look(List.append(&2, U32, cs, gc(rest)), List.append(&2, U32, rp,
-        M1.gl(rest)),
-        List.append(&2, U32, ys, gsy(rest)), code, len), orelse(Jpeg.decode.look(gc(rest), M1.gl(rest), gsy(rest), code,
-          len),
-        Jpeg.decode.look(cs, rp, ys, code, len)), lookg(M1.HG{ln, cs, ys} <> rest, code, len),
-        look_app(cs, rp, ys, gc(rest), M1.gl(rest), gsy(rest), code, len, M1.also_l(sm3(cs, rp, ys), wfg(rest), hh)),
-        Equal.trans(Maybe<&2, U32>, orelse(Jpeg.decode.look(gc(rest), M1.gl(rest), gsy(rest), code, len),
-        Jpeg.decode.look(cs, rp, ys, code, len)), orelse(lookg(rest, code, len), Jpeg.decode.look(cs, rp, ys, code,
-          len)),
-        lookg(M1.HG{ln, cs, ys} <> rest, code, len), Equal.cong(Maybe<&2, U32>, Maybe<&2, U32>, mm => orelse(mm,
-        Jpeg.decode.look(cs, rp, ys, code, len)), Jpeg.decode.look(gc(rest), M1.gl(rest), gsy(rest), code, len),
-        lookg(rest, code, len), look_g(rest, code, len, M1.also_r(sm3(cs, rp, ys), wfg(rest), hh))),
-        Equal.cong(Maybe<&2, U32>, Maybe<&2, U32>, mm => orelse(lookg(rest, code, len), mm), Jpeg.decode.look(cs, rp,
-        ys, code, len), lookgrp(U32.is_eq(ln, len), ln, cs, ys, code, len), lookgrp_eq(U32.is_eq(ln, len), ln, cs, ys,
-        code, len, {==}))))
-
-# the walk with the lookup over groups
-def hwg(bs: List<&2, Bool>, +gs: List<&2, M1.HG>, +code: U32, +len: U32) -> M6.HW:
-  match bs:
-    case Nil{}:
-      M6.HWMiss{}
-    case +bb <> rest:
-      M6.hw.pick(lookg(gs, M6.vstep(code, bb), (len + 1 : U32)), hwg(rest, gs, M6.vstep(code, bb), (len + 1 : U32)))
-
-# the walk over a table in groups is the walk with the lookup over groups
-def hw_g(
-  bs: List<&2, Bool>,
-  +gs: List<&2, M1.HG>,
-  +code: U32,
-  +len: U32,
-  +hh: {wfg(gs) == True{} : Bool}
-) -> {M6.hw(bs, Jpeg.Huff{gc(gs), M1.gl(gs), gsy(gs)}, code, len) == hwg(bs, gs, code, len) : M6.HW}:
-  match bs:
-    case Nil{}:
-      {==}
-    case +bb <> rest:
-      +c2 = M6.vstep(code, bb)
-      +l2 = (len + 1 : U32)
-      Equal.trans(M6.HW, M6.hw.pick(Jpeg.decode.look(gc(gs), M1.gl(gs), gsy(gs), c2, l2), M6.hw(rest, Jpeg.Huff{gc(gs),
-          M1.gl(gs),
-        gsy(gs)}, c2, l2)), M6.hw.pick(lookg(gs, c2, l2), M6.hw(rest, Jpeg.Huff{gc(gs), M1.gl(gs), gsy(gs)}, c2, l2)),
-        hwg(bb <> rest, gs, code, len), Equal.cong(Maybe<&2, U32>, M6.HW, mm => M6.hw.pick(mm, M6.hw(rest,
-            Jpeg.Huff{gc(gs),
-        M1.gl(gs), gsy(gs)}, c2, l2)), Jpeg.decode.look(gc(gs), M1.gl(gs), gsy(gs), c2, l2), lookg(gs, c2, l2),
-            look_g(gs,
-        c2, l2, hh)), Equal.cong(M6.HW, M6.HW, rr => M6.hw.pick(lookg(gs, c2, l2), rr), M6.hw(rest, Jpeg.Huff{gc(gs),
-            M1.gl(gs),
-        gsy(gs)}, c2, l2), hwg(rest, gs, c2, l2), hw_g(rest, gs, c2, l2, hh)))
+          match tab:
+            case Jpeg.HLeaf{+sym}:
+              hleaf(1n+pp, sym, ss, ok)
+            case Jpeg.HGap{}:
+              Empty.absurd({Jpeg.decode.huff(1n+pp, Jpeg.HGap{}, rbits(ss, ok)) == hwres(M6.HWMiss{}, ss, ok) :
+                Jpeg.Hit}, M1.huf.false_true(hf))
+            case Jpeg.HNode{+zero, +one}:
+              +nx = rnext(ss)
+              +sd = M6.hw.side(bb, zero, one)
+              +hn = {Equal.cong(List<&2, Bool>, Bool, xs => Nat.is_lt(0n, List.length(&2, Bool, xs)), rem(ss),
+                bb <> List.append(&2, Bool, rest, tl), he) : {rsome(ss) == True{} : Bool}}
+              +ec = {Equal.trans(List<&2, Bool>, rhead(ss) <> rem(nx), rem(ss), bb <> List.append(&2, Bool, rest,
+                tl), Equal.sym(List<&2, Bool>, rem(ss), rhead(ss) <> rem(nx), rem_cons(ss, h8, hn)), he) :
+                {rhead(ss) <> rem(nx) == bb <> List.append(&2, Bool, rest, tl) : List<&2, Bool>}}
+              +et = {Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => ltail(xs), rhead(ss) <> rem(nx), bb <>
+                List.append(&2, Bool, rest, tl), ec) : {rem(nx) == List.append(&2, Bool, rest, tl) : List<&2, Bool>}}
+              hnode(bb, rest, pp, ss, ok, zero, one, tl, hs, h8, he, hwalk(rest, pp, nx, ok, sd, tl, rnext_short(ss,
+                hs, h8), rnext_oct8(ss, h8), et, inc_fits(M6.hw(rest, sd), pp, hf)), hf)
 
 # a walk that hit symbol ss after nn bits
 def hw.is(rr: M6.HW, +ss: U32, +nn: Nat) -> Bool:
@@ -2420,9 +2155,9 @@ def hw.is(rr: M6.HW, +ss: U32, +nn: Nat) -> Bool:
     case M6.HWMiss{}:
       False{}
 
-# a symbol's code, at most 16 bits, walked over the table in groups, hits the symbol at its last bit
-def hwchk(+cc: List<&2, Bool>, +gs: List<&2, M1.HG>, +ss: U32) -> Bool:
-  Bool.and(Nat.is_le(List.length(&2, Bool, cc), 16n), hw.is(hwg(cc, gs, 0, 0), ss, List.length(&2, Bool, cc)))
+# a symbol's code, at most 16 bits, walked down the code tree, hits the symbol at its last bit
+def hwchk(+cc: List<&2, Bool>, +tab: Jpeg.Huff, +ss: U32) -> Bool:
+  Bool.and(Nat.is_le(List.length(&2, Bool, cc), 16n), hw.is(M6.hw(cc, tab), ss, List.length(&2, Bool, cc)))
 
 # a walk known to hit symbol ss after nn bits
 def hwis(rr: M6.HW, +ss: U32, +nn: Nat, +hh: {hw.is(rr, ss, nn) == True{} : Bool}) -> {rr == M6.HWHit{ss, nn} : M6.HW}:
@@ -2435,31 +2170,48 @@ def hwis(rr: M6.HW, +ss: U32, +nn: Nat, +hh: {hw.is(rr, ss, nn) == True{} : Bool
     case M6.HWMiss{}:
       Empty.absurd({M6.HWMiss{} == M6.HWHit{ss, nn} : M6.HW}, M1.huf.false_true(hh))
 
-# a class's dc table the decoder builds, in groups of one code length: K.3, or K.4 when cls is set
-def dcgrp(+cls: Bool) -> List<&2, M1.HG>:
-  match cls:
-    case False{}:
-      [M1.HG{2, [0], [0]}, M1.HG{3, [2, 3, 4, 5, 6], [1, 2, 3, 4, 5]}, M1.HG{4, [14], [6]}, M1.HG{5, [30], [7]},
-        M1.HG{6, [62], [8]}, M1.HG{7, [126], [9]}, M1.HG{8, [254], [10]}, M1.HG{9, [510], [11]}]
-    case True{}:
-      [M1.HG{2, [0, 1, 2], [0, 1, 2]}, M1.HG{3, [6], [3]}, M1.HG{4, [14], [4]}, M1.HG{5, [30], [5]}, M1.HG{6, [62],
-        [6]}, M1.HG{7, [126], [7]}, M1.HG{8, [254], [8]}, M1.HG{9, [510], [9]}, M1.HG{10, [1022], [10]}, M1.HG{11,
-        [2046], [11]}]
+# the decoder's lookup, from a model reader holding a symbol's code cc and more, in a tree whose walk over cc hits
+# the symbol, finds it and leaves the reader after the code
+def huff.of(
+  +cc: List<&2, Bool>,
+  +tab: Jpeg.Huff,
+  +ss: RS,
+  +ok: U32,
+  +sy: U32,
+  +tl: List<&2, Bool>,
+  +hs: {rshort(ss) == True{} : Bool},
+  +h8: {roct8(ss) == True{} : Bool},
+  +he: {rem(ss) == List.append(&2, Bool, cc, tl) : List<&2, Bool>},
+  +hc: {hwchk(cc, tab, sy) == True{} : Bool}
+) -> {Jpeg.decode.huff(16n, tab, rbits(ss, ok)) == Jpeg.Hit{sy, rbits(radv(List.length(&2, Bool, cc), ss), ok), ok} :
+  Jpeg.Hit}:
+  +nn = List.length(&2, Bool, cc)
+  +ew = {hwis(M6.hw(cc, tab), sy, nn, M3.and_r(Nat.is_le(nn, 16n), hw.is(M6.hw(cc, tab), sy, nn), hc)) :
+    {M6.hw(cc, tab) == M6.HWHit{sy, nn} : M6.HW}}
+  +hf = {Equal.trans(Bool, hw.fits(M6.hw(cc, tab), 16n), hw.fits(M6.HWHit{sy, nn}, 16n), True{},
+    Equal.cong(M6.HW, Bool, rr => hw.fits(rr, 16n), M6.hw(cc, tab), M6.HWHit{sy, nn}, ew),
+    M3.and_l(Nat.is_le(nn, 16n), hw.is(M6.hw(cc, tab), sy, nn), hc)) : {hw.fits(M6.hw(cc, tab), 16n) == True{} : Bool}}
+  Equal.trans(Jpeg.Hit, Jpeg.decode.huff(16n, tab, rbits(ss, ok)), hwres(M6.hw(cc, tab), ss, ok), Jpeg.Hit{sy,
+    rbits(radv(nn, ss), ok), ok}, hwalk(cc, 16n, ss, ok, tab, tl, hs, h8, he, hf), Equal.cong(M6.HW, Jpeg.Hit, rr =>
+    hwres(rr, ss, ok), M6.hw(cc, tab), M6.HWHit{sy, nn}, ew))
 
-# the dc table in groups, as the decoder holds it
+# the decoder's dc code tree for a class, as decode.canon builds it from the class's DHT counts:
+# K.3, or K.4 when cls is set
 def dctab(+cls: Bool) -> Jpeg.Huff:
-  Jpeg.Huff{gc(dcgrp(cls)), M1.gl(dcgrp(cls)), gsy(dcgrp(cls))}
-
-# the decoder's table is the groups'
-def dctab.eq(+cls: Bool) -> {Laws.jpg.dctab(cls) == dctab(cls) : Jpeg.Huff}:
   match cls:
     case False{}:
-      {==}
+      Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{0}, Jpeg.HNode{Jpeg.HLeaf{1}, Jpeg.HLeaf{2}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{3}, Jpeg.HLeaf{4}}, Jpeg.HNode{Jpeg.HLeaf{5}, Jpeg.HNode{Jpeg.HLeaf{6},
+        Jpeg.HNode{Jpeg.HLeaf{7}, Jpeg.HNode{Jpeg.HLeaf{8}, Jpeg.HNode{Jpeg.HLeaf{9}, Jpeg.HNode{Jpeg.HLeaf{10},
+        Jpeg.HNode{Jpeg.HLeaf{11}, Jpeg.HGap{}}}}}}}}}}
     case True{}:
-      {==}
+      Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{0}, Jpeg.HLeaf{1}}, Jpeg.HNode{Jpeg.HLeaf{2}, Jpeg.HNode{Jpeg.HLeaf{3},
+        Jpeg.HNode{Jpeg.HLeaf{4}, Jpeg.HNode{Jpeg.HLeaf{5}, Jpeg.HNode{Jpeg.HLeaf{6}, Jpeg.HNode{Jpeg.HLeaf{7},
+        Jpeg.HNode{Jpeg.HLeaf{8}, Jpeg.HNode{Jpeg.HLeaf{9}, Jpeg.HNode{Jpeg.HLeaf{10}, Jpeg.HNode{Jpeg.HLeaf{11},
+        Jpeg.HGap{}}}}}}}}}}}}
 
-# every group has as many symbols as codes
-def dcgrp.wf(+cls: Bool) -> {wfg(dcgrp(cls)) == True{} : Bool}:
+# the decoder's table is the tree the proof writes out
+def dctab.eq(+cls: Bool) -> {Laws.jpg.dctab(cls) == dctab(cls) : Jpeg.Huff}:
   match cls:
     case False{}:
       {==}
@@ -2468,7 +2220,7 @@ def dcgrp.wf(+cls: Bool) -> {wfg(dcgrp(cls)) == True{} : Bool}:
 
 # the check for one symbol: its book code hits it
 def chk.dc(+cls: Bool, +ss: U32) -> Bool:
-  hwchk(Laws.jpg.dcode(cls, ss), dcgrp(cls), ss)
+  hwchk(Laws.jpg.dcode(cls, ss), dctab(cls), ss)
 
 # the check for every symbol of a list
 def all.dc(+cls: Bool, xs: List<&2, U32>) -> Bool:
@@ -2525,8 +2277,8 @@ def memb.dc(
     case +xx <> +rest:
       memb.dc.b(cls, U32.is_eq(ss, xx), ss, xx, rest, {==}, hin, hall, hr => ha => memb.dc(cls, rest, ss, hr, ha))
 
-# the decoder's Huffman lookup, over the dc table in groups, from a model reader holding a symbol's book code and
-# more, finds the symbol and leaves the reader after the code
+# the decoder's Huffman lookup in the dc table, from a model reader holding a symbol's book code and more, finds the
+# symbol and leaves the reader after the code
 def huff.dc(
   +cls: Bool,
   +ss: RS,
@@ -2537,82 +2289,118 @@ def huff.dc(
   +h8: {roct8(ss) == True{} : Bool},
   +he: {rem(ss) == List.append(&2, Bool, Laws.jpg.dcode(cls, sy), tl) : List<&2, Bool>},
   +hc: {chk.dc(cls, sy) == True{} : Bool}
-) -> {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, ok)}, Jpeg.Huff{gc(dcgrp(cls)), M1.gl(dcgrp(cls)),
-  gsy(dcgrp(cls))}) == Jpeg.Hit{sy, rbits(radv(List.length(&2, Bool, Laws.jpg.dcode(cls, sy)), ss), ok),
-  ok} : Jpeg.Hit}:
-  +cc = Laws.jpg.dcode(cls, sy)
-  +nn = List.length(&2, Bool, cc)
-  +gs = dcgrp(cls)
-  +tab = {Jpeg.Huff{gc(gs), M1.gl(gs), gsy(gs)} : Jpeg.Huff}
-  +eh = {hwis(hwg(cc, gs, 0, 0), sy, nn, M3.and_r(Nat.is_le(nn, 16n), hw.is(hwg(cc, gs, 0, 0), sy, nn), hc)) :
-    {hwg(cc, gs, 0, 0) == M6.HWHit{sy, nn} : M6.HW}}
-  +ew = {Equal.trans(M6.HW, M6.hw(cc, tab, 0, 0), hwg(cc, gs, 0, 0), M6.HWHit{sy, nn}, hw_g(cc, gs, 0, 0,
-    dcgrp.wf(cls)), eh) : {M6.hw(cc, tab, 0, 0) == M6.HWHit{sy, nn} : M6.HW}}
-  +hf = {Equal.trans(Bool, hw.fits(M6.hw(cc, tab, 0, 0), 16n), hw.fits(M6.HWHit{sy, nn}, 16n), True{},
-    Equal.cong(M6.HW, Bool, rr => hw.fits(rr, 16n), M6.hw(cc, tab, 0, 0), M6.HWHit{sy, nn}, ew),
-    M3.and_l(Nat.is_le(nn, 16n), hw.is(hwg(cc, gs, 0, 0), sy, nn), hc)) :
-    {hw.fits(M6.hw(cc, tab, 0, 0), 16n) == True{} : Bool}}
-  Equal.trans(Jpeg.Hit, Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, ok)}, tab), hwres(M6.hw(cc, tab,
-    0, 0), ss, ok), Jpeg.Hit{sy, rbits(radv(nn, ss), ok), ok}, hwalk(cc, 16n, ss, ok, 0, 0, gc(gs),
-    M1.gl(gs), gsy(gs), tl, hs, h8, he, hf), Equal.cong(M6.HW, Jpeg.Hit, rr => hwres(rr, ss, ok), M6.hw(cc, tab,
-    0, 0), M6.HWHit{sy, nn}, ew))
+) -> {Jpeg.decode.huff(16n, dctab(cls), rbits(ss, ok)) == Jpeg.Hit{sy, rbits(radv(List.length(&2, Bool,
+  Laws.jpg.dcode(cls, sy)), ss), ok), ok} : Jpeg.Hit}:
+  huff.of(Laws.jpg.dcode(cls, sy), dctab(cls), ss, ok, sy, tl, hs, h8, he, hc)
 
-# a class's ac table the decoder builds, in groups of one code length: K.5, or K.6 when cls is set
-def acgrp(+cls: Bool) -> List<&2, M1.HG>:
-  match cls:
-    case False{}:
-      [M1.HG{2, [0, 1], [1, 2]}, M1.HG{3, [4], [3]}, M1.HG{4, [10, 11, 12], [0, 4, 17]}, M1.HG{5, [26, 27, 28], [5, 18,
-        33]}, M1.HG{6, [58, 59], [49, 65]}, M1.HG{7, [120, 121, 122, 123], [6, 19, 81, 97]}, M1.HG{8, [248, 249, 250],
-        [7, 34, 113]}, M1.HG{9, [502, 503, 504, 505, 506], [20, 50, 129, 145, 161]}, M1.HG{10, [1014, 1015, 1016, 1017,
-        1018], [8, 35, 66, 177, 193]}, M1.HG{11, [2038, 2039, 2040, 2041], [21, 82, 209, 240]}, M1.HG{12, [4084, 4085,
-        4086, 4087], [36, 51, 98, 114]}, M1.HG{15, [32704], [130]}, M1.HG{16, [65410, 65411, 65412, 65413, 65414, 65415,
-        65416, 65417, 65418, 65419, 65420, 65421, 65422, 65423, 65424, 65425, 65426, 65427, 65428, 65429, 65430, 65431,
-        65432, 65433, 65434, 65435, 65436, 65437, 65438, 65439, 65440, 65441, 65442, 65443, 65444, 65445, 65446, 65447,
-        65448, 65449, 65450, 65451, 65452, 65453, 65454, 65455, 65456, 65457, 65458, 65459, 65460, 65461, 65462, 65463,
-        65464, 65465, 65466, 65467, 65468, 65469, 65470, 65471, 65472, 65473, 65474, 65475, 65476, 65477, 65478, 65479,
-        65480, 65481, 65482, 65483, 65484, 65485, 65486, 65487, 65488, 65489, 65490, 65491, 65492, 65493, 65494, 65495,
-        65496, 65497, 65498, 65499, 65500, 65501, 65502, 65503, 65504, 65505, 65506, 65507, 65508, 65509, 65510, 65511,
-        65512, 65513, 65514, 65515, 65516, 65517, 65518, 65519, 65520, 65521, 65522, 65523, 65524, 65525, 65526, 65527,
-        65528, 65529, 65530, 65531, 65532, 65533, 65534], [9, 10, 22, 23, 24, 25, 26, 37, 38, 39, 40, 41, 42, 52, 53,
-        54, 55, 56, 57, 58, 67, 68, 69, 70, 71, 72, 73, 74, 83, 84, 85, 86, 87, 88, 89, 90, 99, 100, 101, 102, 103, 104,
-        105, 106, 115, 116, 117, 118, 119, 120, 121, 122, 131, 132, 133, 134, 135, 136, 137, 138, 146, 147, 148, 149,
-        150, 151, 152, 153, 154, 162, 163, 164, 165, 166, 167, 168, 169, 170, 178, 179, 180, 181, 182, 183, 184, 185,
-        186, 194, 195, 196, 197, 198, 199, 200, 201, 202, 210, 211, 212, 213, 214, 215, 216, 217, 218, 225, 226, 227,
-        228, 229, 230, 231, 232, 233, 234, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250]}]
-    case True{}:
-      [M1.HG{2, [0, 1], [0, 1]}, M1.HG{3, [4], [2]}, M1.HG{4, [10, 11], [3, 17]}, M1.HG{5, [24, 25, 26, 27], [4, 5, 33,
-        49]}, M1.HG{6, [56, 57, 58, 59], [6, 18, 65, 81]}, M1.HG{7, [120, 121, 122], [7, 97, 113]}, M1.HG{8, [246, 247,
-        248, 249], [19, 34, 50, 129]}, M1.HG{9, [500, 501, 502, 503, 504, 505, 506], [8, 20, 66, 145, 161, 177, 193]},
-        M1.HG{10, [1014, 1015, 1016, 1017, 1018], [9, 35, 51, 82, 240]}, M1.HG{11, [2038, 2039, 2040, 2041], [21, 98,
-        114, 209]}, M1.HG{12, [4084, 4085, 4086, 4087], [10, 22, 36, 52]}, M1.HG{14, [16352], [225]}, M1.HG{15, [32706,
-        32707], [37, 241]}, M1.HG{16, [65416, 65417, 65418, 65419, 65420, 65421, 65422, 65423, 65424, 65425, 65426,
-        65427, 65428, 65429, 65430, 65431, 65432, 65433, 65434, 65435, 65436, 65437, 65438, 65439, 65440, 65441, 65442,
-        65443, 65444, 65445, 65446, 65447, 65448, 65449, 65450, 65451, 65452, 65453, 65454, 65455, 65456, 65457, 65458,
-        65459, 65460, 65461, 65462, 65463, 65464, 65465, 65466, 65467, 65468, 65469, 65470, 65471, 65472, 65473, 65474,
-        65475, 65476, 65477, 65478, 65479, 65480, 65481, 65482, 65483, 65484, 65485, 65486, 65487, 65488, 65489, 65490,
-        65491, 65492, 65493, 65494, 65495, 65496, 65497, 65498, 65499, 65500, 65501, 65502, 65503, 65504, 65505, 65506,
-        65507, 65508, 65509, 65510, 65511, 65512, 65513, 65514, 65515, 65516, 65517, 65518, 65519, 65520, 65521, 65522,
-        65523, 65524, 65525, 65526, 65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534], [23, 24, 25, 26, 38, 39,
-        40, 41, 42, 53, 54, 55, 56, 57, 58, 67, 68, 69, 70, 71, 72, 73, 74, 83, 84, 85, 86, 87, 88, 89, 90, 99, 100,
-        101, 102, 103, 104, 105, 106, 115, 116, 117, 118, 119, 120, 121, 122, 130, 131, 132, 133, 134, 135, 136, 137,
-        138, 146, 147, 148, 149, 150, 151, 152, 153, 154, 162, 163, 164, 165, 166, 167, 168, 169, 170, 178, 179, 180,
-        181, 182, 183, 184, 185, 186, 194, 195, 196, 197, 198, 199, 200, 201, 202, 210, 211, 212, 213, 214, 215, 216,
-        217, 218, 226, 227, 228, 229, 230, 231, 232, 233, 234, 242, 243, 244, 245, 246, 247, 248, 249, 250]}]
-
-# the ac table in groups, as the decoder holds it
+# the decoder's ac code tree for a class, as decode.canon builds it from the class's DHT counts:
+# K.5, or K.6 when cls is set
 def actab(+cls: Bool) -> Jpeg.Huff:
-  Jpeg.Huff{gc(acgrp(cls)), M1.gl(acgrp(cls)), gsy(acgrp(cls))}
-
-# the decoder's table is the groups'
-def actab.eq(+cls: Bool) -> {Laws.jpg.actab(cls) == actab(cls) : Jpeg.Huff}:
   match cls:
     case False{}:
-      {==}
+      Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{1}, Jpeg.HLeaf{2}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{3},
+        Jpeg.HNode{Jpeg.HLeaf{0}, Jpeg.HLeaf{4}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{17}, Jpeg.HNode{Jpeg.HLeaf{5},
+        Jpeg.HLeaf{18}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{33}, Jpeg.HNode{Jpeg.HLeaf{49}, Jpeg.HLeaf{65}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{6}, Jpeg.HLeaf{19}}, Jpeg.HNode{Jpeg.HLeaf{81}, Jpeg.HLeaf{97}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{7}, Jpeg.HLeaf{34}}, Jpeg.HNode{Jpeg.HLeaf{113},
+        Jpeg.HNode{Jpeg.HLeaf{20}, Jpeg.HLeaf{50}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{129},
+        Jpeg.HLeaf{145}}, Jpeg.HNode{Jpeg.HLeaf{161}, Jpeg.HNode{Jpeg.HLeaf{8}, Jpeg.HLeaf{35}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{66}, Jpeg.HLeaf{177}}, Jpeg.HNode{Jpeg.HLeaf{193},
+        Jpeg.HNode{Jpeg.HLeaf{21}, Jpeg.HLeaf{82}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{209},
+        Jpeg.HLeaf{240}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{36}, Jpeg.HLeaf{51}}, Jpeg.HNode{Jpeg.HLeaf{98},
+        Jpeg.HLeaf{114}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{130},
+        Jpeg.HNode{Jpeg.HLeaf{9}, Jpeg.HLeaf{10}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{22}, Jpeg.HLeaf{23}},
+        Jpeg.HNode{Jpeg.HLeaf{24}, Jpeg.HLeaf{25}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{26}, Jpeg.HLeaf{37}},
+        Jpeg.HNode{Jpeg.HLeaf{38}, Jpeg.HLeaf{39}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{40}, Jpeg.HLeaf{41}},
+        Jpeg.HNode{Jpeg.HLeaf{42}, Jpeg.HLeaf{52}}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{53},
+        Jpeg.HLeaf{54}}, Jpeg.HNode{Jpeg.HLeaf{55}, Jpeg.HLeaf{56}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{57},
+        Jpeg.HLeaf{58}}, Jpeg.HNode{Jpeg.HLeaf{67}, Jpeg.HLeaf{68}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{69},
+        Jpeg.HLeaf{70}}, Jpeg.HNode{Jpeg.HLeaf{71}, Jpeg.HLeaf{72}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{73},
+        Jpeg.HLeaf{74}}, Jpeg.HNode{Jpeg.HLeaf{83}, Jpeg.HLeaf{84}}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{85}, Jpeg.HLeaf{86}},
+        Jpeg.HNode{Jpeg.HLeaf{87}, Jpeg.HLeaf{88}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{89}, Jpeg.HLeaf{90}},
+        Jpeg.HNode{Jpeg.HLeaf{99}, Jpeg.HLeaf{100}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{101},
+        Jpeg.HLeaf{102}}, Jpeg.HNode{Jpeg.HLeaf{103}, Jpeg.HLeaf{104}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{105},
+        Jpeg.HLeaf{106}}, Jpeg.HNode{Jpeg.HLeaf{115}, Jpeg.HLeaf{116}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{117}, Jpeg.HLeaf{118}}, Jpeg.HNode{Jpeg.HLeaf{119},
+        Jpeg.HLeaf{120}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{121}, Jpeg.HLeaf{122}}, Jpeg.HNode{Jpeg.HLeaf{131},
+        Jpeg.HLeaf{132}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{133}, Jpeg.HLeaf{134}},
+        Jpeg.HNode{Jpeg.HLeaf{135}, Jpeg.HLeaf{136}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{137}, Jpeg.HLeaf{138}},
+        Jpeg.HNode{Jpeg.HLeaf{146}, Jpeg.HLeaf{147}}}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{148}, Jpeg.HLeaf{149}},
+        Jpeg.HNode{Jpeg.HLeaf{150}, Jpeg.HLeaf{151}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{152}, Jpeg.HLeaf{153}},
+        Jpeg.HNode{Jpeg.HLeaf{154}, Jpeg.HLeaf{162}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{163},
+        Jpeg.HLeaf{164}}, Jpeg.HNode{Jpeg.HLeaf{165}, Jpeg.HLeaf{166}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{167},
+        Jpeg.HLeaf{168}}, Jpeg.HNode{Jpeg.HLeaf{169}, Jpeg.HLeaf{170}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{178}, Jpeg.HLeaf{179}}, Jpeg.HNode{Jpeg.HLeaf{180},
+        Jpeg.HLeaf{181}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{182}, Jpeg.HLeaf{183}}, Jpeg.HNode{Jpeg.HLeaf{184},
+        Jpeg.HLeaf{185}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{186}, Jpeg.HLeaf{194}},
+        Jpeg.HNode{Jpeg.HLeaf{195}, Jpeg.HLeaf{196}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{197}, Jpeg.HLeaf{198}},
+        Jpeg.HNode{Jpeg.HLeaf{199}, Jpeg.HLeaf{200}}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{201}, Jpeg.HLeaf{202}},
+        Jpeg.HNode{Jpeg.HLeaf{210}, Jpeg.HLeaf{211}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{212}, Jpeg.HLeaf{213}},
+        Jpeg.HNode{Jpeg.HLeaf{214}, Jpeg.HLeaf{215}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{216},
+        Jpeg.HLeaf{217}}, Jpeg.HNode{Jpeg.HLeaf{218}, Jpeg.HLeaf{225}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{226},
+        Jpeg.HLeaf{227}}, Jpeg.HNode{Jpeg.HLeaf{228}, Jpeg.HLeaf{229}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{230}, Jpeg.HLeaf{231}}, Jpeg.HNode{Jpeg.HLeaf{232},
+        Jpeg.HLeaf{233}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{234}, Jpeg.HLeaf{241}}, Jpeg.HNode{Jpeg.HLeaf{242},
+        Jpeg.HLeaf{243}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{244}, Jpeg.HLeaf{245}},
+        Jpeg.HNode{Jpeg.HLeaf{246}, Jpeg.HLeaf{247}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{248}, Jpeg.HLeaf{249}},
+        Jpeg.HNode{Jpeg.HLeaf{250}, Jpeg.HGap{}}}}}}}}}}}}}}}}}
     case True{}:
-      {==}
+      Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{0}, Jpeg.HLeaf{1}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{2},
+        Jpeg.HNode{Jpeg.HLeaf{3}, Jpeg.HLeaf{17}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{4}, Jpeg.HLeaf{5}},
+        Jpeg.HNode{Jpeg.HLeaf{33}, Jpeg.HLeaf{49}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{6}, Jpeg.HLeaf{18}},
+        Jpeg.HNode{Jpeg.HLeaf{65}, Jpeg.HLeaf{81}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{7}, Jpeg.HLeaf{97}},
+        Jpeg.HNode{Jpeg.HLeaf{113}, Jpeg.HNode{Jpeg.HLeaf{19}, Jpeg.HLeaf{34}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{50}, Jpeg.HLeaf{129}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{8},
+        Jpeg.HLeaf{20}}, Jpeg.HNode{Jpeg.HLeaf{66}, Jpeg.HLeaf{145}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{161}, Jpeg.HLeaf{177}}, Jpeg.HNode{Jpeg.HLeaf{193},
+        Jpeg.HNode{Jpeg.HLeaf{9}, Jpeg.HLeaf{35}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{51}, Jpeg.HLeaf{82}},
+        Jpeg.HNode{Jpeg.HLeaf{240}, Jpeg.HNode{Jpeg.HLeaf{21}, Jpeg.HLeaf{98}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{114}, Jpeg.HLeaf{209}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{10},
+        Jpeg.HLeaf{22}}, Jpeg.HNode{Jpeg.HLeaf{36}, Jpeg.HLeaf{52}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{225}, Jpeg.HNode{Jpeg.HLeaf{37},
+        Jpeg.HLeaf{241}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{23}, Jpeg.HLeaf{24}}, Jpeg.HNode{Jpeg.HLeaf{25},
+        Jpeg.HLeaf{26}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{38}, Jpeg.HLeaf{39}}, Jpeg.HNode{Jpeg.HLeaf{40},
+        Jpeg.HLeaf{41}}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{42}, Jpeg.HLeaf{53}},
+        Jpeg.HNode{Jpeg.HLeaf{54}, Jpeg.HLeaf{55}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{56}, Jpeg.HLeaf{57}},
+        Jpeg.HNode{Jpeg.HLeaf{58}, Jpeg.HLeaf{67}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{68}, Jpeg.HLeaf{69}},
+        Jpeg.HNode{Jpeg.HLeaf{70}, Jpeg.HLeaf{71}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{72}, Jpeg.HLeaf{73}},
+        Jpeg.HNode{Jpeg.HLeaf{74}, Jpeg.HLeaf{83}}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{84}, Jpeg.HLeaf{85}},
+        Jpeg.HNode{Jpeg.HLeaf{86}, Jpeg.HLeaf{87}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{88}, Jpeg.HLeaf{89}},
+        Jpeg.HNode{Jpeg.HLeaf{90}, Jpeg.HLeaf{99}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{100},
+        Jpeg.HLeaf{101}}, Jpeg.HNode{Jpeg.HLeaf{102}, Jpeg.HLeaf{103}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{104},
+        Jpeg.HLeaf{105}}, Jpeg.HNode{Jpeg.HLeaf{106}, Jpeg.HLeaf{115}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{116}, Jpeg.HLeaf{117}}, Jpeg.HNode{Jpeg.HLeaf{118},
+        Jpeg.HLeaf{119}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{120}, Jpeg.HLeaf{121}}, Jpeg.HNode{Jpeg.HLeaf{122},
+        Jpeg.HLeaf{130}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{131}, Jpeg.HLeaf{132}},
+        Jpeg.HNode{Jpeg.HLeaf{133}, Jpeg.HLeaf{134}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{135}, Jpeg.HLeaf{136}},
+        Jpeg.HNode{Jpeg.HLeaf{137}, Jpeg.HLeaf{138}}}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{146}, Jpeg.HLeaf{147}},
+        Jpeg.HNode{Jpeg.HLeaf{148}, Jpeg.HLeaf{149}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{150}, Jpeg.HLeaf{151}},
+        Jpeg.HNode{Jpeg.HLeaf{152}, Jpeg.HLeaf{153}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{154},
+        Jpeg.HLeaf{162}}, Jpeg.HNode{Jpeg.HLeaf{163}, Jpeg.HLeaf{164}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{165},
+        Jpeg.HLeaf{166}}, Jpeg.HNode{Jpeg.HLeaf{167}, Jpeg.HLeaf{168}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{169}, Jpeg.HLeaf{170}}, Jpeg.HNode{Jpeg.HLeaf{178},
+        Jpeg.HLeaf{179}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{180}, Jpeg.HLeaf{181}}, Jpeg.HNode{Jpeg.HLeaf{182},
+        Jpeg.HLeaf{183}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{184}, Jpeg.HLeaf{185}},
+        Jpeg.HNode{Jpeg.HLeaf{186}, Jpeg.HLeaf{194}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{195}, Jpeg.HLeaf{196}},
+        Jpeg.HNode{Jpeg.HLeaf{197}, Jpeg.HLeaf{198}}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{199}, Jpeg.HLeaf{200}},
+        Jpeg.HNode{Jpeg.HLeaf{201}, Jpeg.HLeaf{202}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{210}, Jpeg.HLeaf{211}},
+        Jpeg.HNode{Jpeg.HLeaf{212}, Jpeg.HLeaf{213}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{214},
+        Jpeg.HLeaf{215}}, Jpeg.HNode{Jpeg.HLeaf{216}, Jpeg.HLeaf{217}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{218},
+        Jpeg.HLeaf{226}}, Jpeg.HNode{Jpeg.HLeaf{227}, Jpeg.HLeaf{228}}}}},
+        Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{229}, Jpeg.HLeaf{230}}, Jpeg.HNode{Jpeg.HLeaf{231},
+        Jpeg.HLeaf{232}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{233}, Jpeg.HLeaf{234}}, Jpeg.HNode{Jpeg.HLeaf{242},
+        Jpeg.HLeaf{243}}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{244}, Jpeg.HLeaf{245}},
+        Jpeg.HNode{Jpeg.HLeaf{246}, Jpeg.HLeaf{247}}}, Jpeg.HNode{Jpeg.HNode{Jpeg.HLeaf{248}, Jpeg.HLeaf{249}},
+        Jpeg.HNode{Jpeg.HLeaf{250}, Jpeg.HGap{}}}}}}}}}}}}}}}}}
 
-# every group has as many symbols as codes
-def acgrp.wf(+cls: Bool) -> {wfg(acgrp(cls)) == True{} : Bool}:
+# the decoder's table is the tree the proof writes out
+def actab.eq(+cls: Bool) -> {Laws.jpg.actab(cls) == actab(cls) : Jpeg.Huff}:
   match cls:
     case False{}:
       {==}
@@ -2621,7 +2409,7 @@ def acgrp.wf(+cls: Bool) -> {wfg(acgrp(cls)) == True{} : Bool}:
 
 # the check for one symbol: its book code hits it
 def chk.ac(+cls: Bool, +ss: U32) -> Bool:
-  hwchk(Laws.jpg.acode(cls, ss), acgrp(cls), ss)
+  hwchk(Laws.jpg.acode(cls, ss), actab(cls), ss)
 
 # the check for every symbol of a list
 def all.ac(+cls: Bool, xs: List<&2, U32>) -> Bool:
@@ -2678,8 +2466,8 @@ def memb.ac(
     case +xx <> +rest:
       memb.ac.b(cls, U32.is_eq(ss, xx), ss, xx, rest, {==}, hin, hall, hr => ha => memb.ac(cls, rest, ss, hr, ha))
 
-# the decoder's Huffman lookup, over the ac table in groups, from a model reader holding a symbol's book code and
-# more, finds the symbol and leaves the reader after the code
+# the decoder's Huffman lookup in the ac table, from a model reader holding a symbol's book code and more, finds the
+# symbol and leaves the reader after the code
 def huff.ac(
   +cls: Bool,
   +ss: RS,
@@ -2690,25 +2478,9 @@ def huff.ac(
   +h8: {roct8(ss) == True{} : Bool},
   +he: {rem(ss) == List.append(&2, Bool, Laws.jpg.acode(cls, sy), tl) : List<&2, Bool>},
   +hc: {chk.ac(cls, sy) == True{} : Bool}
-) -> {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, ok)}, Jpeg.Huff{gc(acgrp(cls)), M1.gl(acgrp(cls)),
-  gsy(acgrp(cls))}) == Jpeg.Hit{sy, rbits(radv(List.length(&2, Bool, Laws.jpg.acode(cls, sy)), ss), ok),
-  ok} : Jpeg.Hit}:
-  +cc = Laws.jpg.acode(cls, sy)
-  +nn = List.length(&2, Bool, cc)
-  +gs = acgrp(cls)
-  +tab = {Jpeg.Huff{gc(gs), M1.gl(gs), gsy(gs)} : Jpeg.Huff}
-  +eh = {hwis(hwg(cc, gs, 0, 0), sy, nn, M3.and_r(Nat.is_le(nn, 16n), hw.is(hwg(cc, gs, 0, 0), sy, nn), hc)) :
-    {hwg(cc, gs, 0, 0) == M6.HWHit{sy, nn} : M6.HW}}
-  +ew = {Equal.trans(M6.HW, M6.hw(cc, tab, 0, 0), hwg(cc, gs, 0, 0), M6.HWHit{sy, nn}, hw_g(cc, gs, 0, 0,
-    acgrp.wf(cls)), eh) : {M6.hw(cc, tab, 0, 0) == M6.HWHit{sy, nn} : M6.HW}}
-  +hf = {Equal.trans(Bool, hw.fits(M6.hw(cc, tab, 0, 0), 16n), hw.fits(M6.HWHit{sy, nn}, 16n), True{},
-    Equal.cong(M6.HW, Bool, rr => hw.fits(rr, 16n), M6.hw(cc, tab, 0, 0), M6.HWHit{sy, nn}, ew),
-    M3.and_l(Nat.is_le(nn, 16n), hw.is(hwg(cc, gs, 0, 0), sy, nn), hc)) :
-    {hw.fits(M6.hw(cc, tab, 0, 0), 16n) == True{} : Bool}}
-  Equal.trans(Jpeg.Hit, Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, ok)}, tab), hwres(M6.hw(cc, tab,
-    0, 0), ss, ok), Jpeg.Hit{sy, rbits(radv(nn, ss), ok), ok}, hwalk(cc, 16n, ss, ok, 0, 0, gc(gs),
-    M1.gl(gs), gsy(gs), tl, hs, h8, he, hf), Equal.cong(M6.HW, Jpeg.Hit, rr => hwres(rr, ss, ok), M6.hw(cc, tab,
-    0, 0), M6.HWHit{sy, nn}, ew))
+) -> {Jpeg.decode.huff(16n, actab(cls), rbits(ss, ok)) == Jpeg.Hit{sy, rbits(radv(List.length(&2, Bool,
+  Laws.jpg.acode(cls, sy)), ss), ok), ok} : Jpeg.Hit}:
+  huff.of(Laws.jpg.acode(cls, sy), actab(cls), ss, ok, sy, tl, hs, h8, he, hc)
 
 # one code read from a model reader holding it and more: the reader after it, and its value
 def read1(
@@ -2896,22 +2668,21 @@ def sym_rt2.dc(
   +s2 = radv(List.length(&2, Bool, cc), s1)
   +f2 = {radv_ok(List.length(&2, Bool, cc), s1, hs1, h81) : {Bool.and(rshort(s2), roct8(s2)) == True{} : Bool}}
   +eh = {huff.dc(cls, s1, 1, sy, tl, hs1, h81, e1, memb.dc(cls, Jenc.encode.dcsyms(), sy, hy, all.dc.ok(cls))) :
-    {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, dctab(cls)) == Jpeg.Hit{sy, rbits(s2, 1),
+    {Jpeg.decode.huff(16n, dctab(cls), rbits(s1, 1)) == Jpeg.Hit{sy, rbits(s2, 1),
       1} : Jpeg.Hit}}
   Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, Jenc.encode.dcof(cls), dctab(cls), sy, post),
-    Laws.jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, dctab(cls)), post), (sy,
+    Laws.jpg.hit(Jpeg.decode.huff(16n, dctab(cls), rbits(s1, 1)), post), (sy,
     (Laws.jpg.nums(post), 1), 1),
-    Equal.cong(Jpeg.Bits, U32 & (List<&2, U32> & U32) & U32, bb => Laws.jpg.hit(Jpeg.decode.huff(16n,
-    Jpeg.Ask{None{}, 0, 0, bb}, dctab(cls)), post), Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, Laws.jpg.sym.bytes(pre,
+    Equal.cong(Jpeg.Bits, U32 & (List<&2, U32> & U32) & U32, bb => Laws.jpg.hit(Jpeg.decode.huff(16n, dctab(cls), bb),
+      post), Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, Laws.jpg.sym.bytes(pre,
       Jenc.encode.dcof(cls), sy, post)}), rbits(s1, 1), Equal.trans(Jpeg.Bits, Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0,
     Laws.jpg.sym.bytes(pre, Jenc.encode.dcof(cls), sy, post)}), Laws.jpg.skip(pre, rbits(s0,
     1)), rbits(s1, 1), Equal.cong(List<&2, U32>, Jpeg.Bits, xs => Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, xs}),
     Laws.jpg.sym.bytes(pre, Jenc.encode.dcof(cls), sy, post), rxs(os), eb), k1)),
-    Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1,
-    1)}, dctab(cls)), post),
+    Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.hit(Jpeg.decode.huff(16n, dctab(cls), rbits(s1,
+    1)), post),
     Laws.jpg.hit(Jpeg.Hit{sy, rbits(s2, 1), 1}, post), (sy, (Laws.jpg.nums(post), 1), 1), Equal.cong(Jpeg.Hit,
-    U32 & (List<&2, U32> & U32) & U32, hh => Laws.jpg.hit(hh, post), Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0,
-    rbits(s1, 1)}, dctab(cls)),
+    U32 & (List<&2, U32> & U32) & U32, hh => Laws.jpg.hit(hh, post), Jpeg.decode.huff(16n, dctab(cls), rbits(s1, 1)),
     Jpeg.Hit{sy, rbits(s2, 1), 1}, eh), Equal.cong(List<&2, U32> & U32, U32 & (List<&2, U32> & U32) & U32, rr => (sy,
     rr, 1), Laws.jpg.reads(post, rbits(s2, 1)), (Laws.jpg.nums(post), 1), reads_m(post, s2, 1, mp, M3.and_l(rshort(s2),
     roct8(s2), f2), M3.and_r(rshort(s2), roct8(s2), f2), hq, rem_after(cc, s1, tl, hs1, h81, e1)))))
@@ -3059,22 +2830,21 @@ def sym_rt2.ac(
   +s2 = radv(List.length(&2, Bool, cc), s1)
   +f2 = {radv_ok(List.length(&2, Bool, cc), s1, hs1, h81) : {Bool.and(rshort(s2), roct8(s2)) == True{} : Bool}}
   +eh = {huff.ac(cls, s1, 1, sy, tl, hs1, h81, e1, memb.ac(cls, Jenc.encode.acsyms(), sy, hy, all.ac.ok(cls))) :
-    {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, actab(cls)) == Jpeg.Hit{sy, rbits(s2, 1),
+    {Jpeg.decode.huff(16n, actab(cls), rbits(s1, 1)) == Jpeg.Hit{sy, rbits(s2, 1),
       1} : Jpeg.Hit}}
   Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, Jenc.encode.acof(cls), actab(cls), sy, post),
-    Laws.jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, actab(cls)), post), (sy,
+    Laws.jpg.hit(Jpeg.decode.huff(16n, actab(cls), rbits(s1, 1)), post), (sy,
     (Laws.jpg.nums(post), 1), 1),
-    Equal.cong(Jpeg.Bits, U32 & (List<&2, U32> & U32) & U32, bb => Laws.jpg.hit(Jpeg.decode.huff(16n,
-    Jpeg.Ask{None{}, 0, 0, bb}, actab(cls)), post), Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, Laws.jpg.sym.bytes(pre,
+    Equal.cong(Jpeg.Bits, U32 & (List<&2, U32> & U32) & U32, bb => Laws.jpg.hit(Jpeg.decode.huff(16n, actab(cls), bb),
+      post), Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, Laws.jpg.sym.bytes(pre,
       Jenc.encode.acof(cls), sy, post)}), rbits(s1, 1), Equal.trans(Jpeg.Bits, Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0,
     Laws.jpg.sym.bytes(pre, Jenc.encode.acof(cls), sy, post)}), Laws.jpg.skip(pre, rbits(s0,
     1)), rbits(s1, 1), Equal.cong(List<&2, U32>, Jpeg.Bits, xs => Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, xs}),
     Laws.jpg.sym.bytes(pre, Jenc.encode.acof(cls), sy, post), rxs(os), eb), k1)),
-    Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1,
-    1)}, actab(cls)), post),
+    Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.hit(Jpeg.decode.huff(16n, actab(cls), rbits(s1,
+    1)), post),
     Laws.jpg.hit(Jpeg.Hit{sy, rbits(s2, 1), 1}, post), (sy, (Laws.jpg.nums(post), 1), 1), Equal.cong(Jpeg.Hit,
-    U32 & (List<&2, U32> & U32) & U32, hh => Laws.jpg.hit(hh, post), Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0,
-    rbits(s1, 1)}, actab(cls)),
+    U32 & (List<&2, U32> & U32) & U32, hh => Laws.jpg.hit(hh, post), Jpeg.decode.huff(16n, actab(cls), rbits(s1, 1)),
     Jpeg.Hit{sy, rbits(s2, 1), 1}, eh), Equal.cong(List<&2, U32> & U32, U32 & (List<&2, U32> & U32) & U32, rr => (sy,
     rr, 1), Laws.jpg.reads(post, rbits(s2, 1)), (Laws.jpg.nums(post), 1), reads_m(post, s2, 1, mp, M3.and_l(rshort(s2),
     roct8(s2), f2), M3.and_r(rshort(s2), roct8(s2), f2), hq, rem_after(cc, s1, tl, hs1, h81, e1)))))
@@ -3159,7 +2929,7 @@ def huff_law.ac(
 # the reader and the ok flag of the decoder's AC state
 def acbo(xx: Jpeg.Ac) -> Jpeg.Bits & U32:
   match xx:
-    case Jpeg.Ac{_k, _zz, bits, _d, +ok}:
+    case Jpeg.Ac{_k, _zz, _qs, bits, _d, +ok}:
       (bits, ok)
 
 # the decoder's AC loop ended with a model reader holding tail bits rr, its ok flag 1
@@ -3172,10 +2942,12 @@ def acdone(
   +cls: Bool,
   pp: Nat,
   +kk: U32,
-  +zz: List<&2, U32>,
+  +zz: Jpeg.B8,
+  +qs: List<&2, U32>,
   +bits: Jpeg.Bits,
   +ok: U32
-) -> {Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, bits, 1, ok}, actab(cls)) == Jpeg.Ac{kk, zz, bits, 1, ok} : Jpeg.Ac}:
+) -> {Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, qs, bits, 1, ok}, actab(cls)) == Jpeg.Ac{kk, zz, qs, bits, 1, ok} :
+  Jpeg.Ac}:
   match pp:
     case 0n:
       {==}
@@ -3187,14 +2959,15 @@ def acres.done(
   +cls: Bool,
   +pp: Nat,
   +kk: U32,
-  +zz: List<&2, U32>,
+  +zz: Jpeg.B8,
+  +qs: List<&2, U32>,
   +se: RS,
   +rr: List<&2, Bool>,
   e2: {rem(se) == rr : List<&2, Bool>},
   e3: {Bool.and(rshort(se), roct8(se)) == True{} : Bool}
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(se, 1), 1, 1}, actab(cls)), rr):
-  ea = Equal.sym(Jpeg.Ac, Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(se, 1), 1, 1}, actab(cls)), Jpeg.Ac{kk, zz,
-    rbits(se, 1), 1, 1}, acdone(cls, pp, kk, zz, rbits(se, 1), 1))
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, qs, rbits(se, 1), 1, 1}, actab(cls)), rr):
+  ea = Equal.sym(Jpeg.Ac, Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, qs, rbits(se, 1), 1, 1}, actab(cls)), Jpeg.Ac{kk, zz,
+    qs, rbits(se, 1), 1, 1}, acdone(cls, pp, kk, zz, qs, rbits(se, 1), 1))
   %ea : AcRes(_, rr)
   (se, {==}, e2, e3)
 
@@ -3223,10 +2996,10 @@ def isnil.eq(xs: List<&2, Bool>, hh: {Laws.jpg.isnil(xs) == True{} : Bool}) -> {
 
 # the rest of the AC loop, as a token's step needs it
 def IhAc(+cls: Bool, -rest: List<&2, Laws.JTok>, +pp: Nat, +rr: List<&2, Bool>) -> Type:
-  @kk: U32 -> @zz: List<&2, U32> -> @ss: RS -> @hs: {rshort(ss) == True{} : Bool} ->
+  @kk: U32 -> @zz: Jpeg.B8 -> @qs: List<&2, U32> -> @ss: RS -> @hs: {rshort(ss) == True{} : Bool} ->
     @h8: {roct8(ss) == True{} : Bool} -> @he: {rem(ss) == List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr) :
     List<&2, Bool>} -> @hw: {Laws.jpg.acwf(rest, Laws.JAcSt{kk, pp, False{}}) == True{} : Bool} ->
-    AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actab(cls)), rr)
+    AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, qs, rbits(ss, 1), 0, 1}, actab(cls)), rr)
 
 # the tail after an empty list of magnitude bits and no tokens is the tail
 def tail.nil(
@@ -3265,7 +3038,8 @@ def sim.eob(
   +cls: Bool,
   +pp: Nat,
   +kk: U32,
-  +zz: List<&2, U32>,
+  +zz: Jpeg.B8,
+  +qs: List<&2, U32>,
   +s1: RS,
   +ex: List<&2, Bool>,
   +rest: List<&2, Laws.JTok>,
@@ -3274,8 +3048,8 @@ def sim.eob(
   er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)) : List<&2, Bool>},
   hk: {Laws.jpg.isnil(ex) == True{} : Bool},
   hr: {Laws.jpg.acwf(rest, Laws.JAcSt{kk, pp, True{}}) == True{} : Bool}
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(s1, 1), 1, 1}, actab(cls)), rr):
-  acres.done(cls, pp, kk, zz, s1, rr, Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex, List.append(&2,
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, qs, rbits(s1, 1), 1, 1}, actab(cls)), rr):
+  acres.done(cls, pp, kk, zz, qs, s1, rr, Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex, List.append(&2,
     Bool, Laws.jpg.acbits(cls, rest), rr)), rr, er, tail.nil(cls, ex, rest, rr, isnil.eq(ex, hk), acwf.fin(rest, kk,
     pp, hr))), f1)
 
@@ -3285,7 +3059,8 @@ def sim.zrl2(
   c2: Bool,
   +pp: Nat,
   +kk: U32,
-  +zz: List<&2, U32>,
+  +zz: Jpeg.B8,
+  +qs: List<&2, U32>,
   +s1: RS,
   +ex: List<&2, Bool>,
   +rest: List<&2, Laws.JTok>,
@@ -3294,15 +3069,16 @@ def sim.zrl2(
   er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)) : List<&2, Bool>},
   +hk: {Bool.and(Laws.jpg.isnil(ex), Bool.or(False{}, c2)) == True{} : Bool},
   hr: {Laws.jpg.acwf(rest, Laws.JAcSt{(kk + 16 : U32), pp, True{}}) == True{} : Bool}
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(c2, zz, rbits(s1, 1), 1), actab(cls)), rr):
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(c2, zz, qs, rbits(s1, 1), 1), actab(cls)), rr):
   match c2:
     case True{}:
-      acres.done(cls, pp, 64, zz, s1, rr, Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex,
+      acres.done(cls, pp, 64, zz, qs, s1, rr, Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex,
         List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)), rr, er, tail.nil(cls, ex, rest, rr, isnil.eq(ex,
             M3.and_l(Laws.jpg.isnil(ex),
         True{}, hk)), acwf.fin(rest, (kk + 16 : U32), pp, hr))), f1)
     case False{}:
-      Empty.absurd(AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(False{}, zz, rbits(s1, 1), 1), actab(cls)), rr),
+      Empty.absurd(AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(False{}, zz, qs, rbits(s1, 1), 1), actab(cls)),
+        rr),
         M1.huf.false_true(Equal.trans(Bool, False{}, Bool.and(Laws.jpg.isnil(ex), False{}), True{}, Equal.sym(Bool,
         Bool.and(Laws.jpg.isnil(ex), False{}), False{}, M6.and_false_r(Laws.jpg.isnil(ex))), hk)))
 
@@ -3313,7 +3089,8 @@ def sim.zrl(
   c2: Bool,
   +pp: Nat,
   +kk: U32,
-  +zz: List<&2, U32>,
+  +zz: Jpeg.B8,
+  +qs: List<&2, U32>,
   +s1: RS,
   +ex: List<&2, Bool>,
   +rest: List<&2, Laws.JTok>,
@@ -3324,10 +3101,12 @@ def sim.zrl(
   +hk: {Bool.and(Laws.jpg.isnil(ex), Bool.or(c1, c2)) == True{} : Bool},
   hr: {Laws.jpg.acwf(rest, Laws.JAcSt{(kk + 16 : U32), pp, Bool.not(c1)}) == True{} : Bool},
   ih: IhAc(cls, rest, pp, rr)
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.k(c1, (kk + 16 : U32), zz, rbits(s1, 1), 1), actab(cls)), rr):
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.k(c1, (kk + 16 : U32), zz, qs, rbits(s1, 1), 1), actab(cls)),
+  rr):
   match c1:
     case True{}:
-      ih((kk + 16 : U32), zz, s1, M3.and_l(rshort(s1), roct8(s1), f1), M3.and_r(rshort(s1), roct8(s1), f1),
+      ih((kk + 16 : U32), zz, Jpeg.decode.skip(16n, qs), s1, M3.and_l(rshort(s1), roct8(s1), f1), M3.and_r(rshort(s1),
+        roct8(s1), f1),
         Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls,
         rest), rr)),
         List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr), er, tail.ex(cls, ex, rest, rr, isnil.eq(ex,
@@ -3336,8 +3115,8 @@ def sim.zrl(
         hk)))), hr)
     case False{}:
       sh = Equal.sym(Bool, U32.is_eq((kk + 16 : U32), 64), c2, h2)
-      %sh : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(_, zz, rbits(s1, 1), 1), actab(cls)), rr)
-      sim.zrl2(cls, c2, pp, kk, zz, s1, ex, rest, rr, f1, er, hk, hr)
+      %sh : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(_, zz, qs, rbits(s1, 1), 1), actab(cls)), rr)
+      sim.zrl2(cls, c2, pp, kk, zz, qs, s1, ex, rest, rr, f1, er, hk, hr)
 
 # a stored coefficient: the loop goes on, or the block ends at index 64
 def sim.st(
@@ -3345,7 +3124,8 @@ def sim.st(
   c3: Bool,
   +pp: Nat,
   +n2: U32,
-  +zz: List<&2, U32>,
+  +zz: Jpeg.B8,
+  +qs: List<&2, U32>,
   +s2: RS,
   +rest: List<&2, Laws.JTok>,
   +rr: List<&2, Bool>,
@@ -3353,17 +3133,17 @@ def sim.st(
   +e2: {rem(s2) == List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr) : List<&2, Bool>},
   hr: {Laws.jpg.acwf(rest, Laws.JAcSt{n2, pp, c3}) == True{} : Bool},
   ih: IhAc(cls, rest, pp, rr)
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.stored(c3, n2, zz, rbits(s2, 1), 1), actab(cls)), rr):
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.stored(c3, n2, zz, qs, rbits(s2, 1), 1), actab(cls)), rr):
   match c3:
     case True{}:
-      acres.done(cls, pp, n2, zz, s2, rr, Equal.trans(List<&2, Bool>, rem(s2), List.append(&2, Bool,
+      acres.done(cls, pp, n2, zz, qs, s2, rr, Equal.trans(List<&2, Bool>, rem(s2), List.append(&2, Bool,
         Laws.jpg.acbits(cls, rest), rr),
         rr, e2, Equal.cong(List<&2, Laws.JTok>, List<&2, Bool>, ts => List.append(&2, Bool, Laws.jpg.acbits(cls, ts),
           rr), rest,
             [],
         acwf.fin(rest, n2, pp, hr))), f2)
     case False{}:
-      ih(n2, zz, s2, M3.and_l(rshort(s2), roct8(s2), f2), M3.and_r(rshort(s2), roct8(s2), f2), e2, hr)
+      ih(n2, zz, qs, s2, M3.and_l(rshort(s2), roct8(s2), f2), M3.and_r(rshort(s2), roct8(s2), f2), e2, hr)
 
 # a run and size token's own check, by the two kinds it is not
 def RunOk(-c1: Bool, -c2: Bool, +sym: U32, -ex: List<&2, Bool>) -> Type:
@@ -3384,7 +3164,8 @@ def sim.run(
   +pp: Nat,
   +sym: U32,
   +kk: U32,
-  +zz: List<&2, U32>,
+  +zz: Jpeg.B8,
+  +qs: List<&2, U32>,
   +s1: RS,
   +ex: List<&2, Bool>,
   +rest: List<&2, Laws.JTok>,
@@ -3394,17 +3175,18 @@ def sim.run(
   hk: RunOk(c1, c2, sym, ex),
   hr: RunRest(rest, kk, sym, pp),
   ih: IhAc(cls, rest, pp, rr)
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.run.b(c1, c2, U32.and(15, sym), (kk + U32.shrn(sym, 4n) : U32), rbits(s1,
-  1), zz, 1), actab(cls)), rr):
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.run.b(c1, c2, U32.and(15, sym), (kk + U32.shrn(sym, 4n) : U32),
+  U32.shrn(sym, 4n), rbits(s1, 1), zz, qs, 1), actab(cls)), rr):
   match c1:
     case True{}:
       Empty.absurd(AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.run.b(True{}, c2, U32.and(15, sym), (kk + U32.shrn(sym,
-        4n) : U32), rbits(s1, 1), zz, 1), actab(cls)), rr), M1.huf.false_true(hk))
+        4n) : U32), U32.shrn(sym, 4n), rbits(s1, 1), zz, qs, 1), actab(cls)), rr), M1.huf.false_true(hk))
     case False{}:
       match c2:
         case True{}:
           Empty.absurd(AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.run.b(False{}, True{}, U32.and(15, sym), (kk +
-            U32.shrn(sym, 4n) : U32), rbits(s1, 1), zz, 1), actab(cls)), rr), M1.huf.false_true(hk))
+            U32.shrn(sym, 4n) : U32), U32.shrn(sym, 4n), rbits(s1, 1), zz, qs, 1), actab(cls)), rr),
+            M1.huf.false_true(hk))
         case False{}:
           +sz = U32.and(15, sym)
           +nk = (kk + U32.shrn(sym, 4n) : U32)
@@ -3426,9 +3208,12 @@ def sim.run(
             el)), rread(ln, s1, 1, 0, hs1, h81, hl))) : {Jpeg.decode.read.n(sz, rbits(s1, 1)) ==
             (rbits(s2, 1), vv) : Jpeg.Bits & U32}}
           sr = Equal.sym(Jpeg.Bits & U32, Jpeg.decode.read.n(sz, rbits(s1, 1)), (rbits(s2, 1), vv), erd)
-          %sr : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.store(_, sz, nk, zz, 1), actab(cls)), rr)
-          sim.st(cls, U32.is_eq((nk + 1 : U32), 64), pp, (nk + 1 : U32), List.set(&2, U32, zz, U32.to_nat(nk),
-            Jpeg.decode.extend(sz, vv)), s2, rest, rr, radv_ok(ln, s1, hs1, h81), rem_after(ex, s1, mr, hs1, h81,
+          +rn = U32.shrn(sym, 4n)
+          %sr : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.store(_, sz, nk, rn, zz, qs, 1), actab(cls)), rr)
+          sim.st(cls, U32.is_eq((nk + 1 : U32), 64), pp, (nk + 1 : U32), Jpeg.decode.cf.put(zz, nk,
+            (Jpeg.decode.extend(sz, vv) * Jpeg.decode.nth(U32.to_nat(rn), qs) : U32)),
+            Jpeg.decode.skip(U32.to_nat((rn + 1 : U32)), qs), s2, rest, rr, radv_ok(ln, s1, hs1, h81), rem_after(ex,
+              s1, mr, hs1, h81,
             er), hr, ih)
 
 # one token's step, by its kind
@@ -3439,7 +3224,8 @@ def sim.k(
   +pp: Nat,
   +sym: U32,
   +kk: U32,
-  +zz: List<&2, U32>,
+  +zz: Jpeg.B8,
+  +qs: List<&2, U32>,
   +s1: RS,
   +ex: List<&2, Bool>,
   +rest: List<&2, Laws.JTok>,
@@ -3449,19 +3235,20 @@ def sim.k(
   +hk: {Laws.jpg.acok.k(e0, e2, sym, ex, kk) == True{} : Bool},
   +hr: {Laws.jpg.acwf(rest, Laws.jpg.acnx.k(e0, e2, sym, kk, 1n+pp)) == True{} : Bool},
   ih: IhAc(cls, rest, pp, rr)
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.sym.b(e0, e2, sym, rbits(s1, 1), kk, zz, 1), actab(cls)), rr):
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.sym.b(e0, e2, sym, rbits(s1, 1), kk, zz, qs, 1), actab(cls)), rr):
   match e0:
     case True{}:
-      sim.eob(cls, pp, kk, zz, s1, ex, rest, rr, f1, er, hk, hr)
+      sim.eob(cls, pp, kk, zz, qs, s1, ex, rest, rr, f1, er, hk, hr)
     case False{}:
       match e2:
         case True{}:
-          sim.zrl(cls, U32.is_lt((kk + 16 : U32), 64), U32.is_eq((kk + 16 : U32), 64), pp, kk, zz, s1, ex, rest, rr,
+          sim.zrl(cls, U32.is_lt((kk + 16 : U32), 64), U32.is_eq((kk + 16 : U32), 64), pp, kk, zz, qs, s1, ex, rest,
+            rr,
             f1, er,
             {==}, hk, hr, ih)
         case False{}:
           sim.run(cls, U32.is_eq(U32.and(15, sym), 0), U32.is_ge((kk + U32.shrn(sym, 4n) : U32), 64), pp, sym, kk, zz,
-            s1,
+            qs, s1,
             ex, rest, rr, f1, er, hk, hr, ih)
 
 # the decoder's AC loop over AC tokens' bits: every token read, the reader left at the tail, ok still 1
@@ -3470,24 +3257,25 @@ def huf.sim(
   ts: List<&2, Laws.JTok>,
   +left: Nat,
   +kk: U32,
-  +zz: List<&2, U32>,
+  +zz: Jpeg.B8,
+  +qs: List<&2, U32>,
   +ss: RS,
   +rr: List<&2, Bool>,
   +hs: {rshort(ss) == True{} : Bool},
   +h8: {roct8(ss) == True{} : Bool},
   +he: {rem(ss) == List.append(&2, Bool, Laws.jpg.acbits(cls, ts), rr) : List<&2, Bool>},
   +hw: {Laws.jpg.acwf(ts, Laws.JAcSt{kk, left, False{}}) == True{} : Bool}
-) -> AcRes(Jpeg.decode.ac(left, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actab(cls)), rr):
+) -> AcRes(Jpeg.decode.ac(left, Jpeg.Ac{kk, zz, qs, rbits(ss, 1), 0, 1}, actab(cls)), rr):
   match ts:
     case Nil{}:
-      Empty.absurd(AcRes(Jpeg.decode.ac(left, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actab(cls)), rr),
+      Empty.absurd(AcRes(Jpeg.decode.ac(left, Jpeg.Ac{kk, zz, qs, rbits(ss, 1), 0, 1}, actab(cls)), rr),
         M1.huf.false_true(hw))
     case +tt <> +rest:
       match tt:
         case Laws.JTok{+sym, +ex}:
           match left:
             case 0n:
-              Empty.absurd(AcRes(Jpeg.decode.ac(0n, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actab(cls)), rr),
+              Empty.absurd(AcRes(Jpeg.decode.ac(0n, Jpeg.Ac{kk, zz, qs, rbits(ss, 1), 0, 1}, actab(cls)), rr),
                 M1.huf.false_true(hw))
             case 1n+ +pp:
               +e0 = U32.is_eq(sym, 0)
@@ -3519,15 +3307,16 @@ def huf.sim(
               +eh = {huff.ac(cls, ss, 1, sym, tl, hs, h8, he1, memb.ac(cls, Jenc.encode.acsyms(), sym,
                 M3.and_l(Laws.jpg.memb(sym,
                 Jenc.encode.acsyms()), Laws.jpg.acok.k(e0, e2, sym, ex, kk), ha),
-                  all.ac.ok(cls))) : {Jpeg.decode.huff(16n,
-                Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)}, actab(cls)) == Jpeg.Hit{sym, rbits(s1, 1), 1} : Jpeg.Hit}}
-              sh = Equal.sym(Jpeg.Hit, Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)}, actab(cls)),
+                  all.ac.ok(cls))) : {Jpeg.decode.huff(16n, actab(cls), rbits(ss, 1)) == Jpeg.Hit{sym, rbits(s1, 1),
+                    1} : Jpeg.Hit}}
+              sh = Equal.sym(Jpeg.Hit, Jpeg.decode.huff(16n, actab(cls), rbits(ss, 1)),
                 Jpeg.Hit{sym, rbits(s1, 1), 1}, eh)
-              %sh : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.step(_, kk, zz, 1), actab(cls)), rr)
-              sim.k(cls, e0, e2, pp, sym, kk, zz, s1, ex, rest, rr, radv_ok(List.length(&2, Bool, cc), ss, hs, h8),
+              %sh : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.step(_, kk, zz, qs, 1), actab(cls)), rr)
+              sim.k(cls, e0, e2, pp, sym, kk, zz, qs, s1, ex, rest, rr, radv_ok(List.length(&2, Bool, cc), ss, hs, h8),
                 rem_after(cc, ss, tl, hs, h8, he1), M3.and_r(Laws.jpg.memb(sym, Jenc.encode.acsyms()),
                   Laws.jpg.acok.k(e0, e2,
-                sym, ex, kk), ha), hr, k2 => z2 => s2 => a2 => b2 => c2 => d2 => huf.sim(cls, rest, pp, k2, z2, s2,
+                sym, ex, kk), ha), hr, k2 => z2 => q2 => s2 => a2 => b2 => c2 => d2 => huf.sim(cls, rest, pp, k2, z2,
+                  q2, s2,
                   rr, a2,
                     b2,
                 c2, d2))
@@ -3553,11 +3342,10 @@ def BlkRes(-bk: Jpeg.Blk, +rr: List<&2, Bool>) -> Type:
 def blk.ac.eq(
   xx: Jpeg.Ac,
   +pred: U32,
-  +qq: List<&2, U32>,
   +qo: U32
-) -> {blkbo(Jpeg.decode.block.ac(xx, pred, qq, qo)) == bomul(acbo(xx), qo) : Jpeg.Bits & U32}:
+) -> {blkbo(Jpeg.decode.block.ac(xx, pred, qo)) == bomul(acbo(xx), qo) : Jpeg.Bits & U32}:
   match xx:
-    case Jpeg.Ac{_k, _zz, _bits, _d, _ok}:
+    case Jpeg.Ac{_k, _zz, _qs, _bits, _d, _ok}:
       {==}
 
 # a block from an AC loop that ended well, with a quantisation table of 64 entries
@@ -3568,11 +3356,11 @@ def blk.from.ac(
   +hq: {Jpeg.decode.qok(qt) == 1 : U32},
   +rr: List<&2, Bool>,
   res: AcRes(xx, rr)
-) -> BlkRes(Jpeg.decode.block.ac(xx, pred, qt, Jpeg.decode.qok(qt)), rr):
+) -> BlkRes(Jpeg.decode.block.ac(xx, pred, Jpeg.decode.qok(qt)), rr):
   (se, e1, e2, e3) = res
   +qo = Jpeg.decode.qok(qt)
-  (se, Equal.trans(Jpeg.Bits & U32, blkbo(Jpeg.decode.block.ac(xx, pred, qt, qo)), bomul(acbo(xx), qo),
-    (rbits(se, 1), 1), blk.ac.eq(xx, pred, qt, qo), Equal.trans(Jpeg.Bits & U32, bomul(acbo(xx), qo),
+  (se, Equal.trans(Jpeg.Bits & U32, blkbo(Jpeg.decode.block.ac(xx, pred, qo)), bomul(acbo(xx), qo),
+    (rbits(se, 1), 1), blk.ac.eq(xx, pred, qo), Equal.trans(Jpeg.Bits & U32, bomul(acbo(xx), qo),
     bomul((rbits(se, 1), 1), qo), (rbits(se, 1), 1), Equal.cong(Jpeg.Bits & U32, Jpeg.Bits & U32, bo => bomul(bo,
     qo), acbo(xx), (rbits(se, 1), 1), e1), Equal.cong(U32, Jpeg.Bits & U32, oo => bomul((rbits(se, 1), 1), oo), qo,
     1, hq))), e2, e3)
@@ -3620,8 +3408,10 @@ def bsim.z(
         List<&2, Bool>, xs => List.append(&2, Bool, xs, mr), dcx, [], len0(dcx, hl0))) : {rem(s1) == mr :
         List<&2, Bool>}}
       +dc = (pred + Jpeg.decode.extend(0, 0) : U32)
-      blk.from.ac(Jpeg.decode.ac(63n, Jpeg.Ac{1, dc <> Jpeg.decode.zeros(63n, []), rbits(s1, 1), 0, 1}, actab(cls)),
-        dc, qt, hq, rr, huf.sim(cls, acs, 63n, 1, dc <> Jpeg.decode.zeros(63n, []), s1, rr, hs1, h81, e1, hw))
+      blk.from.ac(Jpeg.decode.ac(63n, Jpeg.Ac{1, Jpeg.decode.cf.put(Jpeg.decode.b8.zero(), 0,
+        (dc * Jpeg.decode.nth(0n, qt) : U32)), Jpeg.decode.skip(1n, qt), rbits(s1, 1), 0, 1}, actab(cls)),
+        dc, qt, hq, rr, huf.sim(cls, acs, 63n, 1, Jpeg.decode.cf.put(Jpeg.decode.b8.zero(), 0,
+          (dc * Jpeg.decode.nth(0n, qt) : U32)), Jpeg.decode.skip(1n, qt), s1, rr, hs1, h81, e1, hw))
     case False{}:
       +hs1 = {M3.and_l(rshort(s1), roct8(s1), f1) : {rshort(s1) == True{} : Bool}}
       +h81 = {M3.and_r(rshort(s1), roct8(s1), f1) : {roct8(s1) == True{} : Bool}}
@@ -3642,8 +3432,10 @@ def bsim.z(
       +dc = (pred + Jpeg.decode.extend(dcs, vv) : U32)
       sr = Equal.sym(Jpeg.Bits & U32, Jpeg.decode.read.n(dcs, rbits(s1, 1)), (rbits(s2, 1), vv), erd)
       %sr : BlkRes(Jpeg.decode.block.diff(_, dcs, pred, 1, actab(cls), qt, Jpeg.decode.qok(qt)), rr)
-      blk.from.ac(Jpeg.decode.ac(63n, Jpeg.Ac{1, dc <> Jpeg.decode.zeros(63n, []), rbits(s2, 1), 0, 1}, actab(cls)),
-        dc, qt, hq, rr, huf.sim(cls, acs, 63n, 1, dc <> Jpeg.decode.zeros(63n, []), s2, rr, M3.and_l(rshort(s2),
+      blk.from.ac(Jpeg.decode.ac(63n, Jpeg.Ac{1, Jpeg.decode.cf.put(Jpeg.decode.b8.zero(), 0,
+        (dc * Jpeg.decode.nth(0n, qt) : U32)), Jpeg.decode.skip(1n, qt), rbits(s2, 1), 0, 1}, actab(cls)),
+        dc, qt, hq, rr, huf.sim(cls, acs, 63n, 1, Jpeg.decode.cf.put(Jpeg.decode.b8.zero(), 0,
+          (dc * Jpeg.decode.nth(0n, qt) : U32)), Jpeg.decode.skip(1n, qt), s2, rr, M3.and_l(rshort(s2),
         roct8(s2),
         radv_ok(ln, s1, hs1, h81)), M3.and_r(rshort(s2), roct8(s2), radv_ok(ln, s1, hs1, h81)),
         rem_after(dcx, s1, mr, hs1, h81, er), hw))
@@ -3683,9 +3475,9 @@ def bsim(
   +eh = {huff.dc(cls, ss, 1, dcs, tl, hs, h8, he1, memb.dc(cls, Jenc.encode.dcsyms(), dcs, M3.and_l(Laws.jpg.memb(dcs,
     Jenc.encode.dcsyms()), Bool.and(Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(dcs)), Laws.jpg.acwf(acs,
       Laws.JAcSt{1,
-    63n, False{}})), hw), all.dc.ok(cls))) : {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)},
-    dctab(cls)) == Jpeg.Hit{dcs, rbits(s1, 1), 1} : Jpeg.Hit}}
-  sh = Equal.sym(Jpeg.Hit, Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)}, dctab(cls)), Jpeg.Hit{dcs,
+    63n, False{}})), hw), all.dc.ok(cls))) : {Jpeg.decode.huff(16n, dctab(cls), rbits(ss, 1)) == Jpeg.Hit{dcs,
+      rbits(s1, 1), 1} : Jpeg.Hit}}
+  sh = Equal.sym(Jpeg.Hit, Jpeg.decode.huff(16n, dctab(cls), rbits(ss, 1)), Jpeg.Hit{dcs,
     rbits(s1, 1), 1}, eh)
   %sh : BlkRes(Jpeg.decode.block.dc(_, pred, actab(cls), qt, Jpeg.decode.qok(qt)), rr)
   bsim.z(cls, U32.is_eq(dcs, 0), dcs, dcx, acs, pred, qt, hq, s1, rr, radv_ok(List.length(&2, Bool, cc), ss, hs, h8),

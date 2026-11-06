@@ -39,6 +39,7 @@ import ./laws/InflateUptoReadsStoredBlocks.bend as InflateUptoReadsStoredBlocks
 import ./laws/JpegEncodeFlattensAlpha.bend as JpegEncodeFlattensAlpha
 import ./laws/JpegEncodeRefusesBadRasters.bend as JpegEncodeRefusesBadRasters
 import ./laws/JpegPlacesComponentSamples.bend as JpegPlacesComponentSamples
+import ./laws/JpegReadsScansInTurn.bend as JpegReadsScansInTurn
 import ./laws/JpegRefusesNonBaselineFrames.bend as JpegRefusesNonBaselineFrames
 import ./laws/JpegRoundTripKeepsSize.bend as JpegRoundTripKeepsSize
 import ./laws/JpegWritesJfifLayout.bend as JpegWritesJfifLayout

@@ -16,6 +16,7 @@ import ./proofs/InflateUptoReadsStoredBlocks.bend as PInflateUptoReadsStoredBloc
 import ./proofs/JpegEncodeFlattensAlpha.bend as PJpegEncodeFlattensAlpha
 import ./proofs/JpegEncodeRefusesBadRasters.bend as PJpegEncodeRefusesBadRasters
 import ./proofs/JpegPlacesComponentSamples.bend as PJpegPlacesComponentSamples
+import ./proofs/JpegReadsScansInTurn.bend as PJpegReadsScansInTurn
 import ./proofs/JpegRefusesNonBaselineFrames.bend as PJpegRefusesNonBaselineFrames
 import ./proofs/JpegRoundTripKeepsSize.bend as PJpegRoundTripKeepsSize
 import ./proofs/JpegWritesJfifLayout.bend as PJpegWritesJfifLayout

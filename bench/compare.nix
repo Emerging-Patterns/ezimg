@@ -354,6 +354,47 @@ def correct_jpeg():
         ok = got[:2] == (w, h) and dl <= 3.0 and opaque(got[2])
         add_case("D pillow→ezimg jpeg", f"16x16 gradient {label}", "PASS" if ok else "FAIL", f"max luma diff={dl:.2f}")
 
+    # Sequential files of several scans (T.81 E.2). jpegtran -scans recodes a Pillow file with one scan to each
+    # component, or Y then Cb and Cr interleaved, or the components out of order, keeping every coefficient: ezimg
+    # must decode each exactly as it decodes the one-scan file, and within 1 of Pillow. With -optimize each scan
+    # has its own DHT between the scans; -restart 1 puts RSTn markers in each. A progressive recoding stays refused.
+    jt = os.environ.get("EZIMG_JPEGTRAN")
+    if not jt:
+        add_case("D3 jpegtran -scans→ezimg", "jpegtran", "SKIP", "EZIMG_JPEGTRAN unset", hard=False)
+    else:
+        rng = random.Random(5)
+        scripts = (("a scan to each component", "0;\n1;\n2;\n"), ("Y, then Cb and Cr", "0;\n1 2;\n"),
+                   ("Cr, Y, Cb", "2;\n0;\n1;\n"), ("gray", "0;\n"))
+        k = 0
+        for w, h, mode, ss in ((37, 29, "RGB", 2), (40, 24, "RGB", 0), (17, 9, "RGB", 1), (23, 11, "L", 0)):
+            im = Image.frombytes(mode, (w, h), bytes(rng.getrandbits(8) for _ in range(w * h * len(mode))))
+            src = os.path.join(WORK, f"ms_{w}x{h}_{mode}_{ss}.jpg")
+            open(src, "wb").write(pillow_jpeg(im, quality=85, subsampling=ss))
+            _r0, one = run_decode("jpeg-dec", src, 60)
+            for label, script in scripts:
+                if (label == "gray") != (mode == "L"):
+                    continue
+                sf = src + ".scans"; open(sf, "w").write(script)
+                for opt in ([], ["-optimize"], ["-restart", "1"]):
+                    k += 1
+                    name = f"{w}x{h} {mode} subsampling={ss} {label} {' '.join(opt)}".strip()
+                    dst = os.path.join(WORK, f"ms_{k}.jpg")
+                    subprocess.run([jt, "-copy", "none", "-scans", sf] + opt + ["-outfile", dst, src], check=True)
+                    r, got = run_decode("jpeg-dec", dst, 60)
+                    if got is None or one is None:
+                        add_case("D3 jpegtran -scans→ezimg", name, "FAIL", f"rc={r['rc']} one-scan ok={one is not None}")
+                        continue
+                    pil = Image.open(dst); pil.load()
+                    m = channel_metrics(got[2], as_rgb_words(pil), "rgb")
+                    ok = got == one and m["max_abs"] <= 1 and opaque(got[2])
+                    add_case("D3 jpegtran -scans→ezimg", name, "PASS" if ok else "FAIL",
+                             f"same as one scan={got == one} Pillow max_abs={m['max_abs']}")
+        prog = os.path.join(WORK, "ms_progressive.jpg")
+        subprocess.run([jt, "-progressive", "-outfile", prog, os.path.join(WORK, "ms_37x29_RGB_2.jpg")], check=True)
+        r, got = run_decode("jpeg-dec", prog, 60)
+        add_case("D3 jpegtran -scans→ezimg", "progressive recoding refused", "PASS" if got is None else "FAIL",
+                 f"rc={r['rc']}")
+
     # A JPEG decoded by ezimg and saved as PNG by ezimg keeps its colour and is
     # opaque: one sample format for every decoder and encoder (laws/DecodedSamplesPackArgb.bend).
     for name, im, kw in (("RGB 8x8 red 4:4:4", Image.new("RGB", (8, 8), (220, 40, 40)), {"subsampling": 0}),
