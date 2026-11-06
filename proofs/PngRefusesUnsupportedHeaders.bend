@@ -5,7 +5,9 @@ import ../src/crc.bend as Crc
 import ../src/png.bend as Png
 import ../laws/PngRefusesUnsupportedHeaders.bend as Laws
 import ../laws/defs/PngSpecification.bend as D1
+import ../laws/defs/SizeBounds.bend as D2
 import ./lemmas/BasicFacts.bend as M1
+import ./lemmas/PngChunkWalker.bend as M2
 
 # the shape of the IHDR check with five tests: the sides, the colour type
 # and bit depth, compression, filter and interlace methods
@@ -164,7 +166,7 @@ def good.depth(
   +ii: U32,
   h_dd: {D1.spec.depth.ok(cc, dd) == False{} : Bool}
 ) -> {Png.png.good(ww, hh, dd, cc, comp, ff, ii) == False{} : Bool}:
-  shape_second(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), Png.png.depth.ok(cc, dd), U32.is_zero(comp),
+  shape_second(Bool.and(Png.png.side(ww), Png.png.side(hh)), Png.png.depth.ok(cc, dd), U32.is_zero(comp),
     U32.is_zero(ff), Png.png.inter.ok(ii), h_dd)
 
 # png.good refuses an interlace method other than 0 and 1
@@ -178,8 +180,74 @@ def good.interlace(
   +ii: U32,
   h_ii: {D1.spec.inter.ok(ii) == False{} : Bool}
 ) -> {Png.png.good(ww, hh, dd, cc, comp, ff, ii) == False{} : Bool}:
-  shape_fifth(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), Png.png.depth.ok(cc, dd), U32.is_zero(comp),
+  shape_fifth(Bool.and(Png.png.side(ww), Png.png.side(hh)), Png.png.depth.ok(cc, dd), U32.is_zero(comp),
     U32.is_zero(ff), Png.png.inter.ok(ii), h_ii)
+
+# both sides' second tests, one false, make the pair of sides false
+law sides_false:
+  for aa: Bool
+  for bb: Bool
+  for cc: Bool
+  for _dd: Bool
+  for hh: {Bool.and(bb, _dd) == False{} : Bool}
+  {Bool.and(Bool.and(aa, bb), Bool.and(cc, _dd)) == False{} : Bool}
+
+# the proof of sides_false
+def sides_false(aa, bb, cc, _dd, hh):
+  match aa:
+    case False{}:
+      {==}
+    case True{}:
+      match bb:
+        case False{}:
+          {==}
+        case True{}:
+          match cc:
+            case False{}:
+              {==}
+            case True{}:
+              hh
+
+# png.good refuses a width or height of 2^31 or more
+def good.size(
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +comp: U32,
+  +ff: U32,
+  +ii: U32,
+  h_big: {Bool.and(D2.below(31n, U32.to_nat(ww)), D2.below(31n, U32.to_nat(hh))) == False{} : Bool}
+) -> {Png.png.good(ww, hh, dd, cc, comp, ff, ii) == False{} : Bool}:
+  +g1 = Bool.and(Png.png.side(ww), Png.png.side(hh))
+  +sw = D1.spec.side(ww)
+  +e1 = {Equal.trans(Bool, g1, Bool.and(sw, D1.spec.side(hh)), False{},
+    Equal.trans(Bool, g1, Bool.and(sw, Png.png.side(hh)), Bool.and(sw, D1.spec.side(hh)),
+      Equal.cong(Bool, Bool, bb => Bool.and(bb, Png.png.side(hh)), Png.png.side(ww), sw, M2.side.same(ww)),
+      Equal.cong(Bool, Bool, bb => Bool.and(sw, bb), Png.png.side(hh), D1.spec.side(hh), M2.side.same(hh))),
+    sides_false(U32.is_gt(ww, 0), D2.below(31n, U32.to_nat(ww)), U32.is_gt(hh, 0), D2.below(31n, U32.to_nat(hh)),
+      h_big)) : {g1 == False{} : Bool}}
+  Equal.cong(Bool, Bool, gg => shape(gg, Png.png.depth.ok(cc, dd), U32.is_zero(comp), U32.is_zero(ff),
+    Png.png.inter.ok(ii)), g1, False{}, e1)
+
+# the sides read back are the sides
+def big.back(
+  +ww: U32,
+  +hh: U32,
+  h_big: {Bool.and(D2.below(31n, U32.to_nat(ww)), D2.below(31n, U32.to_nat(hh))) == False{} : Bool}
+) -> {Bool.and(D2.below(31n, U32.to_nat(be.back(ww))), D2.below(31n, U32.to_nat(be.back(hh)))) == False{} : Bool}:
+  +bh = D2.below(31n, U32.to_nat(be.back(hh)))
+  Equal.trans(Bool, Bool.and(D2.below(31n, U32.to_nat(be.back(ww))), bh), Bool.and(D2.below(31n, U32.to_nat(ww)), bh),
+    False{},
+    Equal.cong(U32, Bool, uu => Bool.and(D2.below(31n, U32.to_nat(uu)), bh), be.back(ww), ww, M2.prt.be.back(ww)),
+    Equal.trans(Bool, Bool.and(D2.below(31n, U32.to_nat(ww)), bh), Bool.and(D2.below(31n, U32.to_nat(ww)),
+      D2.below(31n, U32.to_nat(hh))), False{},
+      Equal.cong(U32, Bool, uu => Bool.and(D2.below(31n, U32.to_nat(ww)), D2.below(31n, U32.to_nat(uu))), be.back(hh),
+        hh, M2.prt.be.back(hh)), h_big))
+
+def Laws.png_size_refused(ww, hh, dd, cc, comp, ff, ii, crc, rest, h_big):
+  ihdr.refused(ww, hh, dd, cc, comp, ff, ii, crc, rest,
+    good.size(be.back(ww), be.back(hh), dd, cc, comp, ff, ii, big.back(ww, hh, h_big)))
 
 def Laws.png_depth_refused(ww, hh, dd, cc, comp, ff, ii, crc, rest, h_dd):
   ihdr.refused(ww, hh, dd, cc, comp, ff, ii, crc, rest,
@@ -190,12 +258,15 @@ def Laws.png_interlace_refused(ww, hh, dd, cc, comp, ff, ii, crc, rest, h_ii):
     good.interlace(be.back(ww), be.back(hh), dd, cc, comp, ff, ii, h_ii))
 
 def Laws.png_header_takes(ww, hh, dd, cc, ii, h_ww, h_hh, h_dd, h_ii):
-  %Equal.sym(Bool, U32.is_gt(ww, 0), True{}, h_ww) : {Bool.and(Bool.and(_, U32.is_gt(hh, 0)),
-    Bool.and(D1.spec.depth.ok(cc, dd), D1.spec.inter.ok(ii))) == True{} : Bool}
-  %Equal.sym(Bool, U32.is_gt(hh, 0), True{}, h_hh) : {Bool.and(Bool.and(True{}, _),
-    Bool.and(D1.spec.depth.ok(cc, dd), D1.spec.inter.ok(ii))) == True{} : Bool}
-  %Equal.sym(Bool, D1.spec.depth.ok(cc, dd), True{}, h_dd) : {Bool.and(Bool.and(True{}, True{}),
-    Bool.and(_, D1.spec.inter.ok(ii))) == True{} : Bool}
-  %Equal.sym(Bool, D1.spec.inter.ok(ii), True{}, h_ii) : {Bool.and(Bool.and(True{}, True{}), Bool.and(True{}, _)) ==
-    True{} : Bool}
-  {==}
+  +sh = Png.png.side(hh)
+  +rr = Bool.and(D1.spec.depth.ok(cc, dd), D1.spec.inter.ok(ii))
+  Equal.trans(Bool, Png.png.good(ww, hh, dd, cc, 0, 0, ii), Bool.and(Bool.and(True{}, sh), rr), True{},
+    Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(bb, sh), rr), Png.png.side(ww), True{}, M2.side.ok(ww, h_ww)),
+    Equal.trans(Bool, Bool.and(Bool.and(True{}, sh), rr), Bool.and(Bool.and(True{}, True{}), rr), True{},
+      Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(True{}, bb), rr), sh, True{}, M2.side.ok(hh, h_hh)),
+      Equal.trans(Bool, Bool.and(Bool.and(True{}, True{}), rr), Bool.and(Bool.and(True{}, True{}), Bool.and(True{},
+        D1.spec.inter.ok(ii))), True{},
+        Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(True{}, True{}), Bool.and(bb, D1.spec.inter.ok(ii))),
+          D1.spec.depth.ok(cc, dd), True{}, h_dd),
+        Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(True{}, True{}), Bool.and(True{}, bb)), D1.spec.inter.ok(ii),
+          True{}, h_ii))))

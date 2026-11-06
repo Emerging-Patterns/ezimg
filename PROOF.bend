@@ -20,12 +20,14 @@ import ./proofs/JpegRefusesNonBaselineFrames.bend as PJpegRefusesNonBaselineFram
 import ./proofs/JpegRoundTripKeepsSize.bend as PJpegRoundTripKeepsSize
 import ./proofs/JpegWritesJfifLayout.bend as PJpegWritesJfifLayout
 import ./proofs/MapAppliesPerSample.bend as PMapAppliesPerSample
+import ./proofs/PngAdam7PlacesPasses.bend as PPngAdam7PlacesPasses
 import ./proofs/PngAncillaryChunksIgnored.bend as PPngAncillaryChunksIgnored
 import ./proofs/PngDecodesWellFormed.bend as PPngDecodesWellFormed
 import ./proofs/PngHeaderPicksColourType.bend as PPngHeaderPicksColourType
 import ./proofs/PngIgnoresBytesAfterIend.bend as PPngIgnoresBytesAfterIend
 import ./proofs/PngIgnoresFaultyTrns.bend as PPngIgnoresFaultyTrns
 import ./proofs/PngRefusesBadRasters.bend as PPngRefusesBadRasters
+import ./proofs/PngRefusesLongChunks.bend as PPngRefusesLongChunks
 import ./proofs/PngRefusesUnsupportedHeaders.bend as PPngRefusesUnsupportedHeaders
 import ./proofs/PngRoundTrips.bend as PPngRoundTrips
 import ./proofs/PngSamplesFollowBitDepth.bend as PPngSamplesFollowBitDepth

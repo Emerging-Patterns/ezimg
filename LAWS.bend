@@ -43,12 +43,14 @@ import ./laws/JpegRefusesNonBaselineFrames.bend as JpegRefusesNonBaselineFrames
 import ./laws/JpegRoundTripKeepsSize.bend as JpegRoundTripKeepsSize
 import ./laws/JpegWritesJfifLayout.bend as JpegWritesJfifLayout
 import ./laws/MapAppliesPerSample.bend as MapAppliesPerSample
+import ./laws/PngAdam7PlacesPasses.bend as PngAdam7PlacesPasses
 import ./laws/PngAncillaryChunksIgnored.bend as PngAncillaryChunksIgnored
 import ./laws/PngDecodesWellFormed.bend as PngDecodesWellFormed
 import ./laws/PngHeaderPicksColourType.bend as PngHeaderPicksColourType
 import ./laws/PngIgnoresBytesAfterIend.bend as PngIgnoresBytesAfterIend
 import ./laws/PngIgnoresFaultyTrns.bend as PngIgnoresFaultyTrns
 import ./laws/PngRefusesBadRasters.bend as PngRefusesBadRasters
+import ./laws/PngRefusesLongChunks.bend as PngRefusesLongChunks
 import ./laws/PngRefusesUnsupportedHeaders.bend as PngRefusesUnsupportedHeaders
 import ./laws/PngRoundTrips.bend as PngRoundTrips
 import ./laws/PngSamplesFollowBitDepth.bend as PngSamplesFollowBitDepth

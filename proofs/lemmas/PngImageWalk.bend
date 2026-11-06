@@ -37,7 +37,8 @@ def walk.idats(
   +h_nd: {M1.need(cc, plte) == True{} : Bool},
   hf: D1.spec.fits.all(ds)
 ) -> {Png.png.go(D1.spec.idats(ds, D1.spec.chunk([73, 69, 78, 68], [], junk)), Png.ZLen{}, False{}, 0, 0, [], [],
-  M1.st(ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid)) == Png.png.samples(Inf.inflate(List.append(&2, U32,
+  M1.st(ww, hh, cc, plte, trns, List.reverse(&2, U32, done),
+    sid)) == Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.append(&2, U32,
   done, List.concat(&2, U32, ds))), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Png.Pic>}:
   match ds:
     case Nil{}:
@@ -47,15 +48,19 @@ def walk.idats(
       Equal.trans(Maybe<&2, Png.Pic>,
         Png.png.go(D1.spec.chunk([73, 69, 78, 68], [], junk), Png.ZLen{}, False{}, 0, 0, [], [], pg),
         Png.png.finish(Png.pg.iend(pg)),
-        Png.png.samples(Inf.inflate(List.append(&2, U32, done, [])), ww, hh, cc, pl, tr),
-        M2.chunk.end(73, 69, 78, 68, [], junk, pg, Png.pg.iend(pg), {==}, iend.step(ww, hh, cc, plte, trns,
+        Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.append(&2, U32, done, [])), ww, hh, cc, pl,
+          tr),
+        M2.chunk.end(73, 69, 78, 68, [], junk, pg, Png.pg.iend(pg), ({==}, {==}), iend.step(ww, hh, cc, plte, trns,
           List.reverse(&2, U32, done), sid, h_nd)),
         Equal.trans(Maybe<&2, Png.Pic>, Png.png.finish(Png.pg.iend(pg)),
-          Png.png.samples(Inf.inflate(done), ww, hh, cc, pl, tr),
-          Png.png.samples(Inf.inflate(List.append(&2, U32, done, [])), ww, hh, cc, pl, tr),
-          Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate(xs), ww, hh, cc, pl, tr),
+          Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), done), ww, hh, cc, pl, tr),
+          Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.append(&2, U32, done, [])), ww, hh, cc,
+            pl, tr),
+          Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh,
+            cc), xs), ww, hh, cc, pl, tr),
             List.reverse(&2, U32, List.reverse(&2, U32, done)), done, M1.inf.rev_rev(done)),
-          Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate(xs), ww, hh, cc, pl, tr),
+          Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh,
+            cc), xs), ww, hh, cc, pl, tr),
             done, List.append(&2, U32, done, []), Equal.sym(List<&2, U32>, List.append(&2, U32, done, []), done,
             M1.app_nil(done)))))
     case +dd <> +tl:
@@ -69,7 +74,8 @@ def walk.idats(
         Png.png.go(D1.spec.chunk([73, 68, 65, 84], dd, rest), Png.ZLen{}, False{}, 0, 0, [], [], pg),
         Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], M1.st(ww, hh, cc, plte, trns, List.append(&2, U32,
           List.reverse(&2, U32, dd), List.reverse(&2, U32, done)), True{})),
-        Png.png.samples(Inf.inflate(List.append(&2, U32, done, List.append(&2, U32, dd, List.concat(&2, U32, tl)))), ww,
+        Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.append(&2, U32, done, List.append(&2, U32,
+          dd, List.concat(&2, U32, tl)))), ww,
           hh, cc, pl, tr),
         M2.chunk.more(73, 68, 65, 84, dd, rest, pg, M1.st(ww, hh, cc, plte, trns, List.append(&2, U32, List.reverse(&2,
             U32,
@@ -82,7 +88,8 @@ def walk.idats(
             List.reverse(&2, U32, dd), List.reverse(&2, U32, done)), True{})),
           Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], M1.st(ww, hh, cc, plte, trns, List.reverse(&2, U32, d2),
             True{})),
-          Png.png.samples(Inf.inflate(List.append(&2, U32, done, List.append(&2, U32, dd, List.concat(&2, U32, tl)))),
+          Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.append(&2, U32, done, List.append(&2, U32,
+            dd, List.concat(&2, U32, tl)))),
             ww, hh, cc, pl, tr),
           Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [],
               M1.st(ww,
@@ -91,11 +98,14 @@ def walk.idats(
           Equal.trans(Maybe<&2, Png.Pic>,
             Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], M1.st(ww, hh, cc, plte, trns, List.reverse(&2, U32, d2),
               True{})),
-            Png.png.samples(Inf.inflate(List.append(&2, U32, d2, List.concat(&2, U32, tl))), ww, hh, cc, pl, tr),
-            Png.png.samples(Inf.inflate(List.append(&2, U32, done, List.append(&2, U32, dd, List.concat(&2, U32, tl)))),
+            Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.append(&2, U32, d2, List.concat(&2, U32,
+              tl))), ww, hh, cc, pl, tr),
+            Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.append(&2, U32, done, List.append(&2,
+              U32, dd, List.concat(&2, U32, tl)))),
               ww, hh, cc, pl, tr),
             walk.idats(ww, hh, cc, plte, trns, tl, d2, True{}, junk, h_nd, htl),
-            Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate(xs), ww, hh, cc, pl, tr),
+            Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww,
+              hh, cc), xs), ww, hh, cc, pl, tr),
               List.append(&2, U32, d2, List.concat(&2, U32, tl)), List.append(&2, U32, done, List.append(&2, U32, dd,
               List.concat(&2, U32, tl))), M1.app_assoc(done, dd, List.concat(&2, U32, tl))))))
 
@@ -109,8 +119,8 @@ def walk.png(
   +trns: Maybe<&2, List<&2, U32>>,
   +idats: List<&2, List<&2, U32>>,
   +junk: List<&2, U32>,
-  h_ww: {U32.is_gt(ww, 0) == True{} : Bool},
-  h_hh: {U32.is_gt(hh, 0) == True{} : Bool},
+  h_ww: {D1.spec.side(ww) == True{} : Bool},
+  h_hh: {D1.spec.side(hh) == True{} : Bool},
   h_cc: {D1.spec.colour.ok(cc) == True{} : Bool},
   +h_pl: {D1.spec.plte.ok(cc, plte) == True{} : Bool},
   h_tr: {D1.spec.trns.ok(cc, plte, trns) == True{} : Bool},
@@ -119,7 +129,8 @@ def walk.png(
   h_fi: D1.spec.fits.all(idats)
 ) -> {Png.decode(D1.spec.chunk([73, 72, 68, 82], D1.spec.ihdr.data(ww, hh, cc), D1.spec.chunk.opt([80, 76, 84,
   69], plte, D1.spec.chunk.opt([116, 82, 78, 83], trns, D1.spec.idats(idats, D1.spec.chunk([73, 69, 78, 68], [],
-  junk)))))) == Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte),
+  junk)))))) == Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.concat(&2, U32, idats)), ww, hh, cc,
+    D1.spec.or.nil(plte),
   D1.spec.or.nil(trns)) : Maybe<&2, Png.Pic>}:
   +r3 = D1.spec.idats(idats, D1.spec.chunk([73, 69, 78, 68], [], junk))
   +r2 = D1.spec.chunk.opt([116, 82, 78, 83], trns, r3)
@@ -131,18 +142,21 @@ def walk.png(
     Png.png.go(D1.spec.chunk([73, 72, 68, 82], D1.spec.ihdr.data(ww, hh, cc), r1), Png.ZLen{}, False{}, 0, 0, [],
       [], Png.pg.empty()),
     Png.png.go(r1, Png.ZLen{}, False{}, 0, 0, [], [], s0),
-    Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte),
+    Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.concat(&2, U32, idats)), ww, hh, cc,
+      D1.spec.or.nil(plte),
       D1.spec.or.nil(trns)),
-    M2.chunk.more(73, 72, 68, 82, D1.spec.ihdr.data(ww, hh, cc), r1, Png.pg.empty(), s0, {==}, M2.ihdr.step(ww, hh, cc,
-      h_ww, h_hh, h_cc)),
+    M2.chunk.more(73, 72, 68, 82, D1.spec.ihdr.data(ww, hh, cc), r1, Png.pg.empty(), s0, ({==}, {==}),
+      M2.ihdr.step(ww, hh, cc, h_ww, h_hh, h_cc)),
     Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(r1, Png.ZLen{}, False{}, 0, 0, [], [], s0),
       Png.png.go(r2, Png.ZLen{}, False{}, 0, 0, [], [], s1),
-      Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte),
+      Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.concat(&2, U32, idats)), ww, hh, cc,
+        D1.spec.or.nil(plte),
         D1.spec.or.nil(trns)),
       M2.walk.plte(ww, hh, cc, plte, r2, h_pl, h_fp),
       Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(r2, Png.ZLen{}, False{}, 0, 0, [], [], s1),
         Png.png.go(r3, Png.ZLen{}, False{}, 0, 0, [], [], s2),
-        Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte),
+        Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.concat(&2, U32, idats)), ww, hh, cc,
+          D1.spec.or.nil(plte),
           D1.spec.or.nil(trns)),
         M2.walk.trns(ww, hh, cc, plte, trns, r3, h_tr, h_ft),
         walk.idats(ww, hh, cc, plte, trns, idats, [], False{}, junk, M2.need.ok(cc, plte, h_pl), h_fi))))
@@ -237,17 +251,18 @@ def walk.decoded(
   +trns: Maybe<&2, List<&2, U32>>,
   +idats: List<&2, List<&2, U32>>,
   +junk: List<&2, U32>,
-  h_ww: {U32.is_gt(ww, 0) == True{} : Bool},
-  h_hh: {U32.is_gt(hh, 0) == True{} : Bool},
+  h_ww: {D1.spec.side(ww) == True{} : Bool},
+  h_hh: {D1.spec.side(hh) == True{} : Bool},
   h_cc: {D1.spec.colour.ok(cc) == True{} : Bool},
   +h_pl: {D1.spec.plte.ok(cc, plte) == True{} : Bool},
   h_tr: {D1.spec.trns.ok(cc, plte, trns) == True{} : Bool},
   h_fp: D1.spec.fits.opt(plte),
   h_ft: D1.spec.fits.opt(trns),
   h_fi: D1.spec.fits.all(idats)
-) -> {Img.decode_png(D1.spec.png.then(ww, hh, cc, plte, trns, idats, junk)) == D1.spec.decoded(Inf.inflate(
+) -> {Img.decode_png(D1.spec.png.then(ww, hh, cc, plte, trns, idats,
+  junk)) == D1.spec.decoded(Inf.inflate.upto(D1.spec.budget(ww, hh, cc),
   List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Img.Raster>}:
-  +mm = Inf.inflate(List.concat(&2, U32, idats))
+  +mm = Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.concat(&2, U32, idats))
   +pl = D1.spec.or.nil(plte)
   +tr = D1.spec.or.nil(trns)
   +file = D1.spec.chunk([73, 72, 68, 82], D1.spec.ihdr.data(ww, hh, cc), D1.spec.chunk.opt([80, 76, 84, 69], plte,

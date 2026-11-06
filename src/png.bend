@@ -114,11 +114,20 @@ def png.depth.ok(+cc: U32, +dd: U32) -> Bool:
 def png.inter.ok(+ii: U32) -> Bool:
   Bool.or(U32.is_zero(ii), U32.is_eq(ii, 1))
 
-# IHDR constraints: nonzero sides, a colour type and bit depth of table 11.1,
-# compression and filter method 0, and interlace method 0 or 1
+# below 2^31: the bound PNG section 7.1 puts on a chunk's length and
+# section 11.2.1 on the width and height (each at most 2^31 - 1)
+def png.short(+nn: U32) -> Bool:
+  U32.is_zero(U32.shrn(nn, 31n))
+
+# a width or height IHDR may give: from 1 to 2^31 - 1
+def png.side(+nn: U32) -> Bool:
+  Bool.and(U32.is_gt(nn, 0), png.short(nn))
+
+# IHDR constraints: sides from 1 to 2^31 - 1, a colour type and bit depth of
+# table 11.1, compression and filter method 0, and interlace method 0 or 1
 def png.good(+ww: U32, +hh: U32, +dd: U32, +cc: U32, +comp: U32, +ff: U32, +ii: U32) -> Bool:
   Bool.and(
-    Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)),
+    Bool.and(png.side(ww), png.side(hh)),
     Bool.and(
       png.depth.ok(cc, dd),
       Bool.and(U32.is_zero(comp), Bool.and(U32.is_zero(ff), png.inter.ok(ii)))
@@ -1341,15 +1350,43 @@ def a7.end(zz: Bool, rows: List<&2, List<&2, U32>>) -> Maybe<&2, List<&2, U32>>:
     case False{}:
       None{}
 
-def a7.s7(i5: List<&2, List<&2, U32>>, pp: Pass) -> Maybe<&2, List<&2, U32>>:
+# the seven passes put back together (PNG section 8.2), by halves: pass 7
+# holds the odd rows and passes 1 to 6 the even ones; of those, pass 6 holds
+# the odd columns and passes 1 to 5 the even ones; and so on down to pass 1,
+# every eighth sample of every eighth row. Each step interleaves rows
+# (ilv.rows) or columns (ilv.cols)
+def a7.merge(
+  r1: List<&2, List<&2, U32>>,
+  +r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  +r4: List<&2, List<&2, U32>>,
+  r5: List<&2, List<&2, U32>>,
+  +r6: List<&2, List<&2, U32>>,
+  r7: List<&2, List<&2, U32>>
+) -> List<&2, List<&2, U32>>:
+  ilv.rows(ilv.cols(ilv.rows(ilv.cols(ilv.rows(ilv.cols(r1, r2), r3), r4), r5), r6), r7)
+
+def a7.s7(
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  r4: List<&2, List<&2, U32>>,
+  r5: List<&2, List<&2, U32>>,
+  r6: List<&2, List<&2, U32>>,
+  pp: Pass
+) -> Maybe<&2, List<&2, U32>>:
   match pp:
     case PBad{}:
       None{}
     case PGot{r7, t7}:
-      a7.end(List.is_empty(&2, U32, t7), ilv.rows(i5, r7))
+      a7.end(List.is_empty(&2, U32, t7), a7.merge(r1, r2, r3, r4, r5, r6, r7))
 
 def a7.s6(
-  i4: List<&2, List<&2, U32>>,
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  r4: List<&2, List<&2, U32>>,
+  r5: List<&2, List<&2, U32>>,
   pp: Pass,
   +ww: U32,
   +hh: U32,
@@ -1362,10 +1399,13 @@ def a7.s6(
     case PBad{}:
       None{}
     case PGot{r6, t6}:
-      a7.s7(ilv.cols(i4, r6), pass.read(t6, ww, png.dn(hh), dd, cc, plte, trns))
+      a7.s7(r1, r2, r3, r4, r5, r6, pass.read(t6, ww, png.dn(hh), dd, cc, plte, trns))
 
 def a7.s5(
-  i3: List<&2, List<&2, U32>>,
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  r4: List<&2, List<&2, U32>>,
   pp: Pass,
   +ww: U32,
   +hh: U32,
@@ -1378,10 +1418,12 @@ def a7.s5(
     case PBad{}:
       None{}
     case PGot{r5, t5}:
-      a7.s6(ilv.rows(i3, r5), pass.read(t5, png.dn(ww), png.up(hh), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s6(r1, r2, r3, r4, r5, pass.read(t5, png.dn(ww), png.up(hh), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
 def a7.s4(
-  i2: List<&2, List<&2, U32>>,
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
   pp: Pass,
   +ww: U32,
   +hh: U32,
@@ -1395,10 +1437,11 @@ def a7.s4(
       None{}
     case PGot{r4, t4}:
       +w1 = png.up(ww)
-      a7.s5(ilv.cols(i2, r4), pass.read(t4, w1, png.dn(png.up(hh)), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s5(r1, r2, r3, r4, pass.read(t4, w1, png.dn(png.up(hh)), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
 def a7.s3(
-  i1: List<&2, List<&2, U32>>,
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
   pp: Pass,
   +ww: U32,
   +hh: U32,
@@ -1413,7 +1456,7 @@ def a7.s3(
     case PGot{r3, t3}:
       +w1 = png.up(ww)
       +h2 = png.up(png.up(hh))
-      a7.s4(ilv.rows(i1, r3), pass.read(t3, png.dn(w1), h2, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s4(r1, r2, r3, pass.read(t3, png.dn(w1), h2, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
 def a7.s2(
   r1: List<&2, List<&2, U32>>,
@@ -1431,7 +1474,7 @@ def a7.s2(
     case PGot{r2, t2}:
       +w2 = png.up(png.up(ww))
       +h2 = png.up(png.up(hh))
-      a7.s3(ilv.cols(r1, r2), pass.read(t2, w2, png.dn(h2), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s3(r1, r2, pass.read(t2, w2, png.dn(h2), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
 def a7.s1(
   pp: Pass,
@@ -1451,10 +1494,7 @@ def a7.s1(
       a7.s2(r1, pass.read(t1, png.dn(w2), h3, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
 # Adam7 (PNG section 8.2): seven passes in order, each a picture of its own,
-# put back together by halves. Pass 7 holds the odd rows and passes 1 to 6
-# the even ones; of those, pass 6 holds the odd columns and passes 1 to 5
-# the even ones; and so on down to pass 1, every eighth sample of every
-# eighth row. Each step interleaves rows or columns
+# read at the sizes png.a7.len counts and put back together by a7.merge
 def a7.go(
   +raw: List<&2, U32>,
   +ww: U32,
@@ -1544,11 +1584,15 @@ def png.deep(
     case Some{+raw}:
       png.pic(png.deep.at(U32.is_zero(ii), raw, ww, hh, dd, cc, plte, trns), ww, hh)
 
+# the filtered bytes of 8-bit samples without interlacing: h rows, each a
+# filter byte and w pixels of bpp bytes. png.budget at bit depth 8 and
+# interlace method 0, in the form the round trip reads
+def png.budget8(+ww: U32, +hh: U32, +cc: U32) -> Nat:
+  Nat.mul(U32.to_nat(hh), 1n+Nat.mul(U32.to_nat(ww), U32.to_nat(png.bpp(cc))))
+
 # 8-bit samples without interlacing take png.samples; any other bit depth,
-# or Adam7, png.deep, with the inflater stopped once the data passes the
-# length the header implies (the 8-bit path keeps plain inflate: the
-# round-trip proof reads it, and inflate.upto agreeing with inflate under
-# its budget is not proved)
+# or Adam7, png.deep. Either way the inflater stops once the data passes the
+# length the header implies
 def png.finish.go(
   zenc: Bool,
   +ww: U32,
@@ -1562,7 +1606,8 @@ def png.finish.go(
 ) -> Maybe<&2, Pic>:
   match zenc:
     case True{}:
-      png.samples(Inf.inflate(List.reverse(&2, U32, idat)), ww, hh, colour, plte, trns)
+      png.samples(Inf.inflate.upto(png.budget8(ww, hh, colour), List.reverse(&2, U32, idat)), ww, hh, colour, plte,
+        trns)
     case False{}:
       png.deep(Inf.inflate.upto(png.budget(ww, hh, dd, colour, ii), List.reverse(&2, U32, idat)), ww, hh, dd,
         colour, ii, plte, trns)
@@ -1618,6 +1663,16 @@ def png.crc(nx: Nx, more: Unit -> Maybe<&2, Pic>) -> Maybe<&2, Pic>:
     case NMore{_pg}:
       more(Unit{})
 
+# after a chunk's length field: the walk over the rest when the length is
+# below 2^31 (PNG section 7.1), none otherwise. The walk is a thunk, forced
+# only when the length is taken
+def png.len.ok(zz: Bool, more: Unit -> Maybe<&2, Pic>) -> Maybe<&2, Pic>:
+  match zz:
+    case True{}:
+      more(Unit{})
+    case False{}:
+      None{}
+
 # one byte of a PNG chunk stream. `zlast` is the last data byte of the chunk.
 def png.go(
   xs: List<&2, U32>,
@@ -1633,7 +1688,8 @@ def png.go(
     case Nil{} _pz _z:
       None{}
     case +a <> +b <> +c <> +d <> rest ZLen{} _z:
-      png.go(rest, ZTyp{}, False{}, be.u32(a, b, c, d), 0, [], [], pg)
+      +n = be.u32(a, b, c, d)
+      png.len.ok(png.short(n), _u => png.go(rest, ZTyp{}, False{}, n, 0, [], [], pg))
     case _xs ZLen{} _z:
       None{}
     case +a <> +b <> +c <> +d <> rest ZTyp{} _z:

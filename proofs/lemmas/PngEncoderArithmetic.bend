@@ -1163,6 +1163,57 @@ def small.nat(+nn: U32) -> {Png.enc.small(nn) == D1.below(28n, U32.to_nat(nn)) :
       Equal.cong(Nat, Bool, kk => Nat.is_eq(kk, 0n), U32.to_nat(sv), hv, shrn.halves(28n, nn)),
       Equal.sym(Bool, D1.below(28n, U32.to_nat(nn)), Nat.is_eq(hv, 0n), below.halves(28n, U32.to_nat(nn)))))
 
+# the decoder's bound on chunk lengths, widths and heights is the value below 2^31
+def short.nat(+nn: U32) -> {Png.png.short(nn) == D1.below(31n, U32.to_nat(nn)) : Bool}:
+  +sv = U32.shrn(nn, 31n)
+  +hv = halves(31n, U32.to_nat(nn))
+  Equal.trans(Bool, U32.is_zero(sv), Nat.is_eq(U32.to_nat(sv), 0n), D1.below(31n, U32.to_nat(nn)),
+    Equal.sym(Bool, Nat.is_eq(U32.to_nat(sv), 0n), U32.is_zero(sv), zero.nat(sv, U32.is_zero(sv), {==})),
+    Equal.trans(Bool, Nat.is_eq(U32.to_nat(sv), 0n), Nat.is_eq(hv, 0n), D1.below(31n, U32.to_nat(nn)),
+      Equal.cong(Nat, Bool, kk => Nat.is_eq(kk, 0n), U32.to_nat(sv), hv, shrn.halves(31n, nn)),
+      Equal.sym(Bool, D1.below(31n, U32.to_nat(nn)), Nat.is_eq(hv, 0n), below.halves(31n, U32.to_nat(nn)))))
+
+# one more on both sides of a gap
+def le.gap.up(
+  +xp: Nat,
+  +yp: Nat,
+  pr: &ee: Nat -> {Nat.add(xp, ee) == yp : Nat}
+) -> &ee: Nat -> {Nat.add(1n+xp, ee) == 1n+yp : Nat}:
+  (+ee, eq) = pr
+  (ee, Equal.cong(Nat, Nat, kk => 1n+kk, Nat.add(xp, ee), yp, eq))
+
+# x at most y: y is x and something
+def le.gap(xx: Nat, yy: Nat, hh: {Nat.is_le(xx, yy) == True{} : Bool}) -> &ee: Nat -> {Nat.add(xx, ee) == yy : Nat}:
+  match xx yy:
+    case 0n yy0:
+      (yy0, {==})
+    case 1n+xp 0n:
+      Empty.absurd(&ee: Nat -> {Nat.add(1n+xp, ee) == 0n : Nat}, M1.false_true(hh))
+    case 1n+(+xp) 1n+(+yp):
+      le.gap.up(xp, yp, le.gap(xp, yp, hh))
+
+# the gap taken out, below_mono
+def below.le.go(
+  +nn: Nat,
+  +xx: Nat,
+  +yy: Nat,
+  pr: &ee: Nat -> {Nat.add(xx, ee) == yy : Nat},
+  hb: {D1.below(nn, yy) == True{} : Bool}
+) -> {D1.below(nn, xx) == True{} : Bool}:
+  (+ee, eq) = pr
+  below_mono(nn, xx, ee, Equal.trans(Bool, D1.below(nn, Nat.add(xx, ee)), D1.below(nn, yy), True{},
+    Equal.cong(Nat, Bool, kk => D1.below(nn, kk), Nat.add(xx, ee), yy, eq), hb))
+
+# what is at most a number below 2^n is below 2^n
+def below.le(
+  +nn: Nat,
+  +xx: Nat,
+  +yy: Nat,
+  hle: {Nat.is_le(xx, yy) == True{} : Bool},
+  hb: {D1.below(nn, yy) == True{} : Bool}
+) -> {D1.below(nn, xx) == True{} : Bool}:
+  below.le.go(nn, xx, yy, le.gap(xx, yy, hle), hb)
+
 # below 2^n is below 2^(n + 1)
 law below_up:
   for nn: Nat

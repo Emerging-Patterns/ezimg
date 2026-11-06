@@ -19,13 +19,14 @@ law png_after_iend:
   for +trns: Maybe<&2, List<&2, U32>>
   for +idats: List<&2, List<&2, U32>>
   for +rest: List<&2, U32>
-  for h_ww: {U32.is_gt(ww, 0) == True{} : Bool}
-  for h_hh: {U32.is_gt(hh, 0) == True{} : Bool}
+  for h_ww: {D1.spec.side(ww) == True{} : Bool}
+  for h_hh: {D1.spec.side(hh) == True{} : Bool}
   for h_cc: {D1.spec.colour.ok(cc) == True{} : Bool}
   for h_pl: {D1.spec.plte.ok(cc, plte) == True{} : Bool}
   for h_tr: {D1.spec.trns.ok(cc, plte, trns) == True{} : Bool}
   for h_fp: D1.spec.fits.opt(plte)
   for h_ft: D1.spec.fits.opt(trns)
   for h_fi: D1.spec.fits.all(idats)
-  {Img.decode_png(D1.spec.png.then(ww, hh, cc, plte, trns, idats, rest)) == D1.spec.decoded(Inf.inflate(
+  {Img.decode_png(D1.spec.png.then(ww, hh, cc, plte, trns, idats, rest)) ==
+    D1.spec.decoded(Inf.inflate.upto(D1.spec.budget(ww, hh, cc),
     List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Img.Raster>}

@@ -4,6 +4,7 @@ import ../main.bend as Img
 import ../src/crc.bend as Crc
 import ../src/png.bend as Png
 import ../laws/CrcIsIso3309.bend as Laws
+import ../laws/defs/PngSpecification.bend as D1
 import ./lemmas/BasicFacts.bend as M1
 import ./lemmas/CrcReference.bend as M2
 
@@ -412,6 +413,7 @@ law walk_bad.at:
   for +rest: List<&2, U32>
   for +pg: Png.Pg
   for +hn: {U32.to_nat(Png.be.u32(l0, l1, l2, l3)) == List.length(&2, U32, data) : Nat}
+  for +hs: {Png.png.short(Png.be.u32(l0, l1, l2, l3)) == True{} : Bool}
   for +sum: U32
   for +es: {Crc.crc32(t0 <> t1 <> t2 <> t3 <> data) == sum : U32}
   for h_ne: {Png.be.u32(s0, s1, s2, s3) == sum : U32} -> Empty
@@ -419,14 +421,14 @@ law walk_bad.at:
     Png.ZLen{}, False{}, 0, 0, [], [], pg) == None{} : Maybe<&2, Png.Pic>}
 
 # the proof of walk_bad.at
-def walk_bad.at(l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3, rest, pg, hn, sum, es, h_ne):
+def walk_bad.at(l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3, rest, pg, hn, hs, sum, es, h_ne):
   Equal.trans(Maybe<&2, Png.Pic>,
     Png.png.go(l0 <> l1 <> l2 <> l3 <> t0 <> t1 <> t2 <> t3 <> List.append(&2, U32, data, s0 <> s1 <> s2 <> s3 <> rest),
       Png.ZLen{}, False{}, 0, 0, [], [], pg),
     M2.at_crc(s0, s1, s2, s3, rest, Png.be.u32(t0, t1, t2, t3), List.reverse.go(&2, U32, data, [t3, t2, t1, t0]),
       List.reverse.go(&2, U32, data, []), pg),
     None{},
-    M2.walk_chunk(l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3, rest, pg, hn),
+    M2.walk_chunk(l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3, rest, pg, hn, hs),
     crc_bad(data, t0, t1, t2, t3, s0, s1, s2, s3, rest, pg,
       ee => h_ne(Equal.trans(U32, Png.be.u32(s0, s1, s2, s3), Crc.crc32(t0 <> t1 <> t2 <> t3 <> data), sum, ee, es))))
 
@@ -439,13 +441,44 @@ law walk_bad:
   for h_crc: {Laws.chunk.stored(bad) == Laws.chunk.sum(bad) : U32} -> Empty
   {Png.png.go(Laws.chunk.onto(bad, rest), Png.ZLen{}, False{}, 0, 0, [], [], pg) == None{} : Maybe<&2, Png.Pic>}
 
+# the bad chunk, its length below 2^31 (zs) or not: walked to its CRC and
+# refused there, or refused at its length
+def walk_bad.split(
+  zs: Bool,
+  +l0: U32,
+  +l1: U32,
+  +l2: U32,
+  +l3: U32,
+  +t0: U32,
+  +t1: U32,
+  +t2: U32,
+  +t3: U32,
+  +data: List<&2, U32>,
+  +s0: U32,
+  +s1: U32,
+  +s2: U32,
+  +s3: U32,
+  +rest: List<&2, U32>,
+  +pg: Png.Pg,
+  +hn: {U32.to_nat(Png.be.u32(l0, l1, l2, l3)) == List.length(&2, U32, data) : Nat},
+  +ez: {Png.png.short(Png.be.u32(l0, l1, l2, l3)) == zs : Bool},
+  h_ne: {Png.be.u32(s0, s1, s2, s3) == D1.crc.ref(t0 <> t1 <> t2 <> t3 <> data) : U32} -> Empty
+) -> {Png.png.go(l0 <> l1 <> l2 <> l3 <> t0 <> t1 <> t2 <> t3 <> List.append(&2, U32, data, s0 <> s1 <> s2 <> s3 <>
+  rest), Png.ZLen{}, False{}, 0, 0, [], [], pg) == None{} : Maybe<&2, Png.Pic>}:
+  match zs:
+    case True{}:
+      walk_bad.at(l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3, rest, pg, hn, ez,
+        D1.crc.ref(t0 <> t1 <> t2 <> t3 <> data), M2.crc32_ref(t0 <> t1 <> t2 <> t3 <> data), h_ne)
+    case False{}:
+      M2.walk_long(l0, l1, l2, l3, t0 <> t1 <> t2 <> t3 <> List.append(&2, U32, data, s0 <> s1 <> s2 <> s3 <> rest), pg,
+        ez)
+
 # the proof of walk_bad
 def walk_bad(bad, rest, pg, h_bad, h_crc):
   match bad:
     case Laws.Chunk{+l0, +l1, +l2, +l3, +t0, +t1, +t2, +t3, +data, +s0, +s1, +s2, +s3}:
-      walk_bad.at(l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3, rest, pg, h_bad,
-        Laws.chunk.sum(Laws.Chunk{l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3}),
-        M2.crc32_ref(t0 <> t1 <> t2 <> t3 <> data), h_crc)
+      walk_bad.split(Png.png.short(Png.be.u32(l0, l1, l2, l3)), l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3,
+        rest, pg, h_bad, {==}, h_crc)
 
 # the law's "not IEND" is the decoder's: Bool.not(z) is True exactly when z is False
 def open.typ(zz: Bool, ho: {Bool.not(zz) == True{} : Bool}) -> {zz == False{} : Bool}:
@@ -466,24 +499,57 @@ law walk_pass:
   for ih: @pp: Png.Pg -> {Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], pp) == None{} : Maybe<&2, Png.Pic>}
   {Png.png.go(Laws.chunk.onto(ck, rest), Png.ZLen{}, False{}, 0, 0, [], [], pg) == None{} : Maybe<&2, Png.Pic>}
 
-# the proof of walk_pass
-def walk_pass(ck, rest, pg, h_ck, h_op, ih):
-  match ck:
-    case Laws.Chunk{+l0, +l1, +l2, +l3, +t0, +t1, +t2, +t3, +data, +s0, +s1, +s2, +s3}:
+# a chunk before the bad one, its length below 2^31 (zs) or not: walked to
+# its CRC and judged, or refused at its length
+def walk_pass.split(
+  zs: Bool,
+  +l0: U32,
+  +l1: U32,
+  +l2: U32,
+  +l3: U32,
+  +t0: U32,
+  +t1: U32,
+  +t2: U32,
+  +t3: U32,
+  +data: List<&2, U32>,
+  +s0: U32,
+  +s1: U32,
+  +s2: U32,
+  +s3: U32,
+  +rest: List<&2, U32>,
+  +pg: Png.Pg,
+  +h_ck: {U32.to_nat(Png.be.u32(l0, l1, l2, l3)) == List.length(&2, U32, data) : Nat},
+  +ez: {Png.png.short(Png.be.u32(l0, l1, l2, l3)) == zs : Bool},
+  h_op: {Bool.not(U32.is_eq(Png.be.u32(t0, t1, t2, t3), 1229278788)) == True{} : Bool},
+  ih: @pp: Png.Pg -> {Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], pp) == None{} : Maybe<&2, Png.Pic>}
+) -> {Png.png.go(l0 <> l1 <> l2 <> l3 <> t0 <> t1 <> t2 <> t3 <> List.append(&2, U32, data, s0 <> s1 <> s2 <> s3 <>
+  rest), Png.ZLen{}, False{}, 0, 0, [], [], pg) == None{} : Maybe<&2, Png.Pic>}:
+  match zs:
+    case True{}:
       +nx = {Png.png.judge(Png.be.u32(s0, s1, s2, s3), List.reverse.go(&2, U32, data, [t3, t2, t1, t0]),
         Png.be.u32(t0, t1, t2, t3), List.reverse.go(&2, U32, data, []), pg) : Png.Nx}
       Equal.trans(Maybe<&2, Png.Pic>,
-        Png.png.go(Laws.chunk.onto(Laws.Chunk{l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3}, rest),
-          Png.ZLen{}, False{}, 0, 0, [], [], pg),
+        Png.png.go(l0 <> l1 <> l2 <> l3 <> t0 <> t1 <> t2 <> t3 <> List.append(&2, U32, data, s0 <> s1 <> s2 <> s3 <>
+          rest), Png.ZLen{}, False{}, 0, 0, [], [], pg),
         M2.at_crc(s0, s1, s2, s3, rest, Png.be.u32(t0, t1, t2, t3), List.reverse.go(&2, U32, data, [t3, t2, t1, t0]),
           List.reverse.go(&2, U32, data, []), pg),
         None{},
-        M2.walk_chunk(l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3, rest, pg, h_ck),
+        M2.walk_chunk(l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3, rest, pg, h_ck, ez),
         judge_more(nx, open.judge.at(U32.is_eq(Png.be.u32(s0, s1, s2, s3), Crc.crc32(List.reverse(&2, U32,
           List.reverse.go(&2, U32, data, [t3, t2, t1, t0])))), Png.be.u32(t0, t1, t2, t3),
           open.typ(U32.is_eq(Png.be.u32(t0, t1, t2, t3), Png.tag.iend()), h_op), List.reverse.go(&2, U32, data, []),
           pg),
           rest, ih(Png.png.pgof(nx))))
+    case False{}:
+      M2.walk_long(l0, l1, l2, l3, t0 <> t1 <> t2 <> t3 <> List.append(&2, U32, data, s0 <> s1 <> s2 <> s3 <> rest), pg,
+        ez)
+
+# the proof of walk_pass
+def walk_pass(ck, rest, pg, h_ck, h_op, ih):
+  match ck:
+    case Laws.Chunk{+l0, +l1, +l2, +l3, +t0, +t1, +t2, +t3, +data, +s0, +s1, +s2, +s3}:
+      walk_pass.split(Png.png.short(Png.be.u32(l0, l1, l2, l3)), l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3,
+        rest, pg, h_ck, {==}, h_op, ih)
 
 # every chunk before the bad one: walked to its CRC, and then either refused,
 # ended with bytes still to come, or on to the next chunk
