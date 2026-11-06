@@ -2,8 +2,11 @@
 # as coded when an Adobe APP14 or the component ids say so (libjpeg's rule).
 #
 # Trusted, not proved: decode_jpeg reads the baseline files other encoders
-# (libjpeg, Pillow) write, to within the IDCT accuracy T.83 asks of a decoder
-# (decode.qs says how that was measured).
+# (libjpeg, Pillow) write, to within the IDCT accuracy T.83 asks of a decoder:
+# its IDCT is libjpeg's accurate integer one (jidctint.c, decode.idct1),
+# step for step, so on files libjpeg-turbo writes the gray samples are
+# libjpeg-turbo's own and colour differs only by the YCbCr conversion's
+# rounding (measured with Pillow, a test, not a proof).
 # The laws place each decoded sample (laws/JpegPlacesComponentSamples.bend)
 # but do not prove its value; that needs the other encoder. The Pillow check
 # in bench/ exercises it.
@@ -15,9 +18,12 @@ import Base
 type Pic is Data:
   Pic{w: U32, h: U32, pixels: List<&2, U32>}
 
-# one Huffman table: canonical codes, lengths, and symbols
+# one Huffman table as its code tree (T.81 C): a code's bits, the first highest, lead from the root to the leaf
+# holding its symbol, a 0 bit to a node's zero side and a 1 bit to its one side; a gap is where no code leads
 type Huff is Data:
-  Huff{codes: List<&2, U32>, lens: List<&2, U32>, syms: List<&2, U32>}
+  HGap{}
+  HLeaf{sym: U32}
+  HNode{zero: Huff, one: Huff}
 
 # SOF0 / SOF1 frame geometry. Sampling factors are 1 to 4.
 type Frame is Data:
@@ -52,17 +58,22 @@ type St is Data:
 type Bits is Data:
   Bits{n: U32, ok: U32, buf: U32, xs: List<&2, U32>}
 
-# a Huffman lookup in progress
-type Ask is Data:
-  Ask{hit: Maybe<&2, U32>, code: U32, len: U32, bits: Bits}
-
 # one decoded Huffman symbol
 type Hit is Data:
   Hit{sym: U32, bits: Bits, ok: U32}
 
-# AC run state inside one block
+# eight values: one row of a block
+type R8 is Data:
+  R8{v0: U32, v1: U32, v2: U32, v3: U32, v4: U32, v5: U32, v6: U32, v7: U32}
+
+# an 8 by 8 block of values, row by row
+type B8 is Data:
+  B8{r0: R8, r1: R8, r2: R8, r3: R8, r4: R8, r5: R8, r6: R8, r7: R8}
+
+# AC run state inside one block: the next coefficient's zigzag index k, the dequantised coefficients so far in
+# natural order, and the quantisation table's entries from index k on
 type Ac is Data:
-  Ac{k: U32, zz: List<&2, U32>, bits: Bits, done: U32, ok: U32}
+  Ac{k: U32, zz: B8, qs: List<&2, U32>, bits: Bits, done: U32, ok: U32}
 
 # one decoded 8x8 block, level-shifted samples, and the DC predictor
 type Blk is Data:
@@ -88,11 +99,6 @@ type Geom is Data:
 # so far was read whole with sampling factors the decoder places
 type Comps is Data:
   Comps{ids: List<&2, U32>, hs: List<&2, U32>, vs: List<&2, U32>, tq: List<&2, U32>, ok: Bool}
-
-# the eight cosine columns of the A.3.3 matrix, one list per frequency
-type Cols is Data:
-  Cols{c0: List<&2, U32>, c1: List<&2, U32>, c2: List<&2, U32>, c3: List<&2, U32>, c4: List<&2, U32>,
-    c5: List<&2, U32>, c6: List<&2, U32>, c7: List<&2, U32>}
 
 def decode.sign(+aa: U32) -> U32:
   U32.shrn(aa, 31n)
@@ -163,42 +169,10 @@ def decode.widemul.go(+aa: U32, +bb: U32, +neg: U32) -> U32 & U32:
 def decode.widemul(+aa: U32, +bb: U32) -> U32 & U32:
   decode.widemul.go(decode.abs(aa), decode.abs(bb), U32.and(U32.xor(decode.sign(aa), decode.sign(bb)), 1))
 
-def decode.q17.res(+hh: U32, +ll: U32) -> U32:
-  U32.or(U32.shrn(ll, 17n), U32.shln(U32.and(hh, 131071), 15n))
-
-def decode.q17.sign2(neg: Bool, +res: U32) -> U32:
-  match neg:
-    case False{}:
-      res
-    case True{}:
-      decode.neg32(res)
-
-def decode.q17.div(+hh: U32, +ll: U32, neg: Bool) -> U32:
-  +l2 = (ll + 65536 : U32)
-  +h2 = (hh + decode.carry(ll, l2) : U32)
-  decode.q17.sign2(neg, decode.q17.res(h2, l2))
-
-def decode.q17.neg(pp: U32 & U32) -> U32:
-  (h, l) = pp
-  decode.q17.div(h, l, True{})
-
-def decode.q17.pos(pos: Bool, +hh: U32, +ll: U32) -> U32:
-  match pos:
-    case True{}:
-      decode.q17.div(hh, ll, False{})
-    case False{}:
-      decode.q17.neg(decode.neg64(hh, ll))
-
-def decode.q17(+hh: U32, +ll: U32) -> U32:
-  decode.q17.pos(U32.is_lt(hh, 2147483648), hh, ll)
-
-# a 64-bit dot product (hh, ll), in units of 2^-16, as the pass's result. The row pass halves it and keeps four
-# fraction bits (a shift by 13), so the column pass rounds once, at the end, from what the row pass computed; the
-# column pass takes those four bits off with its half (a shift by 21). Rounding to the nearest, half away from 0.
-# Rounding after each pass instead fails the IDCT accuracy test of IEEE 1180-1990 that ITU-T T.83 (ISO/IEC
-# 10918-2) sets for decoders (overall mean square error 0.2 against at most 0.02, peak error 2 against at most 1);
-# with four fraction bits it passes, peak error 1 and overall mean square error at most 0.0092, measured on a
-# copy of this arithmetic outside the gate (a test, not a proof).
+# the encoder's forward DCT (src/jpeg_enc.bend, encode.q17) rounds with this: a 64-bit dot product (hh, ll), in
+# units of 2^-16, as the pass's result. The row pass (fine) halves it and keeps four fraction bits (a shift by 13), so
+# the column pass rounds once, at the end, from what the row pass computed, taking those four bits off with its half
+# (a shift by 21). Rounding to the nearest, half away from 0.
 def decode.qs.res(fine: Bool, +hh: U32, +ll: U32) -> U32:
   match fine:
     case True{}:
@@ -240,49 +214,6 @@ def decode.qs.pos(pos: Bool, +hh: U32, +ll: U32, +fine: Bool) -> U32:
 def decode.qs(+hh: U32, +ll: U32, +fine: Bool) -> U32:
   decode.qs.pos(U32.is_lt(hh, 2147483648), hh, ll, fine)
 
-def decode.dot.end(+lo: U32, +ah: U32, +ph: U32, +al: U32, +fine: Bool) -> U32:
-  decode.qs((ah + ph + decode.carry(al, lo) : U32), lo, fine)
-
-def decode.dot(
-  cs: List<&2, U32>,
-  ks: List<&2, U32>,
-  have: Bool,
-  prod: U32 & U32,
-  +ah: U32,
-  +al: U32,
-  +fine: Bool
-) -> U32:
-  match cs:
-    case Nil{}:
-      match ks:
-        case _ks:
-          match have:
-            case False{}:
-              (_ph, _pl) = prod
-              decode.qs(ah, al, fine)
-            case True{}:
-              (ph, pl) = prod
-              decode.dot.end((al + pl : U32), ah, ph, al, fine)
-    case c <> ct:
-      match ks:
-        case Nil{}:
-          match have:
-            case False{}:
-              (_ph, _pl) = prod
-              decode.qs(ah, al, fine)
-            case True{}:
-              (ph, pl) = prod
-              decode.dot.end((al + pl : U32), ah, ph, al, fine)
-        case k <> kt:
-          match have:
-            case False{}:
-              (_ph, _pl) = prod
-              decode.dot(ct, kt, True{}, decode.widemul(c, k), ah, al, fine)
-            case True{}:
-              (+ph, +pl) = prod
-              decode.dot(ct, kt, True{}, decode.widemul(c, k),
-                (ah + ph + decode.carry(al, (al + pl : U32)) : U32), (al + pl : U32), fine)
-
 def decode.at.m(mm: Maybe<&2, U32>) -> U32:
   match mm:
     case Some{v}:
@@ -293,26 +224,6 @@ def decode.at.m(mm: Maybe<&2, U32>) -> U32:
 def decode.at(xs: List<&2, U32>, +ii: U32) -> U32:
   decode.at.m(List.get(&2, U32, xs, U32.to_nat(ii)))
 
-def decode.column(+cs: List<&2, U32>, +xx: U32) -> List<&2, U32>:
-  +b = (xx * 8 : U32)
-  [decode.at(cs, b), decode.at(cs, (b + 1 : U32)), decode.at(cs, (b + 2 : U32)),
-    decode.at(cs, (b + 3 : U32)), decode.at(cs, (b + 4 : U32)), decode.at(cs, (b + 5 : U32)),
-    decode.at(cs, (b + 6 : U32)), decode.at(cs, (b + 7 : U32))]
-
-# one copy of each cosine column, reused for every row of the block
-def decode.cols(+cs: List<&2, U32>) -> Cols:
-  Cols{decode.column(cs, 0), decode.column(cs, 1), decode.column(cs, 2), decode.column(cs, 3),
-    decode.column(cs, 4), decode.column(cs, 5), decode.column(cs, 6), decode.column(cs, 7)}
-
-# one 1-D pass over eight values: fine for the row pass, which keeps four fraction bits for the column pass
-def decode.row8(+row: List<&2, U32>, +cols: Cols, +fine: Bool) -> List<&2, U32>:
-  match cols:
-    case Cols{+c0, +c1, +c2, +c3, +c4, +c5, +c6, +c7}:
-      [decode.dot(row, c0, False{}, (0, 0), 0, 0, fine), decode.dot(row, c1, False{}, (0, 0), 0, 0, fine),
-        decode.dot(row, c2, False{}, (0, 0), 0, 0, fine), decode.dot(row, c3, False{}, (0, 0), 0, 0, fine),
-        decode.dot(row, c4, False{}, (0, 0), 0, 0, fine), decode.dot(row, c5, False{}, (0, 0), 0, 0, fine),
-        decode.dot(row, c6, False{}, (0, 0), 0, 0, fine), decode.dot(row, c7, False{}, (0, 0), 0, 0, fine)]
-
 def decode.cos() -> List<&2, U32>:
   [46341, 64277, 60547, 54491, 46341, 36410, 25080, 12785, 46341, 54491, 25080, 4294954511, 4294920955,
     4294903019, 4294906749, 4294930886, 46341, 36410, 4294942216, 4294903019, 4294920955, 12785, 60547, 54491,
@@ -320,54 +231,6 @@ def decode.cos() -> List<&2, U32>:
     36410, 46341, 4294912805, 4294942216, 64277, 46341, 4294930886, 4294942216, 64277, 4294920955, 4294954511,
     60547, 4294912805, 46341, 4294912805, 25080, 12785, 4294920955, 64277, 4294906749, 36410, 46341, 4294903019,
     60547, 4294912805, 46341, 4294930886, 25080, 4294954511]
-
-def decode.pass(
-  left: Nat,
-  coeffs: List<&2, U32>,
-  +cols: Cols,
-  acc: List<&2, List<&2, U32>>
-) -> List<&2, List<&2, U32>>:
-  match left:
-    case 0n:
-      List.reverse(&2, List<&2, U32>, acc)
-    case 1n+p:
-      match coeffs:
-        case a <> b <> c <> d <> e <> f <> g <> h <> rest:
-          decode.pass(p, rest, cols, decode.row8([a, b, c, d, e, f, g, h], cols, True{}) <> acc)
-        case _:
-          List.reverse(&2, List<&2, U32>, acc)
-
-def decode.col(+rows: List<&2, List<&2, U32>>, +xx: U32, acc: List<&2, U32>) -> List<&2, U32>:
-  match rows:
-    case Nil{}:
-      List.reverse(&2, U32, acc)
-    case h <> t:
-      decode.col(t, xx, decode.at(h, xx) <> acc)
-
-def decode.backs(+rows: List<&2, List<&2, U32>>, +cols: Cols) -> List<&2, List<&2, U32>>:
-  [decode.row8(decode.col(rows, 0, []), cols, False{}), decode.row8(decode.col(rows, 1, []), cols, False{}),
-    decode.row8(decode.col(rows, 2, []), cols, False{}), decode.row8(decode.col(rows, 3, []), cols, False{}),
-    decode.row8(decode.col(rows, 4, []), cols, False{}), decode.row8(decode.col(rows, 5, []), cols, False{}),
-    decode.row8(decode.col(rows, 6, []), cols, False{}), decode.row8(decode.col(rows, 7, []), cols, False{})]
-
-def decode.rows.of(+backs: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
-  [decode.col(backs, 0, []), decode.col(backs, 1, []), decode.col(backs, 2, []),
-    decode.col(backs, 3, []), decode.col(backs, 4, []), decode.col(backs, 5, []),
-    decode.col(backs, 6, []), decode.col(backs, 7, [])]
-
-def decode.flat.row(xs: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
-  match xs:
-    case Nil{}:
-      acc
-    case h <> t:
-      h <> decode.flat.row(t, acc)
-
-def decode.flat(rows: List<&2, List<&2, U32>>) -> List<&2, U32>:
-  match rows:
-    case Nil{}:
-      Nil{}
-    case h <> t:
-      decode.flat.row(h, decode.flat(t))
 
 def decode.clamp.hi(hi: Bool, +vv: U32) -> U32:
   match hi:
@@ -386,26 +249,8 @@ def decode.clamp8.s(ss: U32, +vv: U32) -> U32:
 def decode.clamp8(+vv: U32) -> U32:
   decode.clamp8.s(decode.sign(vv), vv)
 
-def decode.level(xs: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
-  match xs:
-    case Nil{}:
-      List.reverse(&2, U32, acc)
-    case h <> t:
-      decode.level(t, decode.clamp8((h + 128 : U32)) <> acc)
-
-def decode.zeros(nn: Nat, acc: List<&2, U32>) -> List<&2, U32>:
-  match nn:
-    case 0n:
-      acc
-    case 1n+p:
-      decode.zeros(p, 0 <> acc)
-
-def decode.idct(nat: List<&2, U32>) -> List<&2, U32>:
-  +cols = decode.cols(decode.cos())
-  decode.level(decode.flat(decode.rows.of(decode.backs(decode.pass(8n, nat, cols, []), cols))), [])
-
 def decode.huff0() -> Huff:
-  Huff{[], [], []}
+  HGap{}
 
 def decode.frame0() -> Frame:
   Frame{0, 0, 0, [], [], [], [], 1, 1}
@@ -434,54 +279,58 @@ def decode.drop(xs: List<&2, U32>) -> U32:
     case _h <> t:
       decode.drop(t)
 
-def decode.rev3(ac: List<&2, U32>, al: List<&2, U32>, ay: List<&2, U32>) -> Huff:
-  Huff{List.reverse(&2, U32, ac), List.reverse(&2, U32, al), List.reverse(&2, U32, ay)}
+# the nodes at a depth of the code tree from the nodes one level down, left to right, two to a node; a last one
+# alone has a gap on its one side
+def decode.ht.pair(ns: List<&2, Huff>) -> List<&2, Huff>:
+  match ns:
+    case Nil{}:
+      []
+    case aa <> rest:
+      match rest:
+        case Nil{}:
+          [HNode{aa, HGap{}}]
+        case bb <> more:
+          HNode{aa, bb} <> decode.ht.pair(more)
 
-def decode.canon.shift(+len: U32, +code: U32) -> U32:
-  match len:
-    case 0:
-      code
-    case _:
-      U32.shl(code)
+# a leaf for each symbol, in order, before the nodes ns
+def decode.ht.leaves(ys: List<&2, U32>, ns: List<&2, Huff>) -> List<&2, Huff>:
+  match ys:
+    case Nil{}:
+      ns
+    case yy <> rest:
+      HLeaf{yy} <> decode.ht.leaves(rest, ns)
 
-def decode.canon(
-  left: Nat,
-  tick: Nat,
-  counts: List<&2, U32>,
-  symbols: List<&2, U32>,
-  +code: U32,
-  +len: U32,
-  ac: List<&2, U32>,
-  al: List<&2, U32>,
-  ay: List<&2, U32>
-) -> Huff:
-  match left:
-    case 0n:
-      match tick:
-        case _t:
-          match counts:
-            case _cs:
-              match symbols:
-                case _ys:
-                  decode.rev3(ac, al, ay)
-    case 1n+p:
-      match tick:
-        case 0n:
-          match counts:
-            case Nil{}:
-              match symbols:
-                case _ys:
-                  decode.rev3(ac, al, ay)
-            case n <> nt:
-              decode.canon(p, U32.to_nat(n), nt, symbols, decode.canon.shift(len, code), (len + 1 : U32), ac, al, ay)
-        case 1n+q:
-          match counts:
-            case cs:
-              match symbols:
-                case Nil{}:
-                  decode.huff0()
-                case s <> st:
-                  decode.canon(p, q, cs, st, (code + 1 : U32), len, code <> ac, len <> al, s <> ay)
+# the symbols of each code length, the counts' first length first, as a list onto acc, the last length first
+def decode.ht.groups(cs: List<&2, U32>, +ys: List<&2, U32>, acc: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
+  match cs:
+    case Nil{}:
+      acc
+    case +cc <> rest:
+      decode.ht.groups(rest, List.drop(&2, U32, ys, U32.to_nat(cc)), List.take(&2, U32, ys, U32.to_nat(cc)) <> acc)
+
+# the nodes at each depth from the deepest up: at a depth, the leaves of the codes of that length, left to right
+# in symbol order, then the nodes the depth below pairs up. Canonical codes (T.81 C) of one length are consecutive
+# and come before every longer code's prefix, so this is the tree of the canonical codes
+def decode.ht.up(gs: List<&2, List<&2, U32>>, ns: List<&2, Huff>) -> List<&2, Huff>:
+  match gs:
+    case Nil{}:
+      ns
+    case gg <> rest:
+      decode.ht.up(rest, decode.ht.leaves(gg, decode.ht.pair(ns)))
+
+# the root of the tree: the one node over depth 1, a gap for no codes
+def decode.ht.root(ns: List<&2, Huff>) -> Huff:
+  match ns:
+    case Nil{}:
+      HGap{}
+    case aa <> rest:
+      +_r = rest
+      aa
+
+# the code tree of a DHT table's 16 counts (codes of length 1 to 16) and its symbols in order (T.81 C, Figure C.1
+# to C.3), built level by level from the counts, with no code arithmetic
+def decode.canon(+counts: List<&2, U32>, +symbols: List<&2, U32>) -> Huff:
+  decode.ht.root(decode.ht.pair(decode.ht.up(decode.ht.groups(counts, symbols, []), [])))
 
 def decode.index.add(eq: Bool, +ii: U32) -> U32:
   match eq:
@@ -507,48 +356,6 @@ def decode.index(xs: List<&2, U32>, eq: Bool, +want: U32, +ii: U32) -> U32:
           ii
         case False{}:
           decode.index(t, U32.is_eq(n, want), want, decode.index.add(U32.is_eq(n, want), ii))
-
-def decode.look.pref(tail: Maybe<&2, U32>, eqc: Bool, eql: Bool, +ss: U32) -> Maybe<&2, U32>:
-  match tail:
-    case Some{v}:
-      Some{v}
-    case None{}:
-      match eqc:
-        case False{}:
-          None{}
-        case True{}:
-          match eql:
-            case True{}:
-              Some{ss}
-            case False{}:
-              None{}
-
-def decode.look(
-  codes: List<&2, U32>,
-  lens: List<&2, U32>,
-  syms: List<&2, U32>,
-  +code: U32,
-  +len: U32
-) -> Maybe<&2, U32>:
-  match codes:
-    case Nil{}:
-      match lens:
-        case _ls:
-          match syms:
-            case _ss:
-              None{}
-    case c <> ct:
-      match lens:
-        case Nil{}:
-          match syms:
-            case _ss:
-              None{}
-        case l <> lt:
-          match syms:
-            case Nil{}:
-              None{}
-            case s <> st:
-              decode.look.pref(decode.look(ct, lt, st, code, len), U32.is_eq(c, code), U32.is_eq(l, len), s)
 
 # whether a list of bytes opens with want. U32.is_eq, not a literal pattern, so a law reaches a
 # symbolic byte.
@@ -621,40 +428,56 @@ def decode.one(bits: Bits) -> Bits & U32:
     case Bits{+n, +ok, +buf, xs}:
       decode.nbits.of(1n, xs, n, buf, ok)
 
-def decode.ask.bit(tab: Huff, got: Bits & U32, +code: U32, +len: U32) -> Ask:
-  match tab:
-    case Huff{+codes, +lens, +syms}:
-      match got:
-        case (bits, +bit):
-          Ask{decode.look(codes, lens, syms, U32.or(U32.shl(code), bit), (len + 1 : U32)), U32.or(U32.shl(code), bit),
-            (len + 1 : U32), bits}
+# a symbol found, the reader after its code
+def decode.huff.hit(+sym: U32, bits: Bits) -> Hit:
+  match bits:
+    case Bits{+n, +ok, +buf, xs}:
+      Hit{sym, Bits{n, ok, buf, xs}, ok}
 
-def decode.ask(bits: Bits, +code: U32, +len: U32, tab: Huff) -> Ask:
-  decode.ask.bit(tab, decode.one(bits), code, len)
+# a Huffman lookup in progress: the subtree of the code tree the bits read so far lead to, and the reader after them
+type Walk is Data:
+  Walk{tab: Huff, bits: Bits}
 
-def decode.huff.use(hit: Maybe<&2, U32>, bits: Bits) -> Hit:
-  match hit:
-    case Some{+s}:
-      match bits:
-        case Bits{+n, +ok, +buf, xs}:
-          Hit{s, Bits{n, ok, buf, xs}, ok}
-    case None{}:
-      Hit{0, bits, 0}
+# the walk after one more bit: the zero side of a node for a 0 bit, else its one side
+def decode.huff.next(got: Bits & U32, zero: Huff, one: Huff) -> Walk:
+  match got:
+    case (bits, +bit):
+      match bit:
+        case 0:
+          +_t = one
+          Walk{zero, bits}
+        case _:
+          +_t = zero
+          Walk{one, bits}
 
-def decode.huff(left: Nat, ask: Ask, +tab: Huff) -> Hit:
+# the symbol a walk ends at: a leaf is its symbol, the reader left after its code; a node reads one more bit and
+# goes on from the side it leads to, at most left more bits; a gap, or a code longer than that, is no symbol, ok 0
+def decode.huff.walk(left: Nat, ww: Walk) -> Hit:
   match left:
     case 0n:
-      match ask:
-        case Ask{hit, _code, _len, bits}:
-          decode.huff.use(hit, bits)
+      match ww:
+        case Walk{tab, bits}:
+          match tab:
+            case HLeaf{+s}:
+              decode.huff.hit(s, bits)
+            case _:
+              +_t = tab
+              Hit{0, bits, 0}
     case 1n+p:
-      match ask:
-        case Ask{hit, +code, +len, bits}:
-          match hit:
-            case Some{+s}:
-              decode.huff.use(Some{s}, bits)
-            case None{}:
-              decode.huff(p, decode.ask(bits, code, len, tab), tab)
+      match ww:
+        case Walk{tab, bits}:
+          match tab:
+            case HLeaf{+s}:
+              decode.huff.hit(s, bits)
+            case HGap{}:
+              Hit{0, bits, 0}
+            case HNode{zero, one}:
+              decode.huff.walk(p, decode.huff.next(decode.one(bits), zero, one))
+
+# the symbol whose code the reader holds next, from a table's code tree (T.81 C), codes of at most left bits (T.81
+# F.2.2.3 decodes codes of at most 16 bits)
+def decode.huff(left: Nat, tab: Huff, bits: Bits) -> Hit:
+  decode.huff.walk(left, Walk{tab, bits})
 
 def decode.bits.of(bits: Bits) -> Nat & U32 & List<&2, U32> & U32 & U32:
   match bits:
@@ -680,77 +503,325 @@ def decode.extend(+cat: U32, +mag: U32) -> U32:
     case _:
       decode.extend.s(U32.is_lt(mag, U32.shln(1, U32.to_nat((cat - 1 : U32)))), mag, cat)
 
-def decode.ac.stored(full: Bool, +kk: U32, zz: List<&2, U32>, bits: Bits, +ok: U32) -> Ac:
+# the natural-order position (row * 8 + column) of zigzag index k (T.81 Figure A.6)
+def decode.zig.at(+kk: U32) -> U32:
+  match kk:
+    case 0:
+      0
+    case 1:
+      1
+    case 2:
+      8
+    case 3:
+      16
+    case 4:
+      9
+    case 5:
+      2
+    case 6:
+      3
+    case 7:
+      10
+    case 8:
+      17
+    case 9:
+      24
+    case 10:
+      32
+    case 11:
+      25
+    case 12:
+      18
+    case 13:
+      11
+    case 14:
+      4
+    case 15:
+      5
+    case 16:
+      12
+    case 17:
+      19
+    case 18:
+      26
+    case 19:
+      33
+    case 20:
+      40
+    case 21:
+      48
+    case 22:
+      41
+    case 23:
+      34
+    case 24:
+      27
+    case 25:
+      20
+    case 26:
+      13
+    case 27:
+      6
+    case 28:
+      7
+    case 29:
+      14
+    case 30:
+      21
+    case 31:
+      28
+    case 32:
+      35
+    case 33:
+      42
+    case 34:
+      49
+    case 35:
+      56
+    case 36:
+      57
+    case 37:
+      50
+    case 38:
+      43
+    case 39:
+      36
+    case 40:
+      29
+    case 41:
+      22
+    case 42:
+      15
+    case 43:
+      23
+    case 44:
+      30
+    case 45:
+      37
+    case 46:
+      44
+    case 47:
+      51
+    case 48:
+      58
+    case 49:
+      59
+    case 50:
+      52
+    case 51:
+      45
+    case 52:
+      38
+    case 53:
+      31
+    case 54:
+      39
+    case 55:
+      46
+    case 56:
+      53
+    case 57:
+      60
+    case 58:
+      61
+    case 59:
+      54
+    case 60:
+      47
+    case 61:
+      55
+    case 62:
+      62
+    case _:
+      63
+
+# a row with column cc set to vv
+def decode.r8.set(rr: R8, +cc: U32, +vv: U32) -> R8:
+  match rr:
+    case R8{+v0, +v1, +v2, +v3, +v4, +v5, +v6, +v7}:
+      match cc:
+        case 0:
+          +_x = v0
+          R8{vv, v1, v2, v3, v4, v5, v6, v7}
+        case 1:
+          +_x = v1
+          R8{v0, vv, v2, v3, v4, v5, v6, v7}
+        case 2:
+          +_x = v2
+          R8{v0, v1, vv, v3, v4, v5, v6, v7}
+        case 3:
+          +_x = v3
+          R8{v0, v1, v2, vv, v4, v5, v6, v7}
+        case 4:
+          +_x = v4
+          R8{v0, v1, v2, v3, vv, v5, v6, v7}
+        case 5:
+          +_x = v5
+          R8{v0, v1, v2, v3, v4, vv, v6, v7}
+        case 6:
+          +_x = v6
+          R8{v0, v1, v2, v3, v4, v5, vv, v7}
+        case _:
+          +_x = v7
+          R8{v0, v1, v2, v3, v4, v5, v6, vv}
+
+# a block with row rw, column cc set to vv
+def decode.b8.set(bb: B8, +rw: U32, +cc: U32, +vv: U32) -> B8:
+  match bb:
+    case B8{r0, r1, r2, r3, r4, r5, r6, r7}:
+      match rw:
+        case 0:
+          B8{decode.r8.set(r0, cc, vv), r1, r2, r3, r4, r5, r6, r7}
+        case 1:
+          B8{r0, decode.r8.set(r1, cc, vv), r2, r3, r4, r5, r6, r7}
+        case 2:
+          B8{r0, r1, decode.r8.set(r2, cc, vv), r3, r4, r5, r6, r7}
+        case 3:
+          B8{r0, r1, r2, decode.r8.set(r3, cc, vv), r4, r5, r6, r7}
+        case 4:
+          B8{r0, r1, r2, r3, decode.r8.set(r4, cc, vv), r5, r6, r7}
+        case 5:
+          B8{r0, r1, r2, r3, r4, decode.r8.set(r5, cc, vv), r6, r7}
+        case 6:
+          B8{r0, r1, r2, r3, r4, r5, decode.r8.set(r6, cc, vv), r7}
+        case _:
+          B8{r0, r1, r2, r3, r4, r5, r6, decode.r8.set(r7, cc, vv)}
+
+# a block with the coefficient of zigzag index k set to vv
+def decode.cf.put(zz: B8, +kk: U32, +vv: U32) -> B8:
+  +zp = decode.zig.at(kk)
+  decode.b8.set(zz, U32.shrn(zp, 3n), U32.and(zp, 7), vv)
+
+# eight zeros
+def decode.r8.zero() -> R8:
+  R8{0, 0, 0, 0, 0, 0, 0, 0}
+
+# a block of zeros
+def decode.b8.zero() -> B8:
+  B8{decode.r8.zero(), decode.r8.zero(), decode.r8.zero(), decode.r8.zero(), decode.r8.zero(), decode.r8.zero(),
+    decode.r8.zero(), decode.r8.zero()}
+
+# the entry of a list after left more (a block's samples, a quantisation table's entries), 0 past its end
+def decode.nth(left: Nat, qs: List<&2, U32>) -> U32:
+  match left:
+    case 0n:
+      match qs:
+        case Nil{}:
+          0
+        case +qq <> _rest:
+          qq
+    case 1n+p:
+      match qs:
+        case Nil{}:
+          0
+        case _q <> rest:
+          decode.nth(p, rest)
+
+# the entries of a list after left more
+def decode.skip(left: Nat, qs: List<&2, U32>) -> List<&2, U32>:
+  match left:
+    case 0n:
+      qs
+    case 1n+p:
+      match qs:
+        case Nil{}:
+          []
+        case _q <> rest:
+          decode.skip(p, rest)
+
+def decode.ac.stored(full: Bool, +kk: U32, zz: B8, qs: List<&2, U32>, bits: Bits, +ok: U32) -> Ac:
   match full:
     case True{}:
-      Ac{kk, zz, bits, 1, ok}
+      Ac{kk, zz, qs, bits, 1, ok}
     case False{}:
-      Ac{kk, zz, bits, 0, ok}
+      Ac{kk, zz, qs, bits, 0, ok}
 
-def decode.ac.store(got: Bits & U32, +sz: U32, +nk: U32, zz: List<&2, U32>, +ok: U32) -> Ac:
-  (bits, mag) = got
+# coefficient nk, run places after the coefficient before it, dequantised by its entry; the entries after it go on
+def decode.ac.store(got: Bits & U32, +sz: U32, +nk: U32, +run: U32, zz: B8, +qs: List<&2, U32>, +ok: U32) -> Ac:
+  (bits, +mag) = got
   +n2 = (nk + 1 : U32)
-  decode.ac.stored(U32.is_eq(n2, 64), n2, List.set(&2, U32, zz, U32.to_nat(nk), decode.extend(sz, mag)), bits, ok)
+  decode.ac.stored(U32.is_eq(n2, 64), n2, decode.cf.put(zz, nk, (decode.extend(sz, mag) * decode.nth(U32.to_nat(run),
+    qs) : U32)), decode.skip(U32.to_nat((run + 1 : U32)), qs), bits, ok)
 
-def decode.ac.bad(zz: List<&2, U32>, bits: Bits) -> Ac:
-  Ac{64, zz, bits, 1, 0}
+def decode.ac.bad(zz: B8, qs: List<&2, U32>, bits: Bits) -> Ac:
+  Ac{64, zz, qs, bits, 1, 0}
 
-def decode.ac.run.b(zzz: Bool, over: Bool, +sz: U32, +nk: U32, bits: Bits, zz: List<&2, U32>, +ok: U32) -> Ac:
+def decode.ac.run.b(
+  zzz: Bool,
+  over: Bool,
+  +sz: U32,
+  +nk: U32,
+  +run: U32,
+  bits: Bits,
+  zz: B8,
+  qs: List<&2, U32>,
+  +ok: U32
+) -> Ac:
   match zzz:
     case True{}:
-      decode.ac.bad(zz, bits)
+      decode.ac.bad(zz, qs, bits)
     case False{}:
       match over:
         case True{}:
-          decode.ac.bad(zz, bits)
+          decode.ac.bad(zz, qs, bits)
         case False{}:
-          decode.ac.store(decode.read.n(sz, bits), sz, nk, zz, ok)
+          decode.ac.store(decode.read.n(sz, bits), sz, nk, run, zz, qs, ok)
 
-def decode.ac.run(+sym: U32, bits: Bits, +kk: U32, zz: List<&2, U32>, +ok: U32) -> Ac:
+def decode.ac.run(+sym: U32, bits: Bits, +kk: U32, zz: B8, qs: List<&2, U32>, +ok: U32) -> Ac:
   +sz = U32.and(15, sym)
-  +nk = (kk + U32.shrn(sym, 4n) : U32)
-  decode.ac.run.b(U32.is_eq(sz, 0), U32.is_ge(nk, 64), sz, nk, bits, zz, ok)
+  +run = U32.shrn(sym, 4n)
+  +nk = (kk + run : U32)
+  decode.ac.run.b(U32.is_eq(sz, 0), U32.is_ge(nk, 64), sz, nk, run, bits, zz, qs, ok)
 
-def decode.ac.zrl.eq(eq: Bool, zz: List<&2, U32>, bits: Bits, +ok: U32) -> Ac:
+def decode.ac.zrl.eq(eq: Bool, zz: B8, qs: List<&2, U32>, bits: Bits, +ok: U32) -> Ac:
   match eq:
     case True{}:
-      Ac{64, zz, bits, 1, ok}
+      Ac{64, zz, qs, bits, 1, ok}
     case False{}:
-      Ac{64, zz, bits, 1, 0}
+      Ac{64, zz, qs, bits, 1, 0}
 
-def decode.ac.zrl.k(more: Bool, +nk: U32, zz: List<&2, U32>, bits: Bits, +ok: U32) -> Ac:
+def decode.ac.zrl.k(more: Bool, +nk: U32, zz: B8, qs: List<&2, U32>, bits: Bits, +ok: U32) -> Ac:
   match more:
     case True{}:
-      Ac{nk, zz, bits, 0, ok}
+      Ac{nk, zz, decode.skip(16n, qs), bits, 0, ok}
     case False{}:
-      decode.ac.zrl.eq(U32.is_eq(nk, 64), zz, bits, ok)
+      decode.ac.zrl.eq(U32.is_eq(nk, 64), zz, qs, bits, ok)
 
-def decode.ac.zrl(+kk: U32, zz: List<&2, U32>, bits: Bits, +ok: U32) -> Ac:
-  decode.ac.zrl.k(U32.is_lt((kk + 16 : U32), 64), (kk + 16 : U32), zz, bits, ok)
+def decode.ac.zrl(+kk: U32, zz: B8, qs: List<&2, U32>, bits: Bits, +ok: U32) -> Ac:
+  decode.ac.zrl.k(U32.is_lt((kk + 16 : U32), 64), (kk + 16 : U32), zz, qs, bits, ok)
 
 # an AC symbol: EOB (0), ZRL (240), or a run and size. U32.is_eq, not literal patterns, so a law reaches a
 # symbolic symbol.
-def decode.ac.sym.b(eob: Bool, zrl: Bool, +sym: U32, bits: Bits, +kk: U32, zz: List<&2, U32>, +ok: U32) -> Ac:
+def decode.ac.sym.b(
+  eob: Bool,
+  zrl: Bool,
+  +sym: U32,
+  bits: Bits,
+  +kk: U32,
+  zz: B8,
+  qs: List<&2, U32>,
+  +ok: U32
+) -> Ac:
   match eob:
     case True{}:
       +_s = sym
       +_z = zrl
-      Ac{kk, zz, bits, 1, ok}
+      Ac{kk, zz, qs, bits, 1, ok}
     case False{}:
       match zrl:
         case True{}:
           +_s = sym
-          decode.ac.zrl(kk, zz, bits, ok)
+          decode.ac.zrl(kk, zz, qs, bits, ok)
         case False{}:
-          decode.ac.run(sym, bits, kk, zz, ok)
+          decode.ac.run(sym, bits, kk, zz, qs, ok)
 
-def decode.ac.sym(+sym: U32, bits: Bits, +kk: U32, zz: List<&2, U32>, +ok: U32) -> Ac:
-  decode.ac.sym.b(U32.is_eq(sym, 0), U32.is_eq(sym, 240), sym, bits, kk, zz, ok)
+def decode.ac.sym(+sym: U32, bits: Bits, +kk: U32, zz: B8, qs: List<&2, U32>, +ok: U32) -> Ac:
+  decode.ac.sym.b(U32.is_eq(sym, 0), U32.is_eq(sym, 240), sym, bits, kk, zz, qs, ok)
 
-def decode.ac.step(hit: Hit, +kk: U32, zz: List<&2, U32>, +ok: U32) -> Ac:
+def decode.ac.step(hit: Hit, +kk: U32, zz: B8, qs: List<&2, U32>, +ok: U32) -> Ac:
   match hit:
     case Hit{+sym, bits, +hok}:
-      decode.ac.sym(sym, bits, kk, zz, (ok * hok : U32))
+      decode.ac.sym(sym, bits, kk, zz, qs, (ok * hok : U32))
 
 def decode.ac.full(done: Bool, short: Bool, ac: Ac) -> Ac:
   match done:
@@ -762,56 +833,117 @@ def decode.ac.full(done: Bool, short: Bool, ac: Ac) -> Ac:
           ac
         case True{}:
           match ac:
-            case Ac{k, zz, bits, _d, _o}:
-              Ac{k, zz, bits, 1, 0}
+            case Ac{k, zz, qs, bits, _d, _o}:
+              Ac{k, zz, qs, bits, 1, 0}
 
 def decode.ac(left: Nat, ac: Ac, +tab: Huff) -> Ac:
   match left:
     case 0n:
       match ac:
-        case Ac{+k, _zz, _bits, +done, _ok}:
+        case Ac{+k, _zz, _qs, _bits, +done, _ok}:
           decode.ac.full(U32.is_eq(done, 1), U32.is_lt(k, 64), ac)
     case 1n+p:
       match ac:
-        case Ac{+k, +zz, bits, +done, +ok}:
+        case Ac{+k, +zz, +qs, bits, +done, +ok}:
           match done:
             case 0:
-              decode.ac(p, decode.ac.step(decode.huff(16n, Ask{None{}, 0, 0, bits}, tab), k, zz, ok), tab)
+              decode.ac(p, decode.ac.step(decode.huff(16n, tab, bits), k, zz, qs, ok), tab)
             case _:
-              match tab:
-                case Huff{_c, _l, _s}:
-                  ac
+              +_t = tab
+              ac
 
 def decode.zig() -> List<&2, U32>:
   [0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7,
     14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59, 52, 45, 38, 31, 39, 46,
     53, 60, 61, 54, 47, 55, 62, 63]
 
-def decode.nat(zz: List<&2, U32>, quant: List<&2, U32>, zig: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
-  match zz:
-    case Nil{}:
-      match quant:
-        case _q:
-          match zig:
-            case _g:
-              acc
-    case z <> zt:
-      match quant:
-        case Nil{}:
-          match zig:
-            case _g:
-              acc
-        case q <> qt:
-          match zig:
-            case Nil{}:
-              acc
-            case g <> gt:
-              decode.nat(zt, qt, gt, List.set(&2, U32, acc, U32.to_nat(g), (z * q : U32)))
+# xx shifted right nn bits, the sign bit copied in (an arithmetic shift)
+def decode.asr.s(ss: U32, +xx: U32, nn: Nat) -> U32:
+  match ss:
+    case 0:
+      U32.shrn(xx, nn)
+    case _:
+      U32.not(U32.shrn(U32.not(xx), nn))
 
-def decode.block.ac(ac: Ac, +pred: U32, quant: List<&2, U32>, +qok: U32) -> Blk:
+def decode.asr(+xx: U32, nn: Nat) -> U32:
+  decode.asr.s(decode.sign(xx), xx, nn)
+
+# one output of a 1-D pass: the row pass (fine) keeps PASS1_BITS = 2 fraction bits, a shift by CONST_BITS -
+# PASS1_BITS = 11; the column pass shifts by CONST_BITS + PASS1_BITS + 3 = 18, levels by 128 and clamps
+def decode.idct.out(fine: Bool, +xx: U32) -> U32:
+  match fine:
+    case True{}:
+      decode.asr((xx + 1024 : U32), 11n)
+    case False{}:
+      decode.clamp8((decode.asr((xx + 131072 : U32), 18n) + 128 : U32))
+
+# one 1-D pass of libjpeg's accurate integer IDCT (jidctint.c, jpeg_idct_islow: the Loeffler, Ligtenberg and
+# Moschytz factorisation, 12 multiplies, CONST_BITS = 13), over eight values
+def decode.idct1(rr: R8, +fine: Bool) -> R8:
+  match rr:
+    case R8{+d0, +d1, +d2, +d3, +d4, +d5, +d6, +d7}:
+      +z1 = ((d2 + d6 : U32) * 4433 : U32)
+      +t2 = (z1 - (d6 * 15137 : U32) : U32)
+      +t3 = (z1 + (d2 * 6270 : U32) : U32)
+      +t0 = U32.shln((d0 + d4 : U32), 13n)
+      +t1 = U32.shln((d0 - d4 : U32), 13n)
+      +e10 = (t0 + t3 : U32)
+      +e13 = (t0 - t3 : U32)
+      +e11 = (t1 + t2 : U32)
+      +e12 = (t1 - t2 : U32)
+      +y1 = ((d7 + d1 : U32) * 7373 : U32)
+      +y2 = ((d5 + d3 : U32) * 20995 : U32)
+      +y5 = ((d7 + d3 + d5 + d1 : U32) * 9633 : U32)
+      +w3 = (y5 - ((d7 + d3 : U32) * 16069 : U32) : U32)
+      +w4 = (y5 - ((d5 + d1 : U32) * 3196 : U32) : U32)
+      +o0 = ((d7 * 2446 : U32) - y1 + w3 : U32)
+      +o1 = ((d5 * 16819 : U32) - y2 + w4 : U32)
+      +o2 = ((d3 * 25172 : U32) - y2 + w3 : U32)
+      +o3 = ((d1 * 12299 : U32) - y1 + w4 : U32)
+      R8{decode.idct.out(fine, (e10 + o3 : U32)), decode.idct.out(fine, (e11 + o2 : U32)),
+        decode.idct.out(fine, (e12 + o1 : U32)), decode.idct.out(fine, (e13 + o0 : U32)),
+        decode.idct.out(fine, (e13 - o0 : U32)), decode.idct.out(fine, (e12 - o1 : U32)),
+        decode.idct.out(fine, (e11 - o2 : U32)), decode.idct.out(fine, (e10 - o3 : U32))}
+
+# a block's rows as its columns
+def decode.b8.t(bb: B8) -> B8:
+  match bb:
+    case B8{R8{a0, a1, a2, a3, a4, a5, a6, a7}, R8{b0, b1, b2, b3, b4, b5, b6, b7}, R8{c0, c1, c2, c3, c4, c5, c6,
+      c7}, R8{d0, d1, d2, d3, d4, d5, d6, d7}, R8{e0, e1, e2, e3, e4, e5, e6, e7}, R8{f0, f1, f2, f3, f4, f5, f6, f7},
+        R8{g0, g1, g2, g3, g4, g5, g6, g7}, R8{h0, h1, h2, h3, h4, h5, h6, h7}}:
+      B8{R8{a0, b0, c0, d0, e0, f0, g0, h0}, R8{a1, b1, c1, d1, e1, f1, g1, h1}, R8{a2, b2, c2, d2, e2, f2, g2, h2},
+        R8{a3, b3, c3, d3, e3, f3, g3, h3}, R8{a4, b4, c4, d4, e4, f4, g4, h4}, R8{a5, b5, c5, d5, e5, f5, g5, h5},
+          R8{a6, b6, c6, d6, e6, f6, g6, h6}, R8{a7, b7, c7, d7, e7, f7, g7, h7}}
+
+# one 1-D pass over each row
+def decode.b8.pass(bb: B8, +fine: Bool) -> B8:
+  match bb:
+    case B8{r0, r1, r2, r3, r4, r5, r6, r7}:
+      B8{decode.idct1(r0, fine), decode.idct1(r1, fine), decode.idct1(r2, fine), decode.idct1(r3, fine),
+        decode.idct1(r4, fine), decode.idct1(r5, fine), decode.idct1(r6, fine), decode.idct1(r7, fine)}
+
+# a row's values onto acc
+def decode.r8.list(rr: R8, acc: List<&2, U32>) -> List<&2, U32>:
+  match rr:
+    case R8{v0, v1, v2, v3, v4, v5, v6, v7}:
+      v0 <> (v1 <> (v2 <> (v3 <> (v4 <> (v5 <> (v6 <> (v7 <> acc)))))))
+
+# a block's values, row by row
+def decode.b8.list(bb: B8) -> List<&2, U32>:
+  match bb:
+    case B8{r0, r1, r2, r3, r4, r5, r6, r7}:
+      decode.r8.list(r0, decode.r8.list(r1, decode.r8.list(r2, decode.r8.list(r3, decode.r8.list(r4,
+        decode.r8.list(r5, decode.r8.list(r6, decode.r8.list(r7, []))))))))
+
+# the 2-D IDCT of dequantised coefficients in natural order: the column pass (libjpeg's pass 1, on the columns)
+# then the row pass, to level-shifted samples clamped to 0 to 255, row by row
+def decode.idct(zz: B8) -> List<&2, U32>:
+  decode.b8.list(decode.b8.pass(decode.b8.t(decode.b8.pass(decode.b8.t(zz), True{})), False{}))
+
+def decode.block.ac(ac: Ac, +pred: U32, +qok: U32) -> Blk:
   match ac:
-    case Ac{_k, +zz, bits, _done, +ok}:
-      Blk{decode.idct(decode.nat(zz, quant, decode.zig(), decode.zeros(64n, []))), bits, pred, (ok * qok : U32)}
+    case Ac{_k, +zz, _qs, bits, _done, +ok}:
+      Blk{decode.idct(zz), bits, pred, (ok * qok : U32)}
 
 def decode.block.diff(
   got: Bits & U32,
@@ -819,12 +951,13 @@ def decode.block.diff(
   +pred: U32,
   +ok: U32,
   ac: Huff,
-  quant: List<&2, U32>,
+  +quant: List<&2, U32>,
   +qok: U32
 ) -> Blk:
   (bits, mag) = got
   +dc = (pred + decode.extend(cat, mag) : U32)
-  decode.block.ac(decode.ac(63n, Ac{1, dc <> decode.zeros(63n, []), bits, 0, ok}, ac), dc, quant, qok)
+  decode.block.ac(decode.ac(63n, Ac{1, decode.cf.put(decode.b8.zero(), 0, (dc * decode.nth(0n, quant) : U32)),
+    decode.skip(1n, quant), bits, 0, ok}, ac), dc, qok)
 
 def decode.block.cat(
   zz: Bool,
@@ -858,7 +991,7 @@ def decode.qok(quant: List<&2, U32>) -> U32:
   decode.qok.b(U32.is_eq(decode.nlist(quant, 0), 64))
 
 def decode.block.go(bits: Bits, +pred: U32, dc: Huff, ac: Huff, +quant: List<&2, U32>) -> Blk:
-  decode.block.dc(decode.huff(16n, Ask{None{}, 0, 0, bits}, dc), pred, ac, quant, decode.qok(quant))
+  decode.block.dc(decode.huff(16n, dc, bits), pred, ac, quant, decode.qok(quant))
 
 def decode.dc.get(tabs: Tabs, +id: U32) -> Huff:
   match tabs:
@@ -1205,12 +1338,12 @@ def decode.splat.py(
       decode.splat.py(p, decode.splat.px(U32.to_nat(pw), plane, x0, (y0 + py : U32), 0, ww, hh, vv), x0, y0,
         (py + 1 : U32), pw, ww, hh, vv)
 
-# samples 8 * row + col onward of one block row, each over the pw by ph pixels at
-# (ox + col * pw, oy + row * ph)
+# the samples xs of one block row from column col on, each over the pw by ph pixels at (ox + col * pw, oy + row * ph):
+# xs's first sample at column col, the next at col + 1, 0 for a sample past the end of xs
 def decode.splat.col(
   left: Nat,
   plane: Array<U32>,
-  +samples: List<&2, U32>,
+  +xs: List<&2, U32>,
   +row: U32,
   +col: U32,
   +ox: U32,
@@ -1225,13 +1358,14 @@ def decode.splat.col(
       plane
     case 1n+p:
       decode.splat.col(p, decode.splat.py(U32.to_nat(ph), plane, (ox + col * pw : U32), (oy + row * ph : U32), 0, pw,
-        ww, hh, decode.at(samples, (row * 8 + col : U32))), samples, row, (col + 1 : U32), ox, oy, pw, ph, ww, hh)
+        ww, hh, decode.nth(0n, xs)), decode.skip(1n, xs), row, (col + 1 : U32), ox, oy, pw, ph, ww, hh)
 
-# the rows of an 8 by 8 block from row down, each sample replicated over pw by ph pixels
+# the rows of an 8 by 8 block from row down, xs its samples from that row's first, each sample replicated over pw by
+# ph pixels; a block's samples are read once, in order
 def decode.splat(
   left: Nat,
   plane: Array<U32>,
-  +samples: List<&2, U32>,
+  +xs: List<&2, U32>,
   +row: U32,
   +ox: U32,
   +oy: U32,
@@ -1242,11 +1376,10 @@ def decode.splat(
 ) -> Array<U32>:
   match left:
     case 0n:
-      +_s = decode.drop(samples)
       plane
     case 1n+p:
-      decode.splat(p, decode.splat.col(8n, plane, samples, row, 0, ox, oy, pw, ph, ww, hh), samples, (row + 1 : U32),
-        ox, oy, pw, ph, ww, hh)
+      decode.splat(p, decode.splat.col(8n, plane, xs, row, 0, ox, oy, pw, ph, ww, hh), decode.skip(8n, xs),
+        (row + 1 : U32), ox, oy, pw, ph, ww, hh)
 
 def decode.paint.which(
   which: Bool,
@@ -1261,7 +1394,7 @@ def decode.paint.which(
 ) -> Array<U32>:
   match which:
     case False{}:
-      +_s = decode.drop(samples)
+      +_s = samples
       plane
     case True{}:
       decode.splat(8n, plane, samples, 0, ox, oy, pw, ph, ww, hh)
@@ -2487,8 +2620,7 @@ def decode.read.dht(
               match phase:
                 case 0n:
                   +_s = decode.drop(syms)
-                  St{Seek{}, frame, scan, decode.huff.put(tabs, cls, id, decode.canon(272n, 0n, counts, [], 0, 0, [],
-                    [], [])), ent, ri, kind, bad}
+                  St{Seek{}, frame, scan, decode.huff.put(tabs, cls, id, decode.canon(counts, [])), ent, ri, kind, bad}
                 case _:
                   +_c = decode.drop(counts)
                   +_s = decode.drop(syms)
@@ -2526,13 +2658,13 @@ def decode.read.dht(
                   +_s = decode.drop(syms)
                   decode.read.dht(rest, Bool.and(U32.is_le(U32.shrn(b, 4n), 1), U32.is_le(U32.and(b, 15), 3)),
                     False{}, 16n, U32.shrn(b, 4n), U32.and(b, 15), [], [], frame, scan, decode.huff.put(tabs, cls, id,
-                    decode.canon(272n, 0n, counts, [], 0, 0, [], [], [])), ent, ri, kind, bad)
+                    decode.canon(counts, [])), ent, ri, kind, bad)
                 case 1n+p:
                   match p:
                     case 0n:
                       decode.read.dht(rest, decode.huff.sym.ok(cls, b), False{}, 0n, 0, 0, [], [], frame, scan,
-                        decode.huff.put(tabs, cls, id, decode.canon(272n, 0n, counts, List.reverse(&2, U32, b <> syms),
-                        0, 0, [], [], [])), ent, ri, kind, bad)
+                        decode.huff.put(tabs, cls, id, decode.canon(counts, List.reverse(&2, U32, b <> syms))), ent,
+                          ri, kind, bad)
                     case _:
                       decode.read.dht(rest, decode.huff.sym.ok(cls, b), True{}, p, cls, id, counts, b <> syms, frame,
                         scan, tabs, ent, ri, kind, bad)

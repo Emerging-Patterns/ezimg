@@ -99,13 +99,13 @@ def dht.inv(
                 case 0n:
                   dht.inv(rest, Bool.and(U32.is_le(U32.shrn(bb, 4n), 1), U32.is_le(U32.and(bb, 15), 3)), False{}, 16n,
                     U32.shrn(bb, 4n), U32.and(bb, 15), [], [], frame, scan, Jpeg.decode.huff.put(tabs, cls, id,
-                    Jpeg.decode.canon(272n, 0n, counts, [], 0, 0, [], [], [])), ent, ri, kind, bad)
+                    Jpeg.decode.canon(counts, [])), ent, ri, kind, bad)
                 case 1n+pp:
                   match pp:
                     case 0n:
                       dht.inv(rest, Jpeg.decode.huff.sym.ok(cls, bb), False{}, 0n, 0, 0, [], [], frame, scan,
-                        Jpeg.decode.huff.put(tabs, cls, id, Jpeg.decode.canon(272n, 0n, counts, List.reverse(&2, U32,
-                        bb <> syms), 0, 0, [], [], [])), ent, ri, kind, bad)
+                        Jpeg.decode.huff.put(tabs, cls, id, Jpeg.decode.canon(counts, List.reverse(&2, U32,
+                          bb <> syms))), ent, ri, kind, bad)
                     case 1n+qq:
                       dht.inv(rest, Jpeg.decode.huff.sym.ok(cls, bb), True{}, 1n+qq, cls, id, counts, bb <> syms, frame,
                         scan, tabs, ent, ri, kind, bad)

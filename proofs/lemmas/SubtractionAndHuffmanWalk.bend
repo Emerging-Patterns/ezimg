@@ -546,31 +546,42 @@ type HW is Data:
   HWHit{sym: U32, used: Nat}
   HWMiss{}
 
-# the table's answer for one more code bit, before the walk over the bits after it
-def hw.pick(look: Maybe<&2, U32>, rest: HW) -> HW:
-  match look:
-    case Some{+ss}:
-      match rest:
-        case _r:
-          HWHit{ss, 1n}
-    case None{}:
-      match rest:
-        case HWHit{+ss, +nn}:
-          HWHit{ss, 1n+nn}
-        case HWMiss{}:
-          HWMiss{}
+# a walk one bit longer: a hit one bit later, a miss still a miss
+def hw.inc(rest: HW) -> HW:
+  match rest:
+    case HWHit{+ss, +nn}:
+      HWHit{ss, 1n+nn}
+    case HWMiss{}:
+      HWMiss{}
 
-# the decoder's Huffman lookup over a list of bits, code and len so far: each bit extends the code, the
-# table asked at each length
-def hw(bs: List<&2, Bool>, +tab: Jpeg.Huff, +code: U32, +len: U32) -> HW:
+# the side of a node of the code tree a bit leads to: zero for a 0 bit, one for a 1 bit
+def hw.side(bb: Bool, zero: Jpeg.Huff, one: Jpeg.Huff) -> Jpeg.Huff:
+  match bb:
+    case False{}:
+      +_o = one
+      zero
+    case True{}:
+      +_z = zero
+      one
+
+# the decoder's Huffman lookup over a list of bits: the code tree walked from tab a bit at a time, a leaf its
+# symbol, a gap or the end of the bits at a node a miss
+def hw(bs: List<&2, Bool>, +tab: Jpeg.Huff) -> HW:
   match bs:
     case Nil{}:
-      HWMiss{}
+      match tab:
+        case Jpeg.HLeaf{+ss}:
+          HWHit{ss, 0n}
+        case _:
+          HWMiss{}
     case +bb <> rest:
       match tab:
-        case Jpeg.Huff{+cs, +ls, +ys}:
-          hw.pick(Jpeg.decode.look(cs, ls, ys, vstep(code, bb), (len + 1 : U32)), hw(rest, Jpeg.Huff{cs, ls, ys},
-            vstep(code, bb), (len + 1 : U32)))
+        case Jpeg.HLeaf{+ss}:
+          HWHit{ss, 0n}
+        case Jpeg.HGap{}:
+          HWMiss{}
+        case Jpeg.HNode{+zero, +one}:
+          hw.inc(hw(rest, hw.side(bb, zero, one)))
 
 # the index after j ZRLs
 def kz(jj: Nat, +kk: U32) -> U32:
