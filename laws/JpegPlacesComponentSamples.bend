@@ -1,10 +1,15 @@
-# For a SOF0 frame of at most 2^31 points whose components' sampling factors
-# are each 1, 2 or 4, `decode_jpeg` places each component's samples in the
-# order T.81 A.2.3 gives and replicates each sample over the pixels its
-# sampling covers; for a factor outside 1, 2 and 4, `decode_jpeg` returns
-# none. The sample values themselves are not proved: decoding them is
-# trusted in src/jpeg.bend. This covers every sampling layout the frame
-# parser accepts.
+# For a SOF0 or SOF1 frame of at most 2^31 points, `decode_jpeg` places each
+# component's samples in the order T.81 A.2 gives and replicates each sample
+# over the pixels its sampling covers. A frame of three components has its
+# components' sampling factors each 1, 2 or 4, read as the SOF says, and its
+# scan interleaved (A.2.3); for a factor outside 1, 2 and 4 `decode_jpeg`
+# returns none. A frame of one component has a non-interleaved scan (A.2.2):
+# one data unit to an MCU, in raster order over the component's blocks, which
+# for one component is the grid of a component sampled 1 by 1, so the frame
+# the decoder keeps samples it 1 by 1, whatever factors 1 to 4 its SOF names;
+# a factor outside 1 to 4 (T.81 B.2.2) makes `decode_jpeg` none. The sample
+# values themselves are not proved: decoding them is trusted in
+# src/jpeg.bend. This covers every sampling layout the frame parser accepts.
 import Base
 import ../main.bend as Img
 import ../src/jpeg.bend as Jpeg
@@ -19,8 +24,16 @@ def jpg.fac(+ff: U32) -> Bool:
 def jpg.facs(+hv: U32) -> Bool:
   Bool.and(jpg.fac(U32.shrn(hv, 4n)), jpg.fac(U32.and(hv, 15)))
 
-# LAW: a SOF0 segment of one component whose sampling factor is outside 1, 2 and 4, met where a
-# segment may start, makes decode_jpeg none, whatever came before and whatever follows
+# a sampling factor T.81 B.2.2 allows: 1 to 4
+def jpg.fac4(+ff: U32) -> Bool:
+  Bool.and(U32.is_gt(ff, 0), U32.is_le(ff, 4))
+
+# both sampling factors of one SOF component are 1 to 4
+def jpg.facs4(+hv: U32) -> Bool:
+  Bool.and(jpg.fac4(U32.shrn(hv, 4n)), jpg.fac4(U32.and(hv, 15)))
+
+# LAW: a SOF0 segment of one component whose sampling factor is outside 1 to 4, met where a segment may
+# start, makes decode_jpeg none, whatever came before and whatever follows
 law jpeg_refuse_factor1:
   for +pre: List<&2, U32>
   for +frame: Jpeg.Frame
@@ -39,7 +52,7 @@ law jpeg_refuse_factor1:
   for +c1: U32
   for +f1: U32
   for +q1: U32
-  for h_fac: {jpg.facs(f1) == False{} : Bool}
+  for h_fac: {jpg.facs4(f1) == False{} : Bool}
   for +rest: List<&2, U32>
   {Img.decode_jpeg(List.append(&2, U32, pre, 255 <> 192 <> 0 <> 11 <> 8 <> yh <> yl <> xh <> xl <> 1 <> c1 <> f1 <>
     q1 <> rest)) == None{} : Maybe<&2, Img.Raster>}
@@ -444,9 +457,9 @@ law jpeg_block_cover_all:
   {Jpeg.decode.paint.use(Jpeg.Geom{ox, oy, pw, ph, ww, hh}, True{}, samples, plane) ==
     jpg.cover(8n, plane, samples, 0, ox, oy, pw, ph, ww, hh) : Array<U32>}
 
-# LAW: a SOF0 segment of one component whose sampling factor is outside 1, 2 and 4 makes decode_jpeg
-# none, whatever came before its marker (fill bytes included), however much longer than the component
-# its length field makes the segment, and whatever follows
+# LAW: a SOF0 segment of one component whose sampling factor is outside 1 to 4 makes decode_jpeg none,
+# whatever came before its marker (fill bytes included), however much longer than the component its
+# length field makes the segment, and whatever follows
 law jpeg_refuse_factor1_any:
   for +pre: List<&2, U32>
   for +frame: Jpeg.Frame
@@ -471,7 +484,7 @@ law jpeg_refuse_factor1_any:
   for h_len: {U32.is_lt(Jpeg.decode.u16(lh, ll), 2) == False{} : Bool}
   for h_body: {U32.to_nat((Jpeg.decode.u16(lh, ll) - 2 : U32)) == List.length(&2, U32, List.append(&2, U32,
     [8, yh, yl, xh, xl, 1, c1, f1, q1], extra)) : Nat}
-  for h_fac: {jpg.facs(f1) == False{} : Bool}
+  for h_fac: {jpg.facs4(f1) == False{} : Bool}
   for +rest: List<&2, U32>
   {Img.decode_jpeg(List.append(&2, U32, pre, lh <> ll <> List.append(&2, U32, List.append(&2, U32,
     [8, yh, yl, xh, xl, 1, c1, f1, q1], extra), rest))) == None{} : Maybe<&2, Img.Raster>}
@@ -516,7 +529,8 @@ law jpeg_refuse_factor3_any:
 
 # LAW: a SOF0 segment whose component count is neither 1 nor 3 makes decode_jpeg none, whatever its
 # components and their sampling factors, whatever came before its marker and whatever follows; with the
-# two laws above, a SOF0 frame with a factor outside 1, 2 and 4 is none for every component count
+# two laws above, a SOF0 frame is none for every component count when a factor is outside what its count
+# allows
 law jpeg_refuse_count:
   for +pre: List<&2, U32>
   for +frame: Jpeg.Frame
@@ -988,9 +1002,11 @@ def jpg.units.run(
 ) -> List<&2, JUnit>:
   jpg.zip(jpg.trace(1n+left, ctrl, frame, scan, ri), jpg.samples.run(left, blk, ctrl, preds, frame, scan, tabs, ri))
 
-# the ok flag decode.blocks ends with: ok times every decoded unit's
+# the ok flag decode.blocks ends with, from blk on, live saying blk decoded: 0 at the first unit that failed (the run
+# stops there, before reading another), else ok times every decoded unit's
 def jpg.run.ok(
   left: Nat,
+  live: Bool,
   blk: Jpeg.Blk,
   +ctrl: Jpeg.Ctrl,
   +preds: Jpeg.Preds,
@@ -1002,18 +1018,25 @@ def jpg.run.ok(
 ) -> U32:
   match left:
     case 0n:
-      match blk:
-        case Jpeg.Blk{_samples, _bits, _pred, +bok}:
-          (ok * bok : U32)
+      match live:
+        case _live:
+          match blk:
+            case Jpeg.Blk{_samples, _bits, _pred, +bok}:
+              (ok * bok : U32)
     case 1n+pp:
-      match blk:
-        case Jpeg.Blk{_samples, +bits, +pred, +bok}:
-          match ctrl:
-            case Jpeg.Ctrl{+comp, _bi, _mx, _my, _mcu, _rst}:
-              jpg.run.ok(pp, Jpeg.decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri),
-                Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ctrl, frame, scan, ri)),
-                Jpeg.decode.preds.next(Jpeg.decode.adv.duef(Jpeg.decode.adv(ctrl, frame, scan, ri)), preds, comp, pred),
-                frame, scan, tabs, ri, (ok * bok : U32))
+      match live:
+        case False{}:
+          +_b = blk
+          0
+        case True{}:
+          match blk:
+            case Jpeg.Blk{_samples, +bits, +pred, +bok}:
+              match ctrl:
+                case Jpeg.Ctrl{+comp, _bi, _mx, _my, _mcu, _rst}:
+                  +nx = Jpeg.decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri)
+                  jpg.run.ok(pp, Jpeg.decode.blk.live(nx), nx, Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ctrl, frame,
+                    scan, ri)), Jpeg.decode.preds.next(Jpeg.decode.adv.duef(Jpeg.decode.adv(ctrl, frame, scan, ri)),
+                    preds, comp, pred), frame, scan, tabs, ri, (ok * bok : U32))
 
 # a plane with the units of scan component comp painted in order, each at decode.geom of its place
 def jpg.paint.all(
@@ -1049,7 +1072,8 @@ def jpg.point(
         jpg.block.at(Jpeg.decode.geom(ctrl, frame, scan), samples, xx, yy, acc), acc))
 
 # LAW: decode.blocks paints the k-th unit it decodes at decode.geom of the k-th place its walk visits (jpg.trace), onto
-# the plane of that place's scan component (0 Y, 1 Cb, 2 Cr), and hands the three planes to decode.done
+# the plane of that place's scan component (0 Y, 1 Cb, 2 Cr), and hands the three planes to decode.done; a unit that
+# failed stops the run, its flag 0 (jpg.run.ok), and decode.done of flag 0 is none whatever the planes
 law jpeg_blocks_paint:
   for +left: Nat
   for +blk: Jpeg.Blk
@@ -1059,13 +1083,14 @@ law jpeg_blocks_paint:
   for +scan: Jpeg.Scan
   for +tabs: Jpeg.Tabs
   for +ri: U32
+  for +rgb: Bool
   for yy: Array<U32>
   for cb: Array<U32>
   for cr: Array<U32>
   for +ok: U32
-  {Jpeg.decode.blocks(left, blk, ctrl, preds, frame, scan, tabs, ri, yy, cb, cr, ok) ==
-    Jpeg.decode.done(jpg.run.ok(left, blk, ctrl, preds, frame, scan, tabs, ri, ok), frame,
-    jpg.paint.all(jpg.units.run(left, blk, ctrl, preds, frame, scan, tabs, ri), 0, frame, scan, yy),
+  {Jpeg.decode.blocks(left, Jpeg.decode.blk.live(blk), blk, ctrl, preds, frame, scan, tabs, ri, rgb, yy, cb, cr, ok) ==
+    Jpeg.decode.done(jpg.run.ok(left, Jpeg.decode.blk.live(blk), blk, ctrl, preds, frame, scan, tabs, ri, ok), frame,
+    rgb, jpg.paint.all(jpg.units.run(left, blk, ctrl, preds, frame, scan, tabs, ri), 0, frame, scan, yy),
     jpg.paint.all(jpg.units.run(left, blk, ctrl, preds, frame, scan, tabs, ri), 1, frame, scan, cb),
     jpg.paint.all(jpg.units.run(left, blk, ctrl, preds, frame, scan, tabs, ri), 2, frame, scan, cr)) :
     Maybe<&2, Jpeg.Pic>}
@@ -1136,9 +1161,10 @@ def jpg.decoded(
     hmax,
     vmax}, scan, tabs, ent, ri)
 
-# a pixel from its Y, Cb and Cr: gray for a frame of one component, else the T.871 colour (trusted in src/jpeg.bend)
-def jpg.colour(+nf: U32, +yv: U32, +bv: U32, +rv: U32) -> U32:
-  Bool.pick(U32, U32.is_eq(nf, 1), Jpeg.gray(yv), Jpeg.rgb(yv, bv, rv))
+# a pixel from its three component values: gray for a frame of one component; else, for a file coded as RGB (rgb),
+# the values as R, G and B (Jpeg.direct); else the T.871 colour of Y, Cb and Cr (trusted in src/jpeg.bend)
+def jpg.colour(+nf: U32, +rgb: Bool, +yv: U32, +bv: U32, +rv: U32) -> U32:
+  Bool.pick(U32, U32.is_eq(nf, 1), Jpeg.gray(yv), Bool.pick(U32, rgb, Jpeg.direct(yv, bv, rv), Jpeg.rgb(yv, bv, rv)))
 
 # sample kk of a decoded raster, if any
 def jpg.px.at(mm: Maybe<&2, Img.Raster>, +kk: Nat) -> Maybe<&2, U32>:
@@ -1156,10 +1182,12 @@ def jpg.px.want(mm: Maybe<&2, Img.Raster>, +vv: U32) -> Maybe<&2, U32>:
     case Some{_rr}:
       Some{vv}
 
-# LAW: for a SOF0 frame of at most 2^31 points (w * h at most 2^d, d at most
-# 31), whatever the bytes before and the scan, when decode_jpeg returns a
-# raster, its pixel (x, y) is the pixel of the component values at (x, y):
-# gray of Y for one component, else rgb of Y, Cb and Cr. Each component's
+# LAW: for a SOF0 or SOF1 frame of at most 2^31 points (w * h at most 2^d,
+# d at most 31), whatever the bytes before and the scan, when decode_jpeg
+# returns a raster, its pixel (x, y) is the pixel of the component values at
+# (x, y): gray of Y for one component; else, for a file coded as RGB
+# (Jpeg.decode.rgb.of the file's markers, as libjpeg-turbo chooses), the
+# values as R, G and B; else rgb of Y, Cb and Cr. Each component's
 # value is jpg.point over the data units the decoder decodes, their samples
 # as src/jpeg.bend decodes them (trusted there): the k-th unit placed at
 # decode.geom of the k-th place of the decoder's walk (jpg.trace;
@@ -1194,7 +1222,8 @@ law jpeg_place:
   for +h_xx: {U32.is_lt(xx, ww) == True{} : Bool}
   for +h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
   {jpg.px.at(Img.decode_jpeg(bytes), U32.to_nat((yy * ww + xx : U32))) == jpg.px.want(Img.decode_jpeg(bytes),
-    jpg.colour(nf, jpg.point(jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32,
+    jpg.colour(nf, Jpeg.decode.rgb.of(Jpeg.decode.facts(bytes), Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}),
+    jpg.point(jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32,
     ent),
     ri), 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), jpg.point(jpg.decoded(ww, hh, nf,
     ids,

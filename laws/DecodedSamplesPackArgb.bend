@@ -1,6 +1,8 @@
 # Every sample `decode_png` and `decode_jpeg` return is packed `0xAARRGGBB`.
-# Every JPEG sample has alpha 255, and a gray JPEG sample carries its Y value
-# in R, G and B.
+# Every JPEG sample has alpha 255, a gray JPEG sample carries its Y value in
+# R, G and B, and a colour JPEG sample is the T.871 colour of its Y, Cb and Cr
+# or, for a file coded as RGB (an Adobe APP14 transform 0, or components 'R',
+# 'G' and 'B' with neither JFIF nor Adobe marker), its R, G and B as coded.
 #
 # also rests on: laws/PngAncillaryChunksIgnored.bend
 import Base
@@ -32,6 +34,13 @@ def chan.g(+pp: U32) -> U32:
 def chan.b(+pp: U32) -> U32:
   U32.and(255, pp)
 
+# LAW: every sample Jpeg.direct packs is opaque, for every R, G and B
+law jpeg_direct_opaque:
+  for +rr: U32
+  for +gg: U32
+  for +bb: U32
+  {U32.shrn(Jpeg.direct(rr, gg, bb), 24n) == 255 : U32}
+
 # LAW: a gray sample carries its level's byte in red, green and blue
 law jpeg_gray_level:
   for +yy: U32
@@ -54,24 +63,40 @@ def jpeg.rgbs(ys: List<&2, U32>, bs: List<&2, U32>, rs: List<&2, U32>) -> List<&
     case _ _ _:
       Nil{}
 
-# gray samples of the levels ys, or colour samples of ys, bs and rs
-def jpeg.pack(gray: Bool, ys: List<&2, U32>, bs: List<&2, U32>, rs: List<&2, U32>) -> List<&2, U32>:
+# every R, G, B triple coded without a colour transform as a sample, as many as the shortest list holds
+def jpeg.directs(rs: List<&2, U32>, gs: List<&2, U32>, bs: List<&2, U32>) -> List<&2, U32>:
+  match rs gs bs:
+    case rv <> rt gv <> gt bv <> bt:
+      Jpeg.direct(rv, gv, bv) <> jpeg.directs(rt, gt, bt)
+    case _ _ _:
+      Nil{}
+
+# gray samples of the levels ys; or, coded as RGB, samples of the R, G and B ys, bs and rs; or colour samples of
+# the Y, Cb and Cr ys, bs and rs
+def jpeg.pack(gray: Bool, coded: Bool, ys: List<&2, U32>, bs: List<&2, U32>, rs: List<&2, U32>) -> List<&2, U32>:
   match gray:
     case True{}:
+      +_c = coded
       jpeg.grays(ys)
     case False{}:
-      jpeg.rgbs(ys, bs, rs)
+      match coded:
+        case True{}:
+          jpeg.directs(ys, bs, rs)
+        case False{}:
+          jpeg.rgbs(ys, bs, rs)
 
-# LAW: decode_jpeg packs every sample it returns with Jpeg.gray, or every one with Jpeg.rgb
+# LAW: decode_jpeg packs every sample it returns with Jpeg.gray, or every one with Jpeg.direct, or every one with
+# Jpeg.rgb
 law jpeg_decode_packed:
   for +bytes: List<&2, U32>
   for +img: Img.Raster
   for h_dec: {Img.decode_jpeg(bytes) == Some{img} : Maybe<&2, Img.Raster>}
   exs gray: Bool
+  exs coded: Bool
   exs ys: List<&2, U32>
   exs bs: List<&2, U32>
   exs rs: List<&2, U32>
-  {Img.pixels(img) == jpeg.pack(gray, ys, bs, rs) : List<&2, U32>}
+  {Img.pixels(img) == jpeg.pack(gray, coded, ys, bs, rs) : List<&2, U32>}
 
 # LAW: every sample decode_jpeg returns has alpha 255
 law jpeg_decode_opaque:

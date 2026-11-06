@@ -31,7 +31,10 @@ A picture is a `Raster`: a width, a height, and row-major samples. Bend's own
 `Image` is the window quadtree, so a file image lives under this name.
 `png_sig` is the eight-byte PNG signature. `parse_signature` returns that
 signature when the bytes open with it, and none otherwise. `decode_png` returns a raster for an 8-bit PNG. `decode_jpeg` returns a
-raster for a baseline sequential JPEG, and none when the bytes are not one.
+raster for a sequential 8-bit Huffman JPEG (SOF0 or SOF1) that opens with SOI, and none when the bytes are not one,
+a block fails to decode, or the frame has more than 2^31 points or more blocks than its entropy-coded bytes can hold.
+Three components are YCbCr unless the file says RGB the way libjpeg reads it (an Adobe APP14 with transform 0 and
+no JFIF APP0, or component ids 'R', 'G', 'B').
 `encode_jpeg` writes a baseline sequential 4:4:4 JPEG of the samples' colour,
 dropping alpha, and returns none exactly when a side is 0 or past 65535 (a JPEG frame's 16 bits), the
 raster has more than 2^31 points, or its sample count is not the area. Every sample is one `U32` packed `0xAARRGGBB`, whichever
@@ -61,6 +64,6 @@ and the audit behind them are in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md
 
 Scope today: PNG decode reads 8-bit colour types 0, 2, 3, 4 and 6 without
 interlace, and refuses anything else; PNG encode writes colour type 2 or 6.
-JPEG decode reads baseline sequential frames and refuses progressive and
-arithmetic ones; JPEG encode writes baseline 4:4:4. Full codec conformance is
+JPEG decode reads one-scan sequential 8-bit Huffman frames (baseline or
+extended) and refuses progressive, lossless, arithmetic and multi-scan ones; JPEG encode writes baseline 4:4:4. Full codec conformance is
 not claimed.
