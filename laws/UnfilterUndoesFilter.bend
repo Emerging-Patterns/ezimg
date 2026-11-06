@@ -1,6 +1,9 @@
-# For every filter type 0 to 4 and every scanlines of a given width and bytes
-# per pixel, `Png.unfilter` applied to the rows filtered by the PNG
-# specification's filter function returns `Some` of the rows.
+# For every scanlines of a given width and bytes per pixel, each row filtered
+# with a filter type of its own (0 to 4, as encoders choose them row by row),
+# `Png.unfilter` applied to the rows filtered by the PNG specification's
+# filter function returns `Some` of the rows. The same holds for
+# `Png.unfilter.rows`, which the other bit depths and the Adam7 passes use,
+# at any row length and 1 to 8 bytes per pixel.
 import Base
 import ../src/png.bend as Png
 
@@ -12,6 +15,10 @@ type Ft is Data:
   FUp{}
   FAvg{}
   FPaeth{}
+
+# a scanline: the filter type it is written with, and its bytes
+type Row is Data:
+  Row{ft: Ft, bytes: List<&2, U32>}
 
 # the byte PNG writes before a row filtered with each type: 0 to 4
 def ft.code(ft: Ft) -> U32:
@@ -134,14 +141,22 @@ def flt.row(
       U32.and(255, (xx - flt.pred(ft, aa, bb, cc) : U32)) <>
         flt.row(rest, ft, bpp, flt.next(prev), {xx <> hist : List<&2, U32>}, {bb <> phist : List<&2, U32>})
 
-# the filtered image data: each row filtered with `ft` against the row
-# before it (none above the first), after its filter type byte
-def flt.rows(rows: List<&2, List<&2, U32>>, +ft: Ft, +bpp: U32, prev: List<&2, U32>) -> List<&2, U32>:
+# the filtered image data: each row filtered with its own type against the
+# row before it (none above the first), after its filter type byte
+def flt.rows(rows: List<&2, Row>, +bpp: U32, prev: List<&2, U32>) -> List<&2, U32>:
   match rows:
     case Nil{}:
       Nil{}
-    case +row <> rest:
-      ft.code(ft) <> List.append(&2, U32, flt.row(row, ft, bpp, prev, [], []), flt.rows(rest, ft, bpp, row))
+    case Row{+ft, +row} <> rest:
+      ft.code(ft) <> List.append(&2, U32, flt.row(row, ft, bpp, prev, [], []), flt.rows(rest, bpp, row))
+
+# the rows' bytes
+def flt.data(rows: List<&2, Row>) -> List<&2, List<&2, U32>>:
+  match rows:
+    case Nil{}:
+      Nil{}
+    case Row{_ft, row} <> rest:
+      row <> flt.data(rest)
 
 # a row of exactly nn bytes, each below 256, with `ok` the answer so far
 def flt.bytes(row: List<&2, U32>, nn: Nat, ok: Bool) -> Bool:
@@ -167,17 +182,33 @@ def flt.fit(rows: List<&2, List<&2, U32>>, +nn: Nat, ok: Bool) -> Bool:
 def flt.dims(+ww: U32, +hh: U32, +bpp: U32) -> Bool:
   Bool.and(U32.is_gt(ww, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4))))
 
-# LAW: unfilter undoes the PNG filter of every type: rows of width times bpp bytes, filtered by the specification's
-# filter function, unfilter to the rows
+# the sizes unfilter.rows reads: a nonzero row length and row count, 1 to 8 bytes per pixel
+def flt.dims.rows(+stride: U32, +hh: U32, +bpp: U32) -> Bool:
+  Bool.and(U32.is_gt(stride, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 8))))
+
+# LAW: unfilter undoes the PNG filters, a type for each row: rows of width times bpp bytes, each filtered with its
+# own type by the specification's filter function, unfilter to the rows
 law unfilter_filter:
-  for +ft: Ft
   for +ww: U32
   for +hh: U32
   for +bpp: U32
-  for +rows: List<&2, List<&2, U32>>
+  for +rows: List<&2, Row>
   for +h_dims: {flt.dims(ww, hh, bpp) == True{} : Bool}
   for +h_wrap: {U32.to_nat((ww * bpp : U32)) == Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)) : Nat}
-  for h_rows: {List.length(&2, List<&2, U32>, rows) == U32.to_nat(hh) : Nat}
-  for h_fit: {flt.fit(rows, Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)), True{}) == True{} : Bool}
-  {Png.unfilter(flt.rows(rows, ft, bpp, []), ww, hh, bpp) == Some{List.concat(&2, U32, rows)}
+  for h_rows: {List.length(&2, Row, rows) == U32.to_nat(hh) : Nat}
+  for h_fit: {flt.fit(flt.data(rows), Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)), True{}) == True{} : Bool}
+  {Png.unfilter(flt.rows(rows, bpp, []), ww, hh, bpp) == Some{List.concat(&2, U32, flt.data(rows))}
+    : Maybe<&2, List<&2, U32>>}
+
+# LAW: unfilter.rows undoes the PNG filters, a type for each row: hh rows of stride bytes, 1 to 8 bytes per pixel,
+# each filtered with its own type by the specification's filter function, unfilter to the rows
+law unfilter_rows_filter:
+  for +stride: U32
+  for +hh: U32
+  for +bpp: U32
+  for +rows: List<&2, Row>
+  for +h_dims: {flt.dims.rows(stride, hh, bpp) == True{} : Bool}
+  for h_rows: {List.length(&2, Row, rows) == U32.to_nat(hh) : Nat}
+  for h_fit: {flt.fit(flt.data(rows), U32.to_nat(stride), True{}) == True{} : Bool}
+  {Png.unfilter.rows(flt.rows(rows, bpp, []), stride, hh, bpp) == Some{List.concat(&2, U32, flt.data(rows))}
     : Maybe<&2, List<&2, U32>>}

@@ -23,9 +23,11 @@ import ./proofs/PngAncillaryChunksIgnored.bend as PPngAncillaryChunksIgnored
 import ./proofs/PngDecodesWellFormed.bend as PPngDecodesWellFormed
 import ./proofs/PngHeaderPicksColourType.bend as PPngHeaderPicksColourType
 import ./proofs/PngIgnoresBytesAfterIend.bend as PPngIgnoresBytesAfterIend
+import ./proofs/PngIgnoresFaultyTrns.bend as PPngIgnoresFaultyTrns
 import ./proofs/PngRefusesBadRasters.bend as PPngRefusesBadRasters
 import ./proofs/PngRefusesUnsupportedHeaders.bend as PPngRefusesUnsupportedHeaders
 import ./proofs/PngRoundTrips.bend as PPngRoundTrips
+import ./proofs/PngSamplesFollowBitDepth.bend as PPngSamplesFollowBitDepth
 import ./proofs/PngSamplesFollowColourType.bend as PPngSamplesFollowColourType
 import ./proofs/SignatureMatchesPngMagic.bend as PSignatureMatchesPngMagic
 import ./proofs/UnfilterUndoesFilter.bend as PUnfilterUndoesFilter

@@ -46,9 +46,11 @@ import ./laws/PngAncillaryChunksIgnored.bend as PngAncillaryChunksIgnored
 import ./laws/PngDecodesWellFormed.bend as PngDecodesWellFormed
 import ./laws/PngHeaderPicksColourType.bend as PngHeaderPicksColourType
 import ./laws/PngIgnoresBytesAfterIend.bend as PngIgnoresBytesAfterIend
+import ./laws/PngIgnoresFaultyTrns.bend as PngIgnoresFaultyTrns
 import ./laws/PngRefusesBadRasters.bend as PngRefusesBadRasters
 import ./laws/PngRefusesUnsupportedHeaders.bend as PngRefusesUnsupportedHeaders
 import ./laws/PngRoundTrips.bend as PngRoundTrips
+import ./laws/PngSamplesFollowBitDepth.bend as PngSamplesFollowBitDepth
 import ./laws/PngSamplesFollowColourType.bend as PngSamplesFollowColourType
 import ./laws/SignatureMatchesPngMagic.bend as SignatureMatchesPngMagic
 import ./laws/UnfilterUndoesFilter.bend as UnfilterUndoesFilter

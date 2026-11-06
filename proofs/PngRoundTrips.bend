@@ -968,25 +968,53 @@ def frow(
           L4.flt.next(prev), xx <> hist, bb <> phist), tl, frow(tl, bpp, L4.flt.next(prev), xx <> hist,
           bb <> phist, ht)))
 
+# rows written with filter None, as encode_png writes them
+def nones(rows: List<&2, List<&2, U32>>) -> List<&2, L4.Row>:
+  match rows:
+    case Nil{}:
+      Nil{}
+    case row <> tl:
+      L4.Row{L4.FNone{}, row} <> nones(tl)
+
+# the bytes of rows written with filter None are the rows
+def nones.data(rows: List<&2, List<&2, U32>>) -> {L4.flt.data(nones(rows)) == rows : List<&2, List<&2, U32>>}:
+  match rows:
+    case Nil{}:
+      {==}
+    case +row <> tl:
+      Equal.cong(List<&2, List<&2, U32>>, List<&2, List<&2, U32>>, ys => row <> ys, L4.flt.data(nones(tl)), tl,
+        nones.data(tl))
+
+# as many rows written with filter None as rows
+def nones.len(
+  rows: List<&2, List<&2, U32>>
+) -> {List.length(&2, L4.Row, nones(rows)) == List.length(&2, List<&2, U32>, rows) : Nat}:
+  match rows:
+    case Nil{}:
+      {==}
+    case _row <> tl:
+      Equal.cong(Nat, Nat, nn => 1n+nn, List.length(&2, L4.Row, nones(tl)), List.length(&2, List<&2, U32>, tl),
+        nones.len(tl))
+
 # filter None over masked rows: the scanlines
 def frows(
   +rows: List<&2, List<&2, U32>>,
   +bpp: U32,
   +prev: List<&2, U32>,
   hm: masked.rows(rows)
-) -> {L4.flt.rows(rows, L4.FNone{}, bpp, prev) == M1.scan(rows) : List<&2, U32>}:
+) -> {L4.flt.rows(nones(rows), bpp, prev) == M1.scan(rows) : List<&2, U32>}:
   match rows:
     case Nil{}:
       {==}
     case +row <> +tl:
       (hr, ht) = hm
       Equal.trans(List<&2, U32>, 0 <> List.append(&2, U32, L4.flt.row(row, L4.FNone{}, bpp, prev, [], []),
-        L4.flt.rows(tl, L4.FNone{}, bpp, row)), 0 <> List.append(&2, U32, row, L4.flt.rows(tl, L4.FNone{}, bpp,
+        L4.flt.rows(nones(tl), bpp, row)), 0 <> List.append(&2, U32, row, L4.flt.rows(nones(tl), bpp,
         row)), 0 <> List.append(&2, U32, row, M1.scan(tl)),
-        Equal.cong(List<&2, U32>, List<&2, U32>, ys => 0 <> List.append(&2, U32, ys, L4.flt.rows(tl, L4.FNone{},
+        Equal.cong(List<&2, U32>, List<&2, U32>, ys => 0 <> List.append(&2, U32, ys, L4.flt.rows(nones(tl),
           bpp, row)), L4.flt.row(row, L4.FNone{}, bpp, prev, [], []), row, frow(row, bpp, prev, [], [], hr)),
-        Equal.cong(List<&2, U32>, List<&2, U32>, ys => 0 <> List.append(&2, U32, row, ys), L4.flt.rows(tl,
-          L4.FNone{}, bpp, row), M1.scan(tl), frows(tl, bpp, row, ht)))
+        Equal.cong(List<&2, U32>, List<&2, U32>, ys => 0 <> List.append(&2, U32, row, ys), L4.flt.rows(nones(tl),
+          bpp, row), M1.scan(tl), frows(tl, bpp, row, ht)))
 
 # a masked byte is below 256
 def byte.lt(+xx: U32, ex: {U32.and(255, xx) == xx : U32}) -> {U32.is_lt(xx, 256) == True{} : Bool}:
@@ -4904,7 +4932,7 @@ def rt.pix(
         rgb.back(px, hao))
     case False{}:
       Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.of(6, chans.all(False{}, px), [], []),
-        L3.spec.rgba(chans.all(False{}, px)), Some{px}, L3.png_px_rgba(chans.all(False{}, px), []),
+        L3.spec.rgba(chans.all(False{}, px)), Some{px}, L3.png_px_rgba(chans.all(False{}, px), [], []),
         rgba.back(px))
 
 # a true sample-count check keeps the raster
@@ -4966,7 +4994,7 @@ def rt.px(
   +bp = Png.png.bpp(ct)
   +rows = rows.of(hh1, ww1, op, px)
   +ss = M1.sc(px, 0n, ww1, op)
-  +fr = L4.flt.rows(rows, L4.FNone{}, bp, [])
+  +fr = L4.flt.rows(nones(rows), bp, [])
   +e_s = {Equal.trans(List<&2, U32>, ss, M1.scan(rows), fr, sc.rows(hh1, wp, op, px, hl), Equal.sym(List<&2, U32>,
     fr, M1.scan(rows), frows(rows, bp, [], masked.rows.of(hh1, ww1, op, px)))) : {ss == fr : List<&2, U32>}}
   +h_ww = gt.pos(ww, wp, e_w)
@@ -4983,8 +5011,19 @@ def rt.px(
     L4.flt.fit(rows, Nat.mul(ww1, Laws.spec.nch(op)), True{}), True{}, Equal.cong(Nat, Bool, kk => L4.flt.fit(rows,
     kk, True{}), Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), Nat.mul(ww1, Laws.spec.nch(op)), e_nb), fit.rows(hh1, ww1,
     op, px, hl)) : {L4.flt.fit(rows, Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), True{}) == True{} : Bool}}
-  +e_un = {L4.unfilter_filter(L4.FNone{}, ww, hh, bp, rows, rt.dims(ww, hh, op, h_ww, h_hh), rt.wrap(ww, op, e_m),
-    h_rows, h_fit) : {Png.unfilter(fr, ww, hh, bp) == Some{List.concat(&2, U32, rows)} : Maybe<&2, List<&2, U32>>}}
+  +nr = nones(rows)
+  +e_nd = {nones.data(rows) : {L4.flt.data(nr) == rows : List<&2, List<&2, U32>>}}
+  +h_nrows = {Equal.trans(Nat, List.length(&2, L4.Row, nr), List.length(&2, List<&2, U32>, rows), U32.to_nat(hh),
+    nones.len(rows), h_rows) : {List.length(&2, L4.Row, nr) == U32.to_nat(hh) : Nat}}
+  +h_nfit = {Equal.trans(Bool, L4.flt.fit(L4.flt.data(nr), Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), True{}),
+    L4.flt.fit(rows, Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), True{}), True{}, Equal.cong(List<&2, List<&2, U32>>,
+    Bool, rr => L4.flt.fit(rr, Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), True{}), L4.flt.data(nr), rows, e_nd), h_fit)
+    : {L4.flt.fit(L4.flt.data(nr), Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), True{}) == True{} : Bool}}
+  +e_un = {Equal.trans(Maybe<&2, List<&2, U32>>, Png.unfilter(fr, ww, hh, bp), Some{List.concat(&2, U32,
+    L4.flt.data(nr))}, Some{List.concat(&2, U32, rows)}, L4.unfilter_filter(ww, hh, bp, nr, rt.dims(ww, hh, op, h_ww,
+    h_hh), rt.wrap(ww, op, e_m), h_nrows, h_nfit), Equal.cong(List<&2, List<&2, U32>>, Maybe<&2, List<&2, U32>>,
+    rr => Some{List.concat(&2, U32, rr)}, L4.flt.data(nr), rows, e_nd)) : {Png.unfilter(fr, ww, hh, bp) ==
+    Some{List.concat(&2, U32, rows)} : Maybe<&2, List<&2, U32>>}}
   +e_cat = {rows.cat(hh1, ww1, op, px, hl) : {List.concat(&2, U32, rows) == chans.all(op, px) : List<&2, U32>}}
   Equal.trans(Maybe<&2, Img.Raster>,
     D1.spec.raster(D1.spec.px.then(Png.unfilter(ss, ww, hh, bp), ct, [], []), ww, hh),

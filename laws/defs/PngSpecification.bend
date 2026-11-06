@@ -82,6 +82,23 @@ def spec.colour.ok(+cc: U32) -> Bool:
   Bool.or(U32.is_eq(cc, 0), Bool.or(U32.is_eq(cc, 2), Bool.or(U32.is_eq(cc, 3), Bool.or(U32.is_eq(cc, 4),
     U32.is_eq(cc, 6)))))
 
+# the colour types and bit depths of PNG table 11.1 (W3C PNG, third
+# edition, section 11.2.1): gray (0) at 1, 2, 4, 8 and 16 bits, RGB (2) at
+# 8 and 16, indexed colour (3) at 1, 2, 4 and 8, gray with alpha (4) at 8
+# and 16, and RGB with alpha (6) at 8 and 16. No other pairing is a PNG
+def spec.depth.ok(+cc: U32, +dd: U32) -> Bool:
+  +grey = Bool.or(U32.is_eq(dd, 1), Bool.or(U32.is_eq(dd, 2), Bool.or(U32.is_eq(dd, 4), Bool.or(U32.is_eq(dd, 8),
+    U32.is_eq(dd, 16)))))
+  +wide = Bool.or(U32.is_eq(dd, 8), U32.is_eq(dd, 16))
+  +index = Bool.or(U32.is_eq(dd, 1), Bool.or(U32.is_eq(dd, 2), Bool.or(U32.is_eq(dd, 4), U32.is_eq(dd, 8))))
+  Bool.or(Bool.and(grey, U32.is_eq(cc, 0)), Bool.or(Bool.and(wide, U32.is_eq(cc, 2)),
+    Bool.or(Bool.and(index, U32.is_eq(cc, 3)), Bool.or(Bool.and(wide, U32.is_eq(cc, 4)),
+      Bool.and(wide, U32.is_eq(cc, 6))))))
+
+# the interlace methods PNG section 8.1 defines: 0, none, and 1, Adam7
+def spec.inter.ok(+ii: U32) -> Bool:
+  Bool.or(U32.is_eq(ii, 0), U32.is_eq(ii, 1))
+
 # the samples of the unfiltered bytes, when the scanlines unfilter
 def spec.px.then(
   mm: Maybe<&2, List<&2, U32>>,
