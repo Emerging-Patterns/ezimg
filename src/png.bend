@@ -114,11 +114,20 @@ def png.depth.ok(+cc: U32, +dd: U32) -> Bool:
 def png.inter.ok(+ii: U32) -> Bool:
   Bool.or(U32.is_zero(ii), U32.is_eq(ii, 1))
 
-# IHDR constraints: nonzero sides, a colour type and bit depth of table 11.1,
-# compression and filter method 0, and interlace method 0 or 1
+# below 2^31: the bound PNG section 7.1 puts on a chunk's length and
+# section 11.2.1 on the width and height (each at most 2^31 - 1)
+def png.short(+nn: U32) -> Bool:
+  U32.is_zero(U32.shrn(nn, 31n))
+
+# a width or height IHDR may give: from 1 to 2^31 - 1
+def png.side(+nn: U32) -> Bool:
+  Bool.and(U32.is_gt(nn, 0), png.short(nn))
+
+# IHDR constraints: sides from 1 to 2^31 - 1, a colour type and bit depth of
+# table 11.1, compression and filter method 0, and interlace method 0 or 1
 def png.good(+ww: U32, +hh: U32, +dd: U32, +cc: U32, +comp: U32, +ff: U32, +ii: U32) -> Bool:
   Bool.and(
-    Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)),
+    Bool.and(png.side(ww), png.side(hh)),
     Bool.and(
       png.depth.ok(cc, dd),
       Bool.and(U32.is_zero(comp), Bool.and(U32.is_zero(ff), png.inter.ok(ii)))
@@ -1618,6 +1627,16 @@ def png.crc(nx: Nx, more: Unit -> Maybe<&2, Pic>) -> Maybe<&2, Pic>:
     case NMore{_pg}:
       more(Unit{})
 
+# after a chunk's length field: the walk over the rest when the length is
+# below 2^31 (PNG section 7.1), none otherwise. The walk is a thunk, forced
+# only when the length is taken
+def png.len.ok(zz: Bool, more: Unit -> Maybe<&2, Pic>) -> Maybe<&2, Pic>:
+  match zz:
+    case True{}:
+      more(Unit{})
+    case False{}:
+      None{}
+
 # one byte of a PNG chunk stream. `zlast` is the last data byte of the chunk.
 def png.go(
   xs: List<&2, U32>,
@@ -1633,7 +1652,8 @@ def png.go(
     case Nil{} _pz _z:
       None{}
     case +a <> +b <> +c <> +d <> rest ZLen{} _z:
-      png.go(rest, ZTyp{}, False{}, be.u32(a, b, c, d), 0, [], [], pg)
+      +n = be.u32(a, b, c, d)
+      png.len.ok(png.short(n), _u => png.go(rest, ZTyp{}, False{}, n, 0, [], [], pg))
     case _xs ZLen{} _z:
       None{}
     case +a <> +b <> +c <> +d <> rest ZTyp{} _z:

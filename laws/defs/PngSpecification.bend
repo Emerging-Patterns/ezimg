@@ -3,6 +3,7 @@
 import Base
 import ../../main.bend as Img
 import ../../src/png.bend as Png
+import ./SizeBounds.bend as D2
 
 # ok, and every sample of px has alpha 255
 def all.opaque(px: List<&2, U32>, ok: Bool) -> Bool:
@@ -175,9 +176,15 @@ def spec.png(
 ) -> List<&2, U32>:
   spec.png.then(ww, hh, cc, plte, trns, idats, [])
 
-# a list's length, counted in a U32, does not wrap: the list is shorter than 2^32
+# a list a chunk's data may be: its length, counted in a U32, does not wrap,
+# and it is below 2^31, the bound PNG section 7.1 puts on a chunk's length
 def spec.fits(xs: List<&2, U32>) -> Type:
-  {U32.to_nat(U32.from_nat(List.length(&2, U32, xs))) == List.length(&2, U32, xs) : Nat}
+  {U32.to_nat(U32.from_nat(List.length(&2, U32, xs))) == List.length(&2, U32, xs) : Nat} &
+    {D2.below(31n, List.length(&2, U32, xs)) == True{} : Bool}
+
+# a width or height IHDR may give: from 1 to 2^31 - 1 (PNG section 11.2.1)
+def spec.side(+nn: U32) -> Bool:
+  Bool.and(U32.is_gt(nn, 0), D2.below(31n, U32.to_nat(nn)))
 
 # a chunk that may be left out fits
 def spec.fits.opt(mm: Maybe<&2, List<&2, U32>>) -> Type:

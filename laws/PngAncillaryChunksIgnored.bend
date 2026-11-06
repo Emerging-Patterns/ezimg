@@ -103,8 +103,8 @@ law png_walk_anc:
   for +a2: List<&2, Anc>
   for +idats: List<&2, List<&2, U32>>
   for +a3: List<&2, Anc>
-  for h_ww: {U32.is_gt(ww, 0) == True{} : Bool}
-  for h_hh: {U32.is_gt(hh, 0) == True{} : Bool}
+  for h_ww: {D1.spec.side(ww) == True{} : Bool}
+  for h_hh: {D1.spec.side(hh) == True{} : Bool}
   for h_cc: {D1.spec.colour.ok(cc) == True{} : Bool}
   for h_pl: {D1.spec.plte.ok(cc, plte) == True{} : Bool}
   for h_tr: {D1.spec.trns.ok(cc, plte, trns) == True{} : Bool}

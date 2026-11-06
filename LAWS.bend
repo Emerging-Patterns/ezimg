@@ -48,6 +48,7 @@ import ./laws/PngHeaderPicksColourType.bend as PngHeaderPicksColourType
 import ./laws/PngIgnoresBytesAfterIend.bend as PngIgnoresBytesAfterIend
 import ./laws/PngIgnoresFaultyTrns.bend as PngIgnoresFaultyTrns
 import ./laws/PngRefusesBadRasters.bend as PngRefusesBadRasters
+import ./laws/PngRefusesLongChunks.bend as PngRefusesLongChunks
 import ./laws/PngRefusesUnsupportedHeaders.bend as PngRefusesUnsupportedHeaders
 import ./laws/PngRoundTrips.bend as PngRoundTrips
 import ./laws/PngSamplesFollowBitDepth.bend as PngSamplesFollowBitDepth

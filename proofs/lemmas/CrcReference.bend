@@ -361,14 +361,40 @@ law walk_chunk:
   for +rest: List<&2, U32>
   for +pg: Png.Pg
   for +hn: {U32.to_nat(Png.be.u32(l0, l1, l2, l3)) == List.length(&2, U32, data) : Nat}
+  for +hs: {Png.png.short(Png.be.u32(l0, l1, l2, l3)) == True{} : Bool}
   {Png.png.go(l0 <> l1 <> l2 <> l3 <> t0 <> t1 <> t2 <> t3 <> List.append(&2, U32, data, s0 <> s1 <> s2 <> s3 <> rest),
     Png.ZLen{}, False{}, 0, 0, [], [], pg) == at_crc(s0, s1, s2, s3, rest, Png.be.u32(t0, t1, t2, t3),
     List.reverse.go(&2, U32, data, [t3, t2, t1, t0]), List.reverse.go(&2, U32, data, []), pg) : Maybe<&2, Png.Pic>}
 
-# the proof of walk_chunk
-def walk_chunk(l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3, rest, pg, hn):
-  walk_data(data, Png.be.u32(l0, l1, l2, l3), hn, s0, s1, s2, s3, rest, Png.be.u32(t0, t1, t2, t3), [t3, t2, t1, t0],
-    [], pg)
+# the proof of walk_chunk: the length is below 2^31, so the walker reads the type
+def walk_chunk(l0, l1, l2, l3, t0, t1, t2, t3, data, s0, s1, s2, s3, rest, pg, hn, hs):
+  +ln = Png.be.u32(l0, l1, l2, l3)
+  +body = {t0 <> t1 <> t2 <> t3 <> List.append(&2, U32, data, s0 <> s1 <> s2 <> s3 <> rest) : List<&2, U32>}
+  Equal.trans(Maybe<&2, Png.Pic>,
+    Png.png.go(l0 <> l1 <> l2 <> l3 <> body, Png.ZLen{}, False{}, 0, 0, [], [], pg),
+    Png.png.go(body, Png.ZTyp{}, False{}, ln, 0, [], [], pg),
+    at_crc(s0, s1, s2, s3, rest, Png.be.u32(t0, t1, t2, t3), List.reverse.go(&2, U32, data, [t3, t2, t1, t0]),
+      List.reverse.go(&2, U32, data, []), pg),
+    Equal.cong(Bool, Maybe<&2, Png.Pic>, zz => Png.png.len.ok(zz, _u => Png.png.go(body, Png.ZTyp{}, False{}, ln, 0, [],
+      [], pg)), Png.png.short(ln), True{}, hs),
+    walk_data(data, ln, hn, s0, s1, s2, s3, rest, Png.be.u32(t0, t1, t2, t3), [t3, t2, t1, t0], [], pg))
+
+# a length field of 2^31 or more: the walker refuses the input there
+law walk_long:
+  for +l0: U32
+  for +l1: U32
+  for +l2: U32
+  for +l3: U32
+  for +rest: List<&2, U32>
+  for +pg: Png.Pg
+  for hs: {Png.png.short(Png.be.u32(l0, l1, l2, l3)) == False{} : Bool}
+  {Png.png.go(l0 <> l1 <> l2 <> l3 <> rest, Png.ZLen{}, False{}, 0, 0, [], [], pg) == None{} : Maybe<&2, Png.Pic>}
+
+# the proof of walk_long
+def walk_long(l0, l1, l2, l3, rest, pg, hs):
+  +ln = Png.be.u32(l0, l1, l2, l3)
+  Equal.cong(Bool, Maybe<&2, Png.Pic>, zz => Png.png.len.ok(zz, _u => Png.png.go(rest, Png.ZTyp{}, False{}, ln, 0, [],
+    [], pg)), Png.png.short(ln), False{}, hs)
 
 # the bytes the walker's CRC covers, read back in order: type, then data
 law crc_bytes:

@@ -25,6 +25,7 @@ import ./proofs/PngHeaderPicksColourType.bend as PPngHeaderPicksColourType
 import ./proofs/PngIgnoresBytesAfterIend.bend as PPngIgnoresBytesAfterIend
 import ./proofs/PngIgnoresFaultyTrns.bend as PPngIgnoresFaultyTrns
 import ./proofs/PngRefusesBadRasters.bend as PPngRefusesBadRasters
+import ./proofs/PngRefusesLongChunks.bend as PPngRefusesLongChunks
 import ./proofs/PngRefusesUnsupportedHeaders.bend as PPngRefusesUnsupportedHeaders
 import ./proofs/PngRoundTrips.bend as PPngRoundTrips
 import ./proofs/PngSamplesFollowBitDepth.bend as PPngSamplesFollowBitDepth
