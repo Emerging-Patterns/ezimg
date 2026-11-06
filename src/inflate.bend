@@ -5,8 +5,9 @@
 # DEFLATE streams other encoders (zlib, libpng) write. Only stored blocks are
 # proved (laws/InflateReadsStoredBlocks.bend); a proof for dynamic Huffman
 # needs a reference compressor. The Pillow check in bench/ exercises it,
-# which is a test. Of inflate.upto's budget, half is proved
-# (laws/InflateUptoKeepsBudget.bend): what it answers, inflate answers.
+# which is a test. Of inflate.upto's budget, what it answers inflate answers
+# (laws/InflateUptoKeepsBudget.bend), and it answers the stored streams
+# ezimg writes (laws/InflateUptoReadsStoredBlocks.bend).
 #
 # The reader takes one bit at a time, eight per input byte. A Huffman code is
 # read the canonical way (RFC 1951 3.2.2, as zlib's puff.c does): per length
@@ -1205,30 +1206,33 @@ def rd.step8(st: St, +bb: U32) -> St:
   s7 = rd.step(s6, (1 .&. (bb >> 6n : U32) : U32))
   rd.step(s7, (1 .&. (bb >> 7n : U32) : U32))
 
-# walk the bytes until the reader finishes or the bytes run out
-def inflate.go(xs: List<&2, U32>, st: St) -> Maybe<&2, List<&2, U32>>:
-  match xs st:
-    case _xs St{PDone{}, _md, _wh, _a, _g, _n, _c, _sk, Cx{_f, _l, _d, out, _w, _wp, _p, _r, _h}}:
-      Some{out}
-    case _xs St{PFail{}, _md, _wh, _a, _g, _n, _c, _sk, _cx}:
-      None{}
-    case Nil{} _st:
-      None{}
-    case Con{+b, t} st2:
-      inflate.go(t, rd.step8(st2, b))
+# the driver and the output budget
+# --------------------------------
 
-# inflate a zlib wrapper around DEFLATE, as PNG compression method 0
-def inflate(xs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  inflate.go(xs, st.empty())
+# past the budget `bud`, if any, with `nn` bytes in the window
+def st.over.lim(bud: Maybe<&2, Nat>, +nn: Nat) -> Bool:
+  match bud:
+    case None{}:
+      False{}
+    case Some{+lim}:
+      Nat.is_lt(lim, nn)
 
-# the output budget
-# -----------------
+# past the budget, `nn` the bytes in the window. The window is tested first:
+# a reader with an empty window is within any budget.
+def st.over.at(nn: Nat, bud: Maybe<&2, Nat>) -> Bool:
+  match nn:
+    case 0n:
+      False{}
+    case 1n+p:
+      st.over.lim(bud, 1n+p)
 
-# the bytes a reader has emitted or a stored header has promised, past `lim`
-def st.over(st: St, +lim: Nat) -> Bool:
+# the bytes a reader has emitted past the budget. Stored bytes count once a
+# Huffman block starts after them, and at the end: a stored block's bytes
+# are read from the input one for one, so they cannot expand.
+def st.over(st: St, bud: Maybe<&2, Nat>) -> Bool:
   match st:
-    case St{_ph, _md, _wh, _a, _g, _n, _c, _sk, Cx{_f, _l, _d, _o, _w, +wpos, +pend, _r, _h}}:
-      Nat.is_lt(lim, Nat.add(U32.to_nat(wpos), U32.to_nat(pend)))
+    case St{_ph, _md, _wh, _a, _g, _n, _c, _sk, Cx{_f, _l, _d, _o, _w, +wpos, _p, _r, _h}}:
+      st.over.at(U32.to_nat(wpos), bud)
 
 # a reader past the budget fails
 def st.cap.at(zz: Bool, st: St) -> St:
@@ -1239,8 +1243,8 @@ def st.cap.at(zz: Bool, st: St) -> St:
       st
 
 # the reader, failed once it is past the budget
-def st.cap(+st: St, +lim: Nat) -> St:
-  st.cap.at(st.over(st, lim), st)
+def st.cap(+st: St, +bud: Maybe<&2, Nat>) -> St:
+  st.cap.at(st.over(st, bud), st)
 
 # the output, when it fits the budget
 def inflate.upto.fin(zz: Bool, out: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
@@ -1250,26 +1254,39 @@ def inflate.upto.fin(zz: Bool, out: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
     case False{}:
       None{}
 
-# inflate.go with a budget: after each byte the reader is capped, and the
-# output is measured once at the end
-def inflate.upto.go(xs: List<&2, U32>, st: St, +lim: Nat) -> Maybe<&2, List<&2, U32>>:
+# a finished reader's answer: its output, measured against the budget if any
+def inflate.out(bud: Maybe<&2, Nat>, +out: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match bud:
+    case None{}:
+      Some{out}
+    case Some{+lim}:
+      inflate.upto.fin(Nat.is_le(List.length(&2, U32, out), lim), out)
+
+# walk the bytes until the reader finishes or the bytes run out, capping the
+# reader after each byte when there is a budget
+def inflate.drive(xs: List<&2, U32>, st: St, +bud: Maybe<&2, Nat>) -> Maybe<&2, List<&2, U32>>:
   match xs st:
     case _xs St{PDone{}, _md, _wh, _a, _g, _n, _c, _sk, Cx{_f, _l, _d, +out, _w, _wp, _p, _r, _h}}:
-      inflate.upto.fin(Nat.is_le(List.length(&2, U32, out), lim), out)
+      inflate.out(bud, out)
     case _xs St{PFail{}, _md, _wh, _a, _g, _n, _c, _sk, _cx}:
       None{}
     case Nil{} _st:
       None{}
     case Con{+b, t} st2:
-      inflate.upto.go(t, st.cap(rd.step8(st2, b), lim), lim)
+      inflate.drive(t, st.cap(rd.step8(st2, b), bud), bud)
+
+# inflate a zlib wrapper around DEFLATE, as PNG compression method 0
+def inflate(xs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  inflate.drive(xs, st.empty(), None{})
 
 # inflate with an output budget of `lim` bytes: the output of inflate when it
 # has at most `lim` bytes, and none otherwise (laws/InflateUptoKeepsBudget.bend
-# proves the first half). It stops at the first input byte after which the
-# bytes emitted, or promised by a stored block's LEN, pass `lim`: a stored
-# block is refused before its bytes are read, and a Huffman block's output
-# passes the budget by at most what one input byte decodes to (eight 258-byte
-# back-references), so a hostile stream cannot expand far beyond it. Nat is
-# native at runtime: the budget may exceed 2^32.
+# proves what it answers inflate answers; laws/InflateUptoReadsStoredBlocks.bend
+# that it answers the stored streams ezimg writes). It stops at the first
+# input byte after which the bytes a Huffman block has emitted pass `lim`:
+# past the budget by at most what one input byte decodes to (eight 258-byte
+# back-references), so a hostile stream cannot expand far beyond it. Stored
+# bytes, which cannot expand, are counted at the next Huffman block and at
+# the end. Nat is native at runtime: the budget may exceed 2^32.
 def inflate.upto(+lim: Nat, xs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  inflate.upto.go(xs, st.empty(), lim)
+  inflate.drive(xs, st.empty(), Some{lim})
