@@ -169,15 +169,13 @@ def correct_png():
 # sample, each against a time budget. Pillow picks a filter per row, so the
 # files hold every filter type, and fixed and dynamic Huffman blocks.
 REAL_SIZES = [(320, 260), (800, 400)]
-# Each save's budget is a floor plus microseconds per sample, about three
-# times what the decoder takes today. zlib level 1's greedy matcher leaves
-# many matches far back, and ezimg's back-reference walk costs its distance
-# per byte (copy.nth in src/inflate.bend), so level 1 has the larger rate:
-# an 800x400 photo-like RGB file at level 1 takes about 125 s today, the same
-# picture at level 6 about 3 s.
-REAL_FLOOR_S = 10.0
-REAL_SAVES = [("zlib 1", {"compress_level": 1}, 1500.0), ("zlib 6", {"compress_level": 6}, 200.0),
-              ("zlib 9", {"compress_level": 9}, 200.0), ("optimize", {"optimize": True}, 200.0)]
+# Each file's budget is a floor plus microseconds per sample, about six
+# times what the slowest of them takes today (an 800x400 RGBA file decodes in
+# under a second), so a decoder that turns quadratic again, as the old
+# distance-walking back-reference copy did, fails here.
+REAL_FLOOR_S = 2.0
+REAL_SAVES = [("zlib 1", {"compress_level": 1}, 10.0), ("zlib 6", {"compress_level": 6}, 10.0),
+              ("zlib 9", {"compress_level": 9}, 10.0), ("optimize", {"optimize": True}, 10.0)]
 
 def real_budget(w, h, rate):
     return REAL_FLOOR_S + rate * w * h / 1e6
