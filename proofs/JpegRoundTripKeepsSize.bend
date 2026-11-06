@@ -144,43 +144,7 @@ def st.pad(pp: Jenc.Put) -> {Laws.jpg.stuffed(Jenc.encode.pad(pp), False{}, True
     case Jenc.Put{out, +buf, +nn}:
       st.all(Jenc.encode.pad.n(U32.is_eq(nn, 0), out, buf, nn), [], {==})
 
-# each of the encoder's three paths ends in a flush
-def st.disp(
-  neu: Bool,
-  sol: Bool,
-  +color: U32,
-  px: List<&2, U32>,
-  +ww: U32,
-  +hh: U32
-) -> {Laws.jpg.stuffed(Jenc.encode.dispatch.b(neu, sol, color, px, ww, hh), False{}, True{}) == True{} : Bool}:
-  match neu:
-    case True{}:
-      st.pad(Jenc.encode.neutral.mcus(U32.to_nat((U32.div((ww + 7 : U32), 8) * U32.div((hh + 7 : U32), 8) : U32)),
-        Jenc.encode.put0()))
-    case False{}:
-      match sol:
-        case True{}:
-          st.pad(Jenc.encode.neutral.mcus(U32.to_nat(((U32.div((ww + 7 : U32), 8) * U32.div((hh + 7 : U32), 8) : U32) -
-            1 : U32)), Jenc.encode.solid.y(Array.set(U32, Jpeg.decode.plane(1), 0, color),
-            Jenc.encode.book(Jenc.encode.dccounts(), Jenc.encode.dcsyms(), Jenc.encode.accounts(),
-            Jenc.encode.acsyms()), Jenc.encode.put0(), Jenc.encode.ctx())))
-        case False{}:
-          st.pad(Jenc.encode.mcus(U32.to_nat((U32.div((ww + 7 : U32), 8) * U32.div((hh + 7 : U32), 8) : U32)),
-            (Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px, Jpeg.decode.plane((ww * hh : U32)), 0),
-            Jenc.encode.book(Jenc.encode.dccounts(), Jenc.encode.dcsyms(), Jenc.encode.accounts(),
-            Jenc.encode.acsyms()), 1024, 1024, 1024, Jenc.encode.put0()), 0, 0, U32.div((ww + 7 : U32), 8), ww,
-            hh,
-            Jenc.encode.ctx()))
 
-# the watch's answer, whatever it is, dispatches to stuffed bytes
-def st.use(
-  got: U32 & U32 & List<&2, U32>,
-  +ww: U32,
-  +hh: U32
-) -> {Laws.jpg.stuffed(Jenc.encode.arm.use(got, ww, hh), False{}, True{}) == True{} : Bool}:
-  match got:
-    case (+tag, +color, px):
-      st.disp(U32.is_eq(tag, 0), U32.is_eq(tag, 1), color, px, ww, hh)
 
 # the phase the entropy walk is in: after a 255, or not
 def ent.ph(ff: Bool) -> Jpeg.Phase:
@@ -2471,102 +2435,119 @@ def hwis(rr: M6.HW, +ss: U32, +nn: Nat, +hh: {hw.is(rr, ss, nn) == True{} : Bool
     case M6.HWMiss{}:
       Empty.absurd({M6.HWMiss{} == M6.HWHit{ss, nn} : M6.HW}, M1.huf.false_true(hh))
 
-# the dc table the decoder builds, in groups of one code length
-def dcgrp() -> List<&2, M1.HG>:
-  [M1.HG{2, [0], [0]}, M1.HG{3, [2, 3, 4, 5, 6], [1, 2, 3, 4, 5]}, M1.HG{4, [14], [6]}, M1.HG{5, [30], [7]},
-    M1.HG{6, [62], [8]}, M1.HG{7, [126], [9]}, M1.HG{8, [254], [10]}, M1.HG{9, [510], [11]}]
-
-# the statement of dctab.eq
-def dctab.eq.ty() -> Type:
-  {Jpeg.decode.canon(272n, 0n, Jenc.encode.dccounts(), Jenc.encode.dcsyms(), 0, 0, [], [],
-    []) == Jpeg.Huff{gc(dcgrp()), M1.gl(dcgrp()), gsy(dcgrp())} : Jpeg.Huff}
-
-# the decoder's table is the groups'
-def dctab.eq() -> dctab.eq.ty():
-  {==}
+# a class's dc table the decoder builds, in groups of one code length: K.3, or K.4 when cls is set
+def dcgrp(+cls: Bool) -> List<&2, M1.HG>:
+  match cls:
+    case False{}:
+      [M1.HG{2, [0], [0]}, M1.HG{3, [2, 3, 4, 5, 6], [1, 2, 3, 4, 5]}, M1.HG{4, [14], [6]}, M1.HG{5, [30], [7]},
+        M1.HG{6, [62], [8]}, M1.HG{7, [126], [9]}, M1.HG{8, [254], [10]}, M1.HG{9, [510], [11]}]
+    case True{}:
+      [M1.HG{2, [0, 1, 2], [0, 1, 2]}, M1.HG{3, [6], [3]}, M1.HG{4, [14], [4]}, M1.HG{5, [30], [5]}, M1.HG{6, [62],
+        [6]}, M1.HG{7, [126], [7]}, M1.HG{8, [254], [8]}, M1.HG{9, [510], [9]}, M1.HG{10, [1022], [10]}, M1.HG{11,
+        [2046], [11]}]
 
 # the dc table in groups, as the decoder holds it
-def dctab() -> Jpeg.Huff:
-  Jpeg.Huff{gc(dcgrp()), M1.gl(dcgrp()), gsy(dcgrp())}
+def dctab(+cls: Bool) -> Jpeg.Huff:
+  Jpeg.Huff{gc(dcgrp(cls)), M1.gl(dcgrp(cls)), gsy(dcgrp(cls))}
+
+# the decoder's table is the groups'
+def dctab.eq(+cls: Bool) -> {Laws.jpg.dctab(cls) == dctab(cls) : Jpeg.Huff}:
+  match cls:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
 
 # every group has as many symbols as codes
-def dcgrp.wf() -> {wfg(dcgrp()) == True{} : Bool}:
-  {==}
+def dcgrp.wf(+cls: Bool) -> {wfg(dcgrp(cls)) == True{} : Bool}:
+  match cls:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
 
 # the check for one symbol: its book code hits it
-def chk.dc(+ss: U32) -> Bool:
-  hwchk(M3.code.dc(ss), dcgrp(), ss)
+def chk.dc(+cls: Bool, +ss: U32) -> Bool:
+  hwchk(Laws.jpg.dcode(cls, ss), dcgrp(cls), ss)
 
 # the check for every symbol of a list
-def all.dc(xs: List<&2, U32>) -> Bool:
+def all.dc(+cls: Bool, xs: List<&2, U32>) -> Bool:
   match xs:
     case Nil{}:
       True{}
     case +xx <> rest:
-      Laws.jpg.also(chk.dc(xx), all.dc(rest))
+      Laws.jpg.also(chk.dc(cls, xx), all.dc(cls, rest))
 
 # every symbol of the table passes
-def all.dc.ok() -> {all.dc(Jenc.encode.dcsyms()) == True{} : Bool}:
-  {==}
+def all.dc.ok(+cls: Bool) -> {all.dc(cls, Jenc.encode.dcsyms()) == True{} : Bool}:
+  match cls:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
 
 # the rest of the list, as the membership step needs it
-def MembIh.dc(+_sy: U32, -rest: List<&2, U32>) -> Type:
+def MembIh.dc(+cls: Bool, +_sy: U32, -rest: List<&2, U32>) -> Type:
   @hr: {Laws.jpg.memb(_sy,
-    rest) == True{} : Bool} -> @ha: {all.dc(rest) == True{} : Bool} -> {chk.dc(_sy) == True{} : Bool}
+    rest) == True{} : Bool} -> @ha: {all.dc(cls, rest) == True{} : Bool} -> {chk.dc(cls, _sy) == True{} : Bool}
 
 # one of the symbols passes, by whether it is the list's first
 def memb.dc.b(
+  +cls: Bool,
   eq: Bool,
   +ss: U32,
   +xx: U32,
   +rest: List<&2, U32>,
   he: {U32.is_eq(ss, xx) == eq : Bool},
   hin: {Laws.jpg.eith(eq, Laws.jpg.memb(ss, rest)) == True{} : Bool},
-  hall: {Laws.jpg.also(chk.dc(xx), all.dc(rest)) == True{} : Bool},
-  ih: MembIh.dc(ss, rest)
-) -> {chk.dc(ss) == True{} : Bool}:
+  hall: {Laws.jpg.also(chk.dc(cls, xx), all.dc(cls, rest)) == True{} : Bool},
+  ih: MembIh.dc(cls, ss, rest)
+) -> {chk.dc(cls, ss) == True{} : Bool}:
   match eq:
     case True{}:
       es = Equal.sym(U32, ss, xx, M1.ueq(ss, xx, he))
-      %es : {chk.dc(_) == True{} : Bool}
-      M1.also_l(chk.dc(xx), all.dc(rest), hall)
+      %es : {chk.dc(cls, _) == True{} : Bool}
+      M1.also_l(chk.dc(cls, xx), all.dc(cls, rest), hall)
     case False{}:
-      ih(hin, M1.also_r(chk.dc(xx), all.dc(rest), hall))
+      ih(hin, M1.also_r(chk.dc(cls, xx), all.dc(cls, rest), hall))
 
 # a symbol of a list whose symbols all pass passes
 def memb.dc(
+  +cls: Bool,
   xs: List<&2, U32>,
   +ss: U32,
   hin: {Laws.jpg.memb(ss, xs) == True{} : Bool},
-  hall: {all.dc(xs) == True{} : Bool}
-) -> {chk.dc(ss) == True{} : Bool}:
+  hall: {all.dc(cls, xs) == True{} : Bool}
+) -> {chk.dc(cls, ss) == True{} : Bool}:
   match xs:
     case Nil{}:
-      Empty.absurd({chk.dc(ss) == True{} : Bool}, M1.huf.false_true(hin))
+      Empty.absurd({chk.dc(cls, ss) == True{} : Bool}, M1.huf.false_true(hin))
     case +xx <> +rest:
-      memb.dc.b(U32.is_eq(ss, xx), ss, xx, rest, {==}, hin, hall, hr => ha => memb.dc(rest, ss, hr, ha))
+      memb.dc.b(cls, U32.is_eq(ss, xx), ss, xx, rest, {==}, hin, hall, hr => ha => memb.dc(cls, rest, ss, hr, ha))
 
 # the decoder's Huffman lookup, over the dc table in groups, from a model reader holding a symbol's book code and
 # more, finds the symbol and leaves the reader after the code
 def huff.dc(
+  +cls: Bool,
   +ss: RS,
   +ok: U32,
   +sy: U32,
   +tl: List<&2, Bool>,
   +hs: {rshort(ss) == True{} : Bool},
   +h8: {roct8(ss) == True{} : Bool},
-  +he: {rem(ss) == List.append(&2, Bool, M3.code.dc(sy), tl) : List<&2, Bool>},
-  +hc: {chk.dc(sy) == True{} : Bool}
-) -> {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, ok)}, Jpeg.Huff{gc(dcgrp()), M1.gl(dcgrp()),
-  gsy(dcgrp())}) == Jpeg.Hit{sy, rbits(radv(List.length(&2, Bool, M3.code.dc(sy)), ss), ok), ok} : Jpeg.Hit}:
-  +cc = M3.code.dc(sy)
+  +he: {rem(ss) == List.append(&2, Bool, Laws.jpg.dcode(cls, sy), tl) : List<&2, Bool>},
+  +hc: {chk.dc(cls, sy) == True{} : Bool}
+) -> {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, ok)}, Jpeg.Huff{gc(dcgrp(cls)), M1.gl(dcgrp(cls)),
+  gsy(dcgrp(cls))}) == Jpeg.Hit{sy, rbits(radv(List.length(&2, Bool, Laws.jpg.dcode(cls, sy)), ss), ok),
+  ok} : Jpeg.Hit}:
+  +cc = Laws.jpg.dcode(cls, sy)
   +nn = List.length(&2, Bool, cc)
-  +gs = dcgrp()
+  +gs = dcgrp(cls)
   +tab = {Jpeg.Huff{gc(gs), M1.gl(gs), gsy(gs)} : Jpeg.Huff}
   +eh = {hwis(hwg(cc, gs, 0, 0), sy, nn, M3.and_r(Nat.is_le(nn, 16n), hw.is(hwg(cc, gs, 0, 0), sy, nn), hc)) :
     {hwg(cc, gs, 0, 0) == M6.HWHit{sy, nn} : M6.HW}}
   +ew = {Equal.trans(M6.HW, M6.hw(cc, tab, 0, 0), hwg(cc, gs, 0, 0), M6.HWHit{sy, nn}, hw_g(cc, gs, 0, 0,
-    dcgrp.wf()), eh) : {M6.hw(cc, tab, 0, 0) == M6.HWHit{sy, nn} : M6.HW}}
+    dcgrp.wf(cls)), eh) : {M6.hw(cc, tab, 0, 0) == M6.HWHit{sy, nn} : M6.HW}}
   +hf = {Equal.trans(Bool, hw.fits(M6.hw(cc, tab, 0, 0), 16n), hw.fits(M6.HWHit{sy, nn}, 16n), True{},
     Equal.cong(M6.HW, Bool, rr => hw.fits(rr, 16n), M6.hw(cc, tab, 0, 0), M6.HWHit{sy, nn}, ew),
     M3.and_l(Nat.is_le(nn, 16n), hw.is(hwg(cc, gs, 0, 0), sy, nn), hc)) :
@@ -2576,118 +2557,150 @@ def huff.dc(
     M1.gl(gs), gsy(gs), tl, hs, h8, he, hf), Equal.cong(M6.HW, Jpeg.Hit, rr => hwres(rr, ss, ok), M6.hw(cc, tab,
     0, 0), M6.HWHit{sy, nn}, ew))
 
-# the ac table the decoder builds, in groups of one code length
-def acgrp() -> List<&2, M1.HG>:
-  [M1.HG{2, [0, 1], [1, 2]}, M1.HG{3, [4], [3]}, M1.HG{4, [10, 11, 12], [0, 4, 17]}, M1.HG{5, [26, 27, 28], [5, 18,
-    33]}, M1.HG{6, [58, 59], [49, 65]}, M1.HG{7, [120, 121, 122, 123], [6, 19, 81, 97]}, M1.HG{8, [248, 249, 250], [7,
-    34, 113]}, M1.HG{9, [502, 503, 504, 505, 506], [20, 50, 129, 145, 161]}, M1.HG{10, [1014, 1015, 1016, 1017, 1018],
-    [8, 35, 66, 177, 193]}, M1.HG{11, [2038, 2039, 2040, 2041], [21, 82, 209, 240]}, M1.HG{12, [4084, 4085, 4086,
-    4087], [36, 51, 98, 114]}, M1.HG{15, [32704], [130]}, M1.HG{16, [65410, 65411, 65412, 65413, 65414, 65415, 65416,
-    65417, 65418, 65419, 65420, 65421, 65422, 65423, 65424, 65425, 65426, 65427, 65428, 65429, 65430, 65431, 65432,
-    65433, 65434, 65435, 65436, 65437, 65438, 65439, 65440, 65441, 65442, 65443, 65444, 65445, 65446, 65447, 65448,
-    65449, 65450, 65451, 65452, 65453, 65454, 65455, 65456, 65457, 65458, 65459, 65460, 65461, 65462, 65463, 65464,
-    65465, 65466, 65467, 65468, 65469, 65470, 65471, 65472, 65473, 65474, 65475, 65476, 65477, 65478, 65479, 65480,
-    65481, 65482, 65483, 65484, 65485, 65486, 65487, 65488, 65489, 65490, 65491, 65492, 65493, 65494, 65495, 65496,
-    65497, 65498, 65499, 65500, 65501, 65502, 65503, 65504, 65505, 65506, 65507, 65508, 65509, 65510, 65511, 65512,
-    65513, 65514, 65515, 65516, 65517, 65518, 65519, 65520, 65521, 65522, 65523, 65524, 65525, 65526, 65527, 65528,
-    65529, 65530, 65531, 65532, 65533, 65534], [9, 10, 22, 23, 24, 25, 26, 37, 38, 39, 40, 41, 42, 52, 53, 54, 55, 56,
-    57, 58, 67, 68, 69, 70, 71, 72, 73, 74, 83, 84, 85, 86, 87, 88, 89, 90, 99, 100, 101, 102, 103, 104, 105, 106,
-    115, 116, 117, 118, 119, 120, 121, 122, 131, 132, 133, 134, 135, 136, 137, 138, 146, 147, 148, 149, 150, 151, 152,
-    153, 154, 162, 163, 164, 165, 166, 167, 168, 169, 170, 178, 179, 180, 181, 182, 183, 184, 185, 186, 194, 195, 196,
-    197, 198, 199, 200, 201, 202, 210, 211, 212, 213, 214, 215, 216, 217, 218, 225, 226, 227, 228, 229, 230, 231, 232,
-    233, 234, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250]}]
-
-# the statement of actab.eq
-def actab.eq.ty() -> Type:
-  {Jpeg.decode.canon(272n, 0n, Jenc.encode.accounts(), Jenc.encode.acsyms(), 0, 0, [], [],
-    []) == Jpeg.Huff{gc(acgrp()), M1.gl(acgrp()), gsy(acgrp())} : Jpeg.Huff}
-
-# the decoder's table is the groups'
-def actab.eq() -> actab.eq.ty():
-  {==}
+# a class's ac table the decoder builds, in groups of one code length: K.5, or K.6 when cls is set
+def acgrp(+cls: Bool) -> List<&2, M1.HG>:
+  match cls:
+    case False{}:
+      [M1.HG{2, [0, 1], [1, 2]}, M1.HG{3, [4], [3]}, M1.HG{4, [10, 11, 12], [0, 4, 17]}, M1.HG{5, [26, 27, 28], [5, 18,
+        33]}, M1.HG{6, [58, 59], [49, 65]}, M1.HG{7, [120, 121, 122, 123], [6, 19, 81, 97]}, M1.HG{8, [248, 249, 250],
+        [7, 34, 113]}, M1.HG{9, [502, 503, 504, 505, 506], [20, 50, 129, 145, 161]}, M1.HG{10, [1014, 1015, 1016, 1017,
+        1018], [8, 35, 66, 177, 193]}, M1.HG{11, [2038, 2039, 2040, 2041], [21, 82, 209, 240]}, M1.HG{12, [4084, 4085,
+        4086, 4087], [36, 51, 98, 114]}, M1.HG{15, [32704], [130]}, M1.HG{16, [65410, 65411, 65412, 65413, 65414, 65415,
+        65416, 65417, 65418, 65419, 65420, 65421, 65422, 65423, 65424, 65425, 65426, 65427, 65428, 65429, 65430, 65431,
+        65432, 65433, 65434, 65435, 65436, 65437, 65438, 65439, 65440, 65441, 65442, 65443, 65444, 65445, 65446, 65447,
+        65448, 65449, 65450, 65451, 65452, 65453, 65454, 65455, 65456, 65457, 65458, 65459, 65460, 65461, 65462, 65463,
+        65464, 65465, 65466, 65467, 65468, 65469, 65470, 65471, 65472, 65473, 65474, 65475, 65476, 65477, 65478, 65479,
+        65480, 65481, 65482, 65483, 65484, 65485, 65486, 65487, 65488, 65489, 65490, 65491, 65492, 65493, 65494, 65495,
+        65496, 65497, 65498, 65499, 65500, 65501, 65502, 65503, 65504, 65505, 65506, 65507, 65508, 65509, 65510, 65511,
+        65512, 65513, 65514, 65515, 65516, 65517, 65518, 65519, 65520, 65521, 65522, 65523, 65524, 65525, 65526, 65527,
+        65528, 65529, 65530, 65531, 65532, 65533, 65534], [9, 10, 22, 23, 24, 25, 26, 37, 38, 39, 40, 41, 42, 52, 53,
+        54, 55, 56, 57, 58, 67, 68, 69, 70, 71, 72, 73, 74, 83, 84, 85, 86, 87, 88, 89, 90, 99, 100, 101, 102, 103, 104,
+        105, 106, 115, 116, 117, 118, 119, 120, 121, 122, 131, 132, 133, 134, 135, 136, 137, 138, 146, 147, 148, 149,
+        150, 151, 152, 153, 154, 162, 163, 164, 165, 166, 167, 168, 169, 170, 178, 179, 180, 181, 182, 183, 184, 185,
+        186, 194, 195, 196, 197, 198, 199, 200, 201, 202, 210, 211, 212, 213, 214, 215, 216, 217, 218, 225, 226, 227,
+        228, 229, 230, 231, 232, 233, 234, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250]}]
+    case True{}:
+      [M1.HG{2, [0, 1], [0, 1]}, M1.HG{3, [4], [2]}, M1.HG{4, [10, 11], [3, 17]}, M1.HG{5, [24, 25, 26, 27], [4, 5, 33,
+        49]}, M1.HG{6, [56, 57, 58, 59], [6, 18, 65, 81]}, M1.HG{7, [120, 121, 122], [7, 97, 113]}, M1.HG{8, [246, 247,
+        248, 249], [19, 34, 50, 129]}, M1.HG{9, [500, 501, 502, 503, 504, 505, 506], [8, 20, 66, 145, 161, 177, 193]},
+        M1.HG{10, [1014, 1015, 1016, 1017, 1018], [9, 35, 51, 82, 240]}, M1.HG{11, [2038, 2039, 2040, 2041], [21, 98,
+        114, 209]}, M1.HG{12, [4084, 4085, 4086, 4087], [10, 22, 36, 52]}, M1.HG{14, [16352], [225]}, M1.HG{15, [32706,
+        32707], [37, 241]}, M1.HG{16, [65416, 65417, 65418, 65419, 65420, 65421, 65422, 65423, 65424, 65425, 65426,
+        65427, 65428, 65429, 65430, 65431, 65432, 65433, 65434, 65435, 65436, 65437, 65438, 65439, 65440, 65441, 65442,
+        65443, 65444, 65445, 65446, 65447, 65448, 65449, 65450, 65451, 65452, 65453, 65454, 65455, 65456, 65457, 65458,
+        65459, 65460, 65461, 65462, 65463, 65464, 65465, 65466, 65467, 65468, 65469, 65470, 65471, 65472, 65473, 65474,
+        65475, 65476, 65477, 65478, 65479, 65480, 65481, 65482, 65483, 65484, 65485, 65486, 65487, 65488, 65489, 65490,
+        65491, 65492, 65493, 65494, 65495, 65496, 65497, 65498, 65499, 65500, 65501, 65502, 65503, 65504, 65505, 65506,
+        65507, 65508, 65509, 65510, 65511, 65512, 65513, 65514, 65515, 65516, 65517, 65518, 65519, 65520, 65521, 65522,
+        65523, 65524, 65525, 65526, 65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534], [23, 24, 25, 26, 38, 39,
+        40, 41, 42, 53, 54, 55, 56, 57, 58, 67, 68, 69, 70, 71, 72, 73, 74, 83, 84, 85, 86, 87, 88, 89, 90, 99, 100,
+        101, 102, 103, 104, 105, 106, 115, 116, 117, 118, 119, 120, 121, 122, 130, 131, 132, 133, 134, 135, 136, 137,
+        138, 146, 147, 148, 149, 150, 151, 152, 153, 154, 162, 163, 164, 165, 166, 167, 168, 169, 170, 178, 179, 180,
+        181, 182, 183, 184, 185, 186, 194, 195, 196, 197, 198, 199, 200, 201, 202, 210, 211, 212, 213, 214, 215, 216,
+        217, 218, 226, 227, 228, 229, 230, 231, 232, 233, 234, 242, 243, 244, 245, 246, 247, 248, 249, 250]}]
 
 # the ac table in groups, as the decoder holds it
-def actab() -> Jpeg.Huff:
-  Jpeg.Huff{gc(acgrp()), M1.gl(acgrp()), gsy(acgrp())}
+def actab(+cls: Bool) -> Jpeg.Huff:
+  Jpeg.Huff{gc(acgrp(cls)), M1.gl(acgrp(cls)), gsy(acgrp(cls))}
+
+# the decoder's table is the groups'
+def actab.eq(+cls: Bool) -> {Laws.jpg.actab(cls) == actab(cls) : Jpeg.Huff}:
+  match cls:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
 
 # every group has as many symbols as codes
-def acgrp.wf() -> {wfg(acgrp()) == True{} : Bool}:
-  {==}
+def acgrp.wf(+cls: Bool) -> {wfg(acgrp(cls)) == True{} : Bool}:
+  match cls:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
 
 # the check for one symbol: its book code hits it
-def chk.ac(+ss: U32) -> Bool:
-  hwchk(M3.code.ac(ss), acgrp(), ss)
+def chk.ac(+cls: Bool, +ss: U32) -> Bool:
+  hwchk(Laws.jpg.acode(cls, ss), acgrp(cls), ss)
 
 # the check for every symbol of a list
-def all.ac(xs: List<&2, U32>) -> Bool:
+def all.ac(+cls: Bool, xs: List<&2, U32>) -> Bool:
   match xs:
     case Nil{}:
       True{}
     case +xx <> rest:
-      Laws.jpg.also(chk.ac(xx), all.ac(rest))
+      Laws.jpg.also(chk.ac(cls, xx), all.ac(cls, rest))
 
 # every symbol of the table passes
-def all.ac.ok() -> {all.ac(Jenc.encode.acsyms()) == True{} : Bool}:
-  {==}
+def all.ac.ok(+cls: Bool) -> {all.ac(cls, Jenc.encode.acsyms()) == True{} : Bool}:
+  match cls:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
 
 # the rest of the list, as the membership step needs it
-def MembIh.ac(+_sy: U32, -rest: List<&2, U32>) -> Type:
+def MembIh.ac(+cls: Bool, +_sy: U32, -rest: List<&2, U32>) -> Type:
   @hr: {Laws.jpg.memb(_sy,
-    rest) == True{} : Bool} -> @ha: {all.ac(rest) == True{} : Bool} -> {chk.ac(_sy) == True{} : Bool}
+    rest) == True{} : Bool} -> @ha: {all.ac(cls, rest) == True{} : Bool} -> {chk.ac(cls, _sy) == True{} : Bool}
 
 # one of the symbols passes, by whether it is the list's first
 def memb.ac.b(
+  +cls: Bool,
   eq: Bool,
   +ss: U32,
   +xx: U32,
   +rest: List<&2, U32>,
   he: {U32.is_eq(ss, xx) == eq : Bool},
   hin: {Laws.jpg.eith(eq, Laws.jpg.memb(ss, rest)) == True{} : Bool},
-  hall: {Laws.jpg.also(chk.ac(xx), all.ac(rest)) == True{} : Bool},
-  ih: MembIh.ac(ss, rest)
-) -> {chk.ac(ss) == True{} : Bool}:
+  hall: {Laws.jpg.also(chk.ac(cls, xx), all.ac(cls, rest)) == True{} : Bool},
+  ih: MembIh.ac(cls, ss, rest)
+) -> {chk.ac(cls, ss) == True{} : Bool}:
   match eq:
     case True{}:
       es = Equal.sym(U32, ss, xx, M1.ueq(ss, xx, he))
-      %es : {chk.ac(_) == True{} : Bool}
-      M1.also_l(chk.ac(xx), all.ac(rest), hall)
+      %es : {chk.ac(cls, _) == True{} : Bool}
+      M1.also_l(chk.ac(cls, xx), all.ac(cls, rest), hall)
     case False{}:
-      ih(hin, M1.also_r(chk.ac(xx), all.ac(rest), hall))
+      ih(hin, M1.also_r(chk.ac(cls, xx), all.ac(cls, rest), hall))
 
 # a symbol of a list whose symbols all pass passes
 def memb.ac(
+  +cls: Bool,
   xs: List<&2, U32>,
   +ss: U32,
   hin: {Laws.jpg.memb(ss, xs) == True{} : Bool},
-  hall: {all.ac(xs) == True{} : Bool}
-) -> {chk.ac(ss) == True{} : Bool}:
+  hall: {all.ac(cls, xs) == True{} : Bool}
+) -> {chk.ac(cls, ss) == True{} : Bool}:
   match xs:
     case Nil{}:
-      Empty.absurd({chk.ac(ss) == True{} : Bool}, M1.huf.false_true(hin))
+      Empty.absurd({chk.ac(cls, ss) == True{} : Bool}, M1.huf.false_true(hin))
     case +xx <> +rest:
-      memb.ac.b(U32.is_eq(ss, xx), ss, xx, rest, {==}, hin, hall, hr => ha => memb.ac(rest, ss, hr, ha))
+      memb.ac.b(cls, U32.is_eq(ss, xx), ss, xx, rest, {==}, hin, hall, hr => ha => memb.ac(cls, rest, ss, hr, ha))
 
 # the decoder's Huffman lookup, over the ac table in groups, from a model reader holding a symbol's book code and
 # more, finds the symbol and leaves the reader after the code
 def huff.ac(
+  +cls: Bool,
   +ss: RS,
   +ok: U32,
   +sy: U32,
   +tl: List<&2, Bool>,
   +hs: {rshort(ss) == True{} : Bool},
   +h8: {roct8(ss) == True{} : Bool},
-  +he: {rem(ss) == List.append(&2, Bool, M3.code.ac(sy), tl) : List<&2, Bool>},
-  +hc: {chk.ac(sy) == True{} : Bool}
-) -> {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, ok)}, Jpeg.Huff{gc(acgrp()), M1.gl(acgrp()),
-  gsy(acgrp())}) == Jpeg.Hit{sy, rbits(radv(List.length(&2, Bool, M3.code.ac(sy)), ss), ok), ok} : Jpeg.Hit}:
-  +cc = M3.code.ac(sy)
+  +he: {rem(ss) == List.append(&2, Bool, Laws.jpg.acode(cls, sy), tl) : List<&2, Bool>},
+  +hc: {chk.ac(cls, sy) == True{} : Bool}
+) -> {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, ok)}, Jpeg.Huff{gc(acgrp(cls)), M1.gl(acgrp(cls)),
+  gsy(acgrp(cls))}) == Jpeg.Hit{sy, rbits(radv(List.length(&2, Bool, Laws.jpg.acode(cls, sy)), ss), ok),
+  ok} : Jpeg.Hit}:
+  +cc = Laws.jpg.acode(cls, sy)
   +nn = List.length(&2, Bool, cc)
-  +gs = acgrp()
+  +gs = acgrp(cls)
   +tab = {Jpeg.Huff{gc(gs), M1.gl(gs), gsy(gs)} : Jpeg.Huff}
   +eh = {hwis(hwg(cc, gs, 0, 0), sy, nn, M3.and_r(Nat.is_le(nn, 16n), hw.is(hwg(cc, gs, 0, 0), sy, nn), hc)) :
     {hwg(cc, gs, 0, 0) == M6.HWHit{sy, nn} : M6.HW}}
   +ew = {Equal.trans(M6.HW, M6.hw(cc, tab, 0, 0), hwg(cc, gs, 0, 0), M6.HWHit{sy, nn}, hw_g(cc, gs, 0, 0,
-    acgrp.wf()), eh) : {M6.hw(cc, tab, 0, 0) == M6.HWHit{sy, nn} : M6.HW}}
+    acgrp.wf(cls)), eh) : {M6.hw(cc, tab, 0, 0) == M6.HWHit{sy, nn} : M6.HW}}
   +hf = {Equal.trans(Bool, hw.fits(M6.hw(cc, tab, 0, 0), 16n), hw.fits(M6.HWHit{sy, nn}, 16n), True{},
     Equal.cong(M6.HW, Bool, rr => hw.fits(rr, 16n), M6.hw(cc, tab, 0, 0), M6.HWHit{sy, nn}, ew),
     M3.and_l(Nat.is_le(nn, 16n), hw.is(hwg(cc, gs, 0, 0), sy, nn), hc)) :
@@ -2819,43 +2832,53 @@ def skip_m(
 
 # the encoder's code for a symbol from its dc book is the code's bits fed to the writer
 def emit_feed.dc(
+  +cls: Bool,
   +sy: U32,
   +pp: Jenc.Put
-) -> {Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(M3.dcbook.lit(), sy), pp)) == Laws.jpg.feed(M3.code.dc(sy),
+) -> {Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.dcof(cls), sy),
+  pp)) == Laws.jpg.feed(Laws.jpg.dcode(cls, sy),
   pp) : Jenc.Put}:
-  +vv = D2.jpg.val(Array.get(U32, M3.dcbook.lit(), sy))
-  Equal.trans(Jenc.Put, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.coded(Array.get(U32, M3.dcbook.lit(), sy)), pp)),
-    Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.coded((M3.dcbook.lit(), vv)), pp)), Laws.jpg.feed(M3.code.dc(sy), pp),
+  +vv = D2.jpg.val(Array.get(U32, Jenc.encode.dcof(cls), sy))
+  Equal.trans(Jenc.Put, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.coded(Array.get(U32, Jenc.encode.dcof(cls), sy)),
+    pp)),
+    Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.coded((Jenc.encode.dcof(cls), vv)), pp)),
+      Laws.jpg.feed(Laws.jpg.dcode(cls, sy), pp),
     Equal.cong(Array<U32> & U32, Jenc.Put, gg => Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.coded(gg), pp)),
-    Array.get(U32, M3.dcbook.lit(), sy), (M3.dcbook.lit(), vv), M3.get.eq(M3.dcbook.lit(), sy)), M3.bits_go(U32.to_nat(
+    Array.get(U32, Jenc.encode.dcof(cls), sy), (Jenc.encode.dcof(cls), vv), M3.get.eq(Jenc.encode.dcof(cls), sy)),
+      M3.bits_go(U32.to_nat(
     U32.shrn(vv, 16n)), pp, U32.and(vv, 65535)))
 
 # the model's bits for codes pre, a symbol's code from the dc book, and codes post
-def symbits.dc(+pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> List<&2, Bool>:
-  List.append(&2, Bool, List.concat(&2, Bool, pre), List.append(&2, Bool, M3.code.dc(sy), List.concat(&2, Bool, post)))
+def symbits.dc(+cls: Bool, +pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> List<&2, Bool>:
+  List.append(&2, Bool, List.concat(&2, Bool, pre), List.append(&2, Bool, Laws.jpg.dcode(cls, sy), List.concat(&2,
+    Bool, post)))
 
 # the bytes the writer makes of them
-def SymBytes.dc(+pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> Type:
-  {Laws.jpg.sym.bytes(pre, M3.dcbook.lit(), sy, post) == rxs(moct(symbits.dc(pre, sy, post), [])) : List<&2, U32>}
+def SymBytes.dc(+cls: Bool, +pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> Type:
+  {Laws.jpg.sym.bytes(pre, Jenc.encode.dcof(cls), sy, post) == rxs(moct(symbits.dc(cls, pre, sy, post),
+    [])) : List<&2, U32>}
 
 # the reader after codes pre back
-def SymSkip.dc(+pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> Type:
-  Skip(pre, RS{[], moct(symbits.dc(pre, sy, post), [])}, 1, List.append(&2, Bool, List.append(&2, Bool, M3.code.dc(sy),
-    List.concat(&2, Bool, post)), mpad(symbits.dc(pre, sy, post), [])))
+def SymSkip.dc(+cls: Bool, +pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> Type:
+  Skip(pre, RS{[], moct(symbits.dc(cls, pre, sy, post), [])}, 1, List.append(&2, Bool, List.append(&2, Bool,
+    Laws.jpg.dcode(cls, sy),
+    List.concat(&2, Bool, post)), mpad(symbits.dc(cls, pre, sy, post), [])))
 
 # the round trip once the reader has read codes pre back
 def sym_rt2.dc(
+  +cls: Bool,
   +pre: List<&2, List<&2, Bool>>,
   +sy: U32,
   +hy: {Laws.jpg.memb(sy, Jenc.encode.dcsyms()) == True{} : Bool},
   +post: List<&2, List<&2, Bool>>,
   +hq: {Laws.jpg.codes16(post) == True{} : Bool},
-  eb: SymBytes.dc(pre, sy, post),
-  sk: SymSkip.dc(pre, sy, post)
-) -> {Laws.jpg.sym.back(pre, M3.dcbook.lit(), dctab(), sy, post) == (sy, (Laws.jpg.nums(post), 1), 1) : U32 & (List<&2,
+  eb: SymBytes.dc(cls, pre, sy, post),
+  sk: SymSkip.dc(cls, pre, sy, post)
+) -> {Laws.jpg.sym.back(pre, Jenc.encode.dcof(cls), dctab(cls), sy, post) == (sy, (Laws.jpg.nums(post), 1),
+  1) : U32 & (List<&2,
   U32> & U32) & U32}:
   (k1, k2, k3) = sk
-  +cc = M3.code.dc(sy)
+  +cc = Laws.jpg.dcode(cls, sy)
   +cp = List.concat(&2, Bool, pre)
   +cq = List.concat(&2, Bool, post)
   +bs = List.append(&2, Bool, cp, List.append(&2, Bool, cc, cq))
@@ -2872,48 +2895,53 @@ def sym_rt2.dc(
   +h81 = {M3.and_r(rshort(s1), roct8(s1), f1) : {roct8(s1) == True{} : Bool}}
   +s2 = radv(List.length(&2, Bool, cc), s1)
   +f2 = {radv_ok(List.length(&2, Bool, cc), s1, hs1, h81) : {Bool.and(rshort(s2), roct8(s2)) == True{} : Bool}}
-  +eh = {huff.dc(s1, 1, sy, tl, hs1, h81, e1, memb.dc(Jenc.encode.dcsyms(), sy, hy, all.dc.ok())) :
-    {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, dctab()) == Jpeg.Hit{sy, rbits(s2, 1), 1} : Jpeg.Hit}}
-  Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, M3.dcbook.lit(), dctab(), sy, post),
-    Laws.jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, dctab()), post), (sy,
+  +eh = {huff.dc(cls, s1, 1, sy, tl, hs1, h81, e1, memb.dc(cls, Jenc.encode.dcsyms(), sy, hy, all.dc.ok(cls))) :
+    {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, dctab(cls)) == Jpeg.Hit{sy, rbits(s2, 1),
+      1} : Jpeg.Hit}}
+  Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, Jenc.encode.dcof(cls), dctab(cls), sy, post),
+    Laws.jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, dctab(cls)), post), (sy,
     (Laws.jpg.nums(post), 1), 1),
     Equal.cong(Jpeg.Bits, U32 & (List<&2, U32> & U32) & U32, bb => Laws.jpg.hit(Jpeg.decode.huff(16n,
-    Jpeg.Ask{None{}, 0, 0, bb}, dctab()), post), Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, Laws.jpg.sym.bytes(pre,
-      M3.dcbook.lit(), sy, post)}), rbits(s1, 1), Equal.trans(Jpeg.Bits, Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0,
-    Laws.jpg.sym.bytes(pre, M3.dcbook.lit(), sy, post)}), Laws.jpg.skip(pre, rbits(s0,
+    Jpeg.Ask{None{}, 0, 0, bb}, dctab(cls)), post), Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, Laws.jpg.sym.bytes(pre,
+      Jenc.encode.dcof(cls), sy, post)}), rbits(s1, 1), Equal.trans(Jpeg.Bits, Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0,
+    Laws.jpg.sym.bytes(pre, Jenc.encode.dcof(cls), sy, post)}), Laws.jpg.skip(pre, rbits(s0,
     1)), rbits(s1, 1), Equal.cong(List<&2, U32>, Jpeg.Bits, xs => Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, xs}),
-    Laws.jpg.sym.bytes(pre, M3.dcbook.lit(), sy, post), rxs(os), eb), k1)),
+    Laws.jpg.sym.bytes(pre, Jenc.encode.dcof(cls), sy, post), rxs(os), eb), k1)),
     Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1,
-    1)}, dctab()), post),
+    1)}, dctab(cls)), post),
     Laws.jpg.hit(Jpeg.Hit{sy, rbits(s2, 1), 1}, post), (sy, (Laws.jpg.nums(post), 1), 1), Equal.cong(Jpeg.Hit,
     U32 & (List<&2, U32> & U32) & U32, hh => Laws.jpg.hit(hh, post), Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0,
-    rbits(s1, 1)}, dctab()),
+    rbits(s1, 1)}, dctab(cls)),
     Jpeg.Hit{sy, rbits(s2, 1), 1}, eh), Equal.cong(List<&2, U32> & U32, U32 & (List<&2, U32> & U32) & U32, rr => (sy,
     rr, 1), Laws.jpg.reads(post, rbits(s2, 1)), (Laws.jpg.nums(post), 1), reads_m(post, s2, 1, mp, M3.and_l(rshort(s2),
     roct8(s2), f2), M3.and_r(rshort(s2), roct8(s2), f2), hq, rem_after(cc, s1, tl, hs1, h81, e1)))))
 
 # codes pre, a symbol's code from the dc book and codes post, round trip through the writer and the reader
 def sym_rt.dc(
+  +cls: Bool,
   +pre: List<&2, List<&2, Bool>>,
   +hp: {Laws.jpg.codes16(pre) == True{} : Bool},
   +sy: U32,
   +hy: {Laws.jpg.memb(sy, Jenc.encode.dcsyms()) == True{} : Bool},
   +post: List<&2, List<&2, Bool>>,
   +hq: {Laws.jpg.codes16(post) == True{} : Bool}
-) -> {Laws.jpg.sym.back(pre, M3.dcbook.lit(), dctab(), sy, post) == (sy, (Laws.jpg.nums(post), 1), 1) : U32 & (List<&2,
+) -> {Laws.jpg.sym.back(pre, Jenc.encode.dcof(cls), dctab(cls), sy, post) == (sy, (Laws.jpg.nums(post), 1),
+  1) : U32 & (List<&2,
   U32> & U32) & U32}:
-  +cc = M3.code.dc(sy)
+  +cc = Laws.jpg.dcode(cls, sy)
   +cp = List.concat(&2, Bool, pre)
   +cq = List.concat(&2, Bool, post)
   +bs = List.append(&2, Bool, cp, List.append(&2, Bool, cc, cq))
   +os = moct(bs, [])
   +mp = mpad(bs, [])
   +p0 = Jenc.encode.put0()
-  +ew = {Equal.trans(Jenc.Put, Laws.jpg.write(post, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(M3.dcbook.lit(), sy),
+  +ew = {Equal.trans(Jenc.Put, Laws.jpg.write(post,
+    Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.dcof(cls), sy),
     Laws.jpg.write(pre, p0)))), Laws.jpg.write(post, Laws.jpg.feed(cc,
     Laws.jpg.write(pre, p0))), Laws.jpg.feed(bs, p0), Equal.cong(Jenc.Put, Jenc.Put, qq => Laws.jpg.write(post, qq),
-    Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(M3.dcbook.lit(), sy), Laws.jpg.write(pre, p0))), Laws.jpg.feed(cc,
-      Laws.jpg.write(pre, p0)), emit_feed.dc(sy, Laws.jpg.write(pre, p0))),
+    Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.dcof(cls), sy), Laws.jpg.write(pre, p0))),
+      Laws.jpg.feed(cc,
+      Laws.jpg.write(pre, p0)), emit_feed.dc(cls, sy, Laws.jpg.write(pre, p0))),
     Equal.trans(Jenc.Put, Laws.jpg.write(post, Laws.jpg.feed(cc, Laws.jpg.write(pre, p0))), Laws.jpg.feed(cq,
       Laws.jpg.feed(cc,
     Laws.jpg.write(pre, p0))), Laws.jpg.feed(bs, p0), wcodes_feed(post, Laws.jpg.feed(cc, Laws.jpg.write(pre, p0)), hq),
@@ -2929,87 +2957,91 @@ def sym_rt.dc(
       Laws.jpg.feed(bs, p0),
     Laws.jpg.feed(List.append(&2, Bool, cc, cq), Laws.jpg.feed(cp, p0)), M3.feed_app(cp, List.append(&2, Bool, cc, cq),
       p0)))))) :
-    {Laws.jpg.write(post, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(M3.dcbook.lit(), sy), Laws.jpg.write(pre,
+    {Laws.jpg.write(post, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.dcof(cls), sy), Laws.jpg.write(pre,
       p0)))) == Laws.jpg.feed(bs, p0) : Jenc.Put}}
-  +eb = {Equal.trans(List<&2, U32>, Laws.jpg.sym.bytes(pre, M3.dcbook.lit(), sy, post),
+  +eb = {Equal.trans(List<&2, U32>, Laws.jpg.sym.bytes(pre, Jenc.encode.dcof(cls), sy, post),
     Jenc.encode.pad(Laws.jpg.feed(bs, M2.wput(M2.WS{[], []}))), rxs(os), Equal.cong(Jenc.Put, List<&2, U32>, qq =>
-    Jenc.encode.pad(qq), Laws.jpg.write(post, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(M3.dcbook.lit(), sy),
+    Jenc.encode.pad(qq), Laws.jpg.write(post, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.dcof(cls), sy),
       Laws.jpg.write(pre, p0)))), Laws.jpg.feed(bs, p0), ew),
     Equal.trans(List<&2, U32>, Jenc.encode.pad(Laws.jpg.feed(bs, M2.wput(M2.WS{[], []}))),
         Jenc.encode.pad(M2.wput(M2.wm(bs, M2.WS{[],
     []}))), rxs(os), Equal.cong(Jenc.Put, List<&2, U32>, qq => Jenc.encode.pad(qq), Laws.jpg.feed(bs, M2.wput(M2.WS{[],
         []})),
     M2.wput(M2.wm(bs, M2.WS{[], []})), M2.wfeed(bs, M2.WS{[], []}, {==})), pad_m(bs, [], [], {==}))) :
-    {Laws.jpg.sym.bytes(pre, M3.dcbook.lit(), sy, post) == rxs(os) : List<&2, U32>}}
+    {Laws.jpg.sym.bytes(pre, Jenc.encode.dcof(cls), sy, post) == rxs(os) : List<&2, U32>}}
   +s0 = {RS{[], os} : RS}
   +mr = List.append(&2, Bool, List.append(&2, Bool, cc, cq), mp)
   +e0 = {Equal.trans(List<&2, Bool>, rem(s0), List.append(&2, Bool, bs, mp), List.append(&2, Bool, cp, mr),
     concat_moct(bs, []), M3.huf.app_assoc(cp, List.append(&2, Bool, cc, cq), mp)) : {rem(s0) == List.append(&2, Bool,
         cp,
     mr) : List<&2, Bool>}}
-  sym_rt2.dc(pre, sy, hy, post, hq, eb, skip_m(pre, s0, 1, mr, {==}, oct8_moct(bs, [], {==}), hp, e0))
+  sym_rt2.dc(cls, pre, sy, hy, post, hq, eb, skip_m(pre, s0, 1, mr, {==}, oct8_moct(bs, [], {==}), hp, e0))
 
-# the dc table law: the real book and table are the ones written out
+# the dc table law: the decoder's table is the one in groups
 def huff_law.dc(
+  +cls: Bool,
   +pre: List<&2, List<&2, Bool>>,
   +hp: {Laws.jpg.codes16(pre) == True{} : Bool},
   +sy: U32,
   +hy: {Laws.jpg.memb(sy, Jenc.encode.dcsyms()) == True{} : Bool},
   +post: List<&2, List<&2, Bool>>,
   +hq: {Laws.jpg.codes16(post) == True{} : Bool}
-) -> {Laws.jpg.sym.back(pre, Jenc.encode.huff(Jenc.encode.dccounts(), Jenc.encode.dcsyms()), Jpeg.decode.canon(272n,
-  0n, Jenc.encode.dccounts(), Jenc.encode.dcsyms(), 0, 0, [], [], []), sy, post) == (sy, (Laws.jpg.nums(post), 1),
+) -> {Laws.jpg.sym.back(pre, Jenc.encode.dcof(cls), Laws.jpg.dctab(cls), sy, post) == (sy, (Laws.jpg.nums(post), 1),
   1) : U32 & (List<&2, U32> & U32) & U32}:
-  +cn = Jpeg.decode.canon(272n, 0n, Jenc.encode.dccounts(), Jenc.encode.dcsyms(), 0, 0, [], [], [])
-  Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, Jenc.encode.huff(Jenc.encode.dccounts(),
-    Jenc.encode.dcsyms()), cn, sy, post), Laws.jpg.sym.back(pre, M3.dcbook.lit(), cn, sy, post), (sy,
-        (Laws.jpg.nums(post),
-    1), 1), Equal.cong(Array<U32>, U32 & (List<&2, U32> & U32) & U32, bk => Laws.jpg.sym.back(pre, bk, cn, sy, post),
-    Jenc.encode.huff(Jenc.encode.dccounts(), Jenc.encode.dcsyms()), M3.dcbook.lit(), M2.dcbook.eq()),
-    Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, M3.dcbook.lit(), cn, sy, post),
-    Laws.jpg.sym.back(pre, M3.dcbook.lit(), dctab(), sy, post), (sy, (Laws.jpg.nums(post), 1), 1), Equal.cong(Jpeg.Huff,
-    U32 & (List<&2, U32> & U32) & U32, tb => Laws.jpg.sym.back(pre, M3.dcbook.lit(), tb, sy, post), cn, dctab(),
-    dctab.eq()), sym_rt.dc(pre, hp, sy, hy, post, hq)))
+  Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, Jenc.encode.dcof(cls), Laws.jpg.dctab(cls),
+    sy, post), Laws.jpg.sym.back(pre, Jenc.encode.dcof(cls), dctab(cls), sy, post), (sy, (Laws.jpg.nums(post), 1),
+    1), Equal.cong(Jpeg.Huff, U32 & (List<&2, U32> & U32) & U32, tb => Laws.jpg.sym.back(pre, Jenc.encode.dcof(cls),
+    tb, sy, post), Laws.jpg.dctab(cls), dctab(cls), dctab.eq(cls)), sym_rt.dc(cls, pre, hp, sy, hy, post, hq))
 
 # the encoder's code for a symbol from its ac book is the code's bits fed to the writer
 def emit_feed.ac(
+  +cls: Bool,
   +sy: U32,
   +pp: Jenc.Put
-) -> {Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(M3.acbook.lit(), sy), pp)) == Laws.jpg.feed(M3.code.ac(sy),
+) -> {Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls), sy),
+  pp)) == Laws.jpg.feed(Laws.jpg.acode(cls, sy),
   pp) : Jenc.Put}:
-  +vv = D2.jpg.val(Array.get(U32, M3.acbook.lit(), sy))
-  Equal.trans(Jenc.Put, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.coded(Array.get(U32, M3.acbook.lit(), sy)), pp)),
-    Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.coded((M3.acbook.lit(), vv)), pp)), Laws.jpg.feed(M3.code.ac(sy), pp),
+  +vv = D2.jpg.val(Array.get(U32, Jenc.encode.acof(cls), sy))
+  Equal.trans(Jenc.Put, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.coded(Array.get(U32, Jenc.encode.acof(cls), sy)),
+    pp)),
+    Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.coded((Jenc.encode.acof(cls), vv)), pp)),
+      Laws.jpg.feed(Laws.jpg.acode(cls, sy), pp),
     Equal.cong(Array<U32> & U32, Jenc.Put, gg => Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.coded(gg), pp)),
-    Array.get(U32, M3.acbook.lit(), sy), (M3.acbook.lit(), vv), M3.get.eq(M3.acbook.lit(), sy)), M3.bits_go(U32.to_nat(
+    Array.get(U32, Jenc.encode.acof(cls), sy), (Jenc.encode.acof(cls), vv), M3.get.eq(Jenc.encode.acof(cls), sy)),
+      M3.bits_go(U32.to_nat(
     U32.shrn(vv, 16n)), pp, U32.and(vv, 65535)))
 
 # the model's bits for codes pre, a symbol's code from the ac book, and codes post
-def symbits.ac(+pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> List<&2, Bool>:
-  List.append(&2, Bool, List.concat(&2, Bool, pre), List.append(&2, Bool, M3.code.ac(sy), List.concat(&2, Bool, post)))
+def symbits.ac(+cls: Bool, +pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> List<&2, Bool>:
+  List.append(&2, Bool, List.concat(&2, Bool, pre), List.append(&2, Bool, Laws.jpg.acode(cls, sy), List.concat(&2,
+    Bool, post)))
 
 # the bytes the writer makes of them
-def SymBytes.ac(+pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> Type:
-  {Laws.jpg.sym.bytes(pre, M3.acbook.lit(), sy, post) == rxs(moct(symbits.ac(pre, sy, post), [])) : List<&2, U32>}
+def SymBytes.ac(+cls: Bool, +pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> Type:
+  {Laws.jpg.sym.bytes(pre, Jenc.encode.acof(cls), sy, post) == rxs(moct(symbits.ac(cls, pre, sy, post),
+    [])) : List<&2, U32>}
 
 # the reader after codes pre back
-def SymSkip.ac(+pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> Type:
-  Skip(pre, RS{[], moct(symbits.ac(pre, sy, post), [])}, 1, List.append(&2, Bool, List.append(&2, Bool, M3.code.ac(sy),
-    List.concat(&2, Bool, post)), mpad(symbits.ac(pre, sy, post), [])))
+def SymSkip.ac(+cls: Bool, +pre: List<&2, List<&2, Bool>>, +sy: U32, +post: List<&2, List<&2, Bool>>) -> Type:
+  Skip(pre, RS{[], moct(symbits.ac(cls, pre, sy, post), [])}, 1, List.append(&2, Bool, List.append(&2, Bool,
+    Laws.jpg.acode(cls, sy),
+    List.concat(&2, Bool, post)), mpad(symbits.ac(cls, pre, sy, post), [])))
 
 # the round trip once the reader has read codes pre back
 def sym_rt2.ac(
+  +cls: Bool,
   +pre: List<&2, List<&2, Bool>>,
   +sy: U32,
   +hy: {Laws.jpg.memb(sy, Jenc.encode.acsyms()) == True{} : Bool},
   +post: List<&2, List<&2, Bool>>,
   +hq: {Laws.jpg.codes16(post) == True{} : Bool},
-  eb: SymBytes.ac(pre, sy, post),
-  sk: SymSkip.ac(pre, sy, post)
-) -> {Laws.jpg.sym.back(pre, M3.acbook.lit(), actab(), sy, post) == (sy, (Laws.jpg.nums(post), 1), 1) : U32 & (List<&2,
+  eb: SymBytes.ac(cls, pre, sy, post),
+  sk: SymSkip.ac(cls, pre, sy, post)
+) -> {Laws.jpg.sym.back(pre, Jenc.encode.acof(cls), actab(cls), sy, post) == (sy, (Laws.jpg.nums(post), 1),
+  1) : U32 & (List<&2,
   U32> & U32) & U32}:
   (k1, k2, k3) = sk
-  +cc = M3.code.ac(sy)
+  +cc = Laws.jpg.acode(cls, sy)
   +cp = List.concat(&2, Bool, pre)
   +cq = List.concat(&2, Bool, post)
   +bs = List.append(&2, Bool, cp, List.append(&2, Bool, cc, cq))
@@ -3026,48 +3058,53 @@ def sym_rt2.ac(
   +h81 = {M3.and_r(rshort(s1), roct8(s1), f1) : {roct8(s1) == True{} : Bool}}
   +s2 = radv(List.length(&2, Bool, cc), s1)
   +f2 = {radv_ok(List.length(&2, Bool, cc), s1, hs1, h81) : {Bool.and(rshort(s2), roct8(s2)) == True{} : Bool}}
-  +eh = {huff.ac(s1, 1, sy, tl, hs1, h81, e1, memb.ac(Jenc.encode.acsyms(), sy, hy, all.ac.ok())) :
-    {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, actab()) == Jpeg.Hit{sy, rbits(s2, 1), 1} : Jpeg.Hit}}
-  Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, M3.acbook.lit(), actab(), sy, post),
-    Laws.jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, actab()), post), (sy,
+  +eh = {huff.ac(cls, s1, 1, sy, tl, hs1, h81, e1, memb.ac(cls, Jenc.encode.acsyms(), sy, hy, all.ac.ok(cls))) :
+    {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, actab(cls)) == Jpeg.Hit{sy, rbits(s2, 1),
+      1} : Jpeg.Hit}}
+  Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, Jenc.encode.acof(cls), actab(cls), sy, post),
+    Laws.jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1, 1)}, actab(cls)), post), (sy,
     (Laws.jpg.nums(post), 1), 1),
     Equal.cong(Jpeg.Bits, U32 & (List<&2, U32> & U32) & U32, bb => Laws.jpg.hit(Jpeg.decode.huff(16n,
-    Jpeg.Ask{None{}, 0, 0, bb}, actab()), post), Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, Laws.jpg.sym.bytes(pre,
-      M3.acbook.lit(), sy, post)}), rbits(s1, 1), Equal.trans(Jpeg.Bits, Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0,
-    Laws.jpg.sym.bytes(pre, M3.acbook.lit(), sy, post)}), Laws.jpg.skip(pre, rbits(s0,
+    Jpeg.Ask{None{}, 0, 0, bb}, actab(cls)), post), Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, Laws.jpg.sym.bytes(pre,
+      Jenc.encode.acof(cls), sy, post)}), rbits(s1, 1), Equal.trans(Jpeg.Bits, Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0,
+    Laws.jpg.sym.bytes(pre, Jenc.encode.acof(cls), sy, post)}), Laws.jpg.skip(pre, rbits(s0,
     1)), rbits(s1, 1), Equal.cong(List<&2, U32>, Jpeg.Bits, xs => Laws.jpg.skip(pre, Jpeg.Bits{0, 1, 0, xs}),
-    Laws.jpg.sym.bytes(pre, M3.acbook.lit(), sy, post), rxs(os), eb), k1)),
+    Laws.jpg.sym.bytes(pre, Jenc.encode.acof(cls), sy, post), rxs(os), eb), k1)),
     Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.hit(Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(s1,
-    1)}, actab()), post),
+    1)}, actab(cls)), post),
     Laws.jpg.hit(Jpeg.Hit{sy, rbits(s2, 1), 1}, post), (sy, (Laws.jpg.nums(post), 1), 1), Equal.cong(Jpeg.Hit,
     U32 & (List<&2, U32> & U32) & U32, hh => Laws.jpg.hit(hh, post), Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0,
-    rbits(s1, 1)}, actab()),
+    rbits(s1, 1)}, actab(cls)),
     Jpeg.Hit{sy, rbits(s2, 1), 1}, eh), Equal.cong(List<&2, U32> & U32, U32 & (List<&2, U32> & U32) & U32, rr => (sy,
     rr, 1), Laws.jpg.reads(post, rbits(s2, 1)), (Laws.jpg.nums(post), 1), reads_m(post, s2, 1, mp, M3.and_l(rshort(s2),
     roct8(s2), f2), M3.and_r(rshort(s2), roct8(s2), f2), hq, rem_after(cc, s1, tl, hs1, h81, e1)))))
 
 # codes pre, a symbol's code from the ac book and codes post, round trip through the writer and the reader
 def sym_rt.ac(
+  +cls: Bool,
   +pre: List<&2, List<&2, Bool>>,
   +hp: {Laws.jpg.codes16(pre) == True{} : Bool},
   +sy: U32,
   +hy: {Laws.jpg.memb(sy, Jenc.encode.acsyms()) == True{} : Bool},
   +post: List<&2, List<&2, Bool>>,
   +hq: {Laws.jpg.codes16(post) == True{} : Bool}
-) -> {Laws.jpg.sym.back(pre, M3.acbook.lit(), actab(), sy, post) == (sy, (Laws.jpg.nums(post), 1), 1) : U32 & (List<&2,
+) -> {Laws.jpg.sym.back(pre, Jenc.encode.acof(cls), actab(cls), sy, post) == (sy, (Laws.jpg.nums(post), 1),
+  1) : U32 & (List<&2,
   U32> & U32) & U32}:
-  +cc = M3.code.ac(sy)
+  +cc = Laws.jpg.acode(cls, sy)
   +cp = List.concat(&2, Bool, pre)
   +cq = List.concat(&2, Bool, post)
   +bs = List.append(&2, Bool, cp, List.append(&2, Bool, cc, cq))
   +os = moct(bs, [])
   +mp = mpad(bs, [])
   +p0 = Jenc.encode.put0()
-  +ew = {Equal.trans(Jenc.Put, Laws.jpg.write(post, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(M3.acbook.lit(), sy),
+  +ew = {Equal.trans(Jenc.Put, Laws.jpg.write(post,
+    Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls), sy),
     Laws.jpg.write(pre, p0)))), Laws.jpg.write(post, Laws.jpg.feed(cc,
     Laws.jpg.write(pre, p0))), Laws.jpg.feed(bs, p0), Equal.cong(Jenc.Put, Jenc.Put, qq => Laws.jpg.write(post, qq),
-    Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(M3.acbook.lit(), sy), Laws.jpg.write(pre, p0))), Laws.jpg.feed(cc,
-      Laws.jpg.write(pre, p0)), emit_feed.ac(sy, Laws.jpg.write(pre, p0))),
+    Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls), sy), Laws.jpg.write(pre, p0))),
+      Laws.jpg.feed(cc,
+      Laws.jpg.write(pre, p0)), emit_feed.ac(cls, sy, Laws.jpg.write(pre, p0))),
     Equal.trans(Jenc.Put, Laws.jpg.write(post, Laws.jpg.feed(cc, Laws.jpg.write(pre, p0))), Laws.jpg.feed(cq,
       Laws.jpg.feed(cc,
     Laws.jpg.write(pre, p0))), Laws.jpg.feed(bs, p0), wcodes_feed(post, Laws.jpg.feed(cc, Laws.jpg.write(pre, p0)), hq),
@@ -3083,51 +3120,41 @@ def sym_rt.ac(
       Laws.jpg.feed(bs, p0),
     Laws.jpg.feed(List.append(&2, Bool, cc, cq), Laws.jpg.feed(cp, p0)), M3.feed_app(cp, List.append(&2, Bool, cc, cq),
       p0)))))) :
-    {Laws.jpg.write(post, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(M3.acbook.lit(), sy), Laws.jpg.write(pre,
+    {Laws.jpg.write(post, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls), sy), Laws.jpg.write(pre,
       p0)))) == Laws.jpg.feed(bs, p0) : Jenc.Put}}
-  +eb = {Equal.trans(List<&2, U32>, Laws.jpg.sym.bytes(pre, M3.acbook.lit(), sy, post),
+  +eb = {Equal.trans(List<&2, U32>, Laws.jpg.sym.bytes(pre, Jenc.encode.acof(cls), sy, post),
     Jenc.encode.pad(Laws.jpg.feed(bs, M2.wput(M2.WS{[], []}))), rxs(os), Equal.cong(Jenc.Put, List<&2, U32>, qq =>
-    Jenc.encode.pad(qq), Laws.jpg.write(post, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(M3.acbook.lit(), sy),
+    Jenc.encode.pad(qq), Laws.jpg.write(post, Laws.jpg.emit(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls), sy),
       Laws.jpg.write(pre, p0)))), Laws.jpg.feed(bs, p0), ew),
     Equal.trans(List<&2, U32>, Jenc.encode.pad(Laws.jpg.feed(bs, M2.wput(M2.WS{[], []}))),
         Jenc.encode.pad(M2.wput(M2.wm(bs, M2.WS{[],
     []}))), rxs(os), Equal.cong(Jenc.Put, List<&2, U32>, qq => Jenc.encode.pad(qq), Laws.jpg.feed(bs, M2.wput(M2.WS{[],
         []})),
     M2.wput(M2.wm(bs, M2.WS{[], []})), M2.wfeed(bs, M2.WS{[], []}, {==})), pad_m(bs, [], [], {==}))) :
-    {Laws.jpg.sym.bytes(pre, M3.acbook.lit(), sy, post) == rxs(os) : List<&2, U32>}}
+    {Laws.jpg.sym.bytes(pre, Jenc.encode.acof(cls), sy, post) == rxs(os) : List<&2, U32>}}
   +s0 = {RS{[], os} : RS}
   +mr = List.append(&2, Bool, List.append(&2, Bool, cc, cq), mp)
   +e0 = {Equal.trans(List<&2, Bool>, rem(s0), List.append(&2, Bool, bs, mp), List.append(&2, Bool, cp, mr),
     concat_moct(bs, []), M3.huf.app_assoc(cp, List.append(&2, Bool, cc, cq), mp)) : {rem(s0) == List.append(&2, Bool,
         cp,
     mr) : List<&2, Bool>}}
-  sym_rt2.ac(pre, sy, hy, post, hq, eb, skip_m(pre, s0, 1, mr, {==}, oct8_moct(bs, [], {==}), hp, e0))
+  sym_rt2.ac(cls, pre, sy, hy, post, hq, eb, skip_m(pre, s0, 1, mr, {==}, oct8_moct(bs, [], {==}), hp, e0))
 
-# the ac table law: the real book and table are the ones written out
+# the ac table law: the decoder's table is the one in groups
 def huff_law.ac(
+  +cls: Bool,
   +pre: List<&2, List<&2, Bool>>,
   +hp: {Laws.jpg.codes16(pre) == True{} : Bool},
   +sy: U32,
   +hy: {Laws.jpg.memb(sy, Jenc.encode.acsyms()) == True{} : Bool},
   +post: List<&2, List<&2, Bool>>,
   +hq: {Laws.jpg.codes16(post) == True{} : Bool}
-) -> {Laws.jpg.sym.back(pre, Jenc.encode.huff(Jenc.encode.accounts(), Jenc.encode.acsyms()), Jpeg.decode.canon(272n,
-  0n, Jenc.encode.accounts(), Jenc.encode.acsyms(), 0, 0, [], [], []), sy, post) == (sy, (Laws.jpg.nums(post), 1),
+) -> {Laws.jpg.sym.back(pre, Jenc.encode.acof(cls), Laws.jpg.actab(cls), sy, post) == (sy, (Laws.jpg.nums(post), 1),
   1) : U32 & (List<&2, U32> & U32) & U32}:
-  +cn = Jpeg.decode.canon(272n, 0n, Jenc.encode.accounts(), Jenc.encode.acsyms(), 0, 0, [], [], [])
-  Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, Jenc.encode.huff(Jenc.encode.accounts(),
-    Jenc.encode.acsyms()), cn, sy, post), Laws.jpg.sym.back(pre, M3.acbook.lit(), cn, sy, post), (sy,
-        (Laws.jpg.nums(post),
-    1), 1), Equal.cong(Array<U32>, U32 & (List<&2, U32> & U32) & U32, bk => Laws.jpg.sym.back(pre, bk, cn, sy, post),
-    Jenc.encode.huff(Jenc.encode.accounts(), Jenc.encode.acsyms()), M3.acbook.lit(), M2.acbook.eq()),
-    Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, M3.acbook.lit(), cn, sy, post),
-    Laws.jpg.sym.back(pre, M3.acbook.lit(), actab(), sy, post), (sy, (Laws.jpg.nums(post), 1), 1), Equal.cong(Jpeg.Huff,
-    U32 & (List<&2, U32> & U32) & U32, tb => Laws.jpg.sym.back(pre, M3.acbook.lit(), tb, sy, post), cn, actab(),
-    actab.eq()), sym_rt.ac(pre, hp, sy, hy, post, hq)))
-
-# the AC table the decoder holds, in groups
-def actb() -> Jpeg.Huff:
-  actab()
+  Equal.trans(U32 & (List<&2, U32> & U32) & U32, Laws.jpg.sym.back(pre, Jenc.encode.acof(cls), Laws.jpg.actab(cls),
+    sy, post), Laws.jpg.sym.back(pre, Jenc.encode.acof(cls), actab(cls), sy, post), (sy, (Laws.jpg.nums(post), 1),
+    1), Equal.cong(Jpeg.Huff, U32 & (List<&2, U32> & U32) & U32, tb => Laws.jpg.sym.back(pre, Jenc.encode.acof(cls),
+    tb, sy, post), Laws.jpg.actab(cls), actab(cls), actab.eq(cls)), sym_rt.ac(cls, pre, hp, sy, hy, post, hq))
 
 # the reader and the ok flag of the decoder's AC state
 def acbo(xx: Jpeg.Ac) -> Jpeg.Bits & U32:
@@ -3142,12 +3169,13 @@ def AcRes(-xx: Jpeg.Ac, +rr: List<&2, Bool>) -> Type:
 
 # an ended AC loop stays as it is
 def acdone(
+  +cls: Bool,
   pp: Nat,
   +kk: U32,
   +zz: List<&2, U32>,
   +bits: Jpeg.Bits,
   +ok: U32
-) -> {Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, bits, 1, ok}, actb()) == Jpeg.Ac{kk, zz, bits, 1, ok} : Jpeg.Ac}:
+) -> {Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, bits, 1, ok}, actab(cls)) == Jpeg.Ac{kk, zz, bits, 1, ok} : Jpeg.Ac}:
   match pp:
     case 0n:
       {==}
@@ -3156,6 +3184,7 @@ def acdone(
 
 # an ended AC loop with the model's reader is a result
 def acres.done(
+  +cls: Bool,
   +pp: Nat,
   +kk: U32,
   +zz: List<&2, U32>,
@@ -3163,9 +3192,9 @@ def acres.done(
   +rr: List<&2, Bool>,
   e2: {rem(se) == rr : List<&2, Bool>},
   e3: {Bool.and(rshort(se), roct8(se)) == True{} : Bool}
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(se, 1), 1, 1}, actb()), rr):
-  ea = Equal.sym(Jpeg.Ac, Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(se, 1), 1, 1}, actb()), Jpeg.Ac{kk, zz,
-    rbits(se, 1), 1, 1}, acdone(pp, kk, zz, rbits(se, 1), 1))
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(se, 1), 1, 1}, actab(cls)), rr):
+  ea = Equal.sym(Jpeg.Ac, Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(se, 1), 1, 1}, actab(cls)), Jpeg.Ac{kk, zz,
+    rbits(se, 1), 1, 1}, acdone(cls, pp, kk, zz, rbits(se, 1), 1))
   %ea : AcRes(_, rr)
   (se, {==}, e2, e3)
 
@@ -3193,40 +3222,47 @@ def isnil.eq(xs: List<&2, Bool>, hh: {Laws.jpg.isnil(xs) == True{} : Bool}) -> {
       Empty.absurd({_h <> _t == [] : List<&2, Bool>}, M1.huf.false_true(hh))
 
 # the rest of the AC loop, as a token's step needs it
-def IhAc(-rest: List<&2, Laws.JTok>, +pp: Nat, +rr: List<&2, Bool>) -> Type:
+def IhAc(+cls: Bool, -rest: List<&2, Laws.JTok>, +pp: Nat, +rr: List<&2, Bool>) -> Type:
   @kk: U32 -> @zz: List<&2, U32> -> @ss: RS -> @hs: {rshort(ss) == True{} : Bool} ->
-    @h8: {roct8(ss) == True{} : Bool} -> @he: {rem(ss) == List.append(&2, Bool, M3.acbits(rest), rr) :
+    @h8: {roct8(ss) == True{} : Bool} -> @he: {rem(ss) == List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr) :
     List<&2, Bool>} -> @hw: {Laws.jpg.acwf(rest, Laws.JAcSt{kk, pp, False{}}) == True{} : Bool} ->
-    AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actb()), rr)
+    AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actab(cls)), rr)
 
 # the tail after an empty list of magnitude bits and no tokens is the tail
 def tail.nil(
+  +cls: Bool,
   +ex: List<&2, Bool>,
   +rest: List<&2, Laws.JTok>,
   +rr: List<&2, Bool>,
   xe: {ex == [] : List<&2, Bool>},
   re: {rest == [] : List<&2, Laws.JTok>}
-) -> {List.append(&2, Bool, ex, List.append(&2, Bool, M3.acbits(rest), rr)) == rr : List<&2, Bool>}:
-  Equal.trans(List<&2, Bool>, List.append(&2, Bool, ex, List.append(&2, Bool, M3.acbits(rest), rr)), List.append(&2,
+) -> {List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)) == rr : List<&2, Bool>}:
+  Equal.trans(List<&2, Bool>, List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)),
+    List.append(&2,
       Bool,
-    M3.acbits(rest), rr), rr, Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => List.append(&2, Bool, xs,
-    List.append(&2, Bool, M3.acbits(rest), rr)), ex, [], xe), Equal.cong(List<&2, Laws.JTok>, List<&2, Bool>, ts =>
-    List.append(&2, Bool, M3.acbits(ts), rr), rest, [], re))
+    Laws.jpg.acbits(cls, rest), rr), rr, Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => List.append(&2, Bool, xs,
+    List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)), ex, [], xe), Equal.cong(List<&2, Laws.JTok>, List<&2,
+      Bool>, ts =>
+    List.append(&2, Bool, Laws.jpg.acbits(cls, ts), rr), rest, [], re))
 
 # the tail after an empty list of magnitude bits
 def tail.ex(
+  +cls: Bool,
   +ex: List<&2, Bool>,
   +rest: List<&2, Laws.JTok>,
   +rr: List<&2, Bool>,
   xe: {ex == [] : List<&2, Bool>}
-) -> {List.append(&2, Bool, ex, List.append(&2, Bool, M3.acbits(rest), rr)) == List.append(&2, Bool, M3.acbits(rest),
+) -> {List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)) == List.append(&2, Bool,
+  Laws.jpg.acbits(cls, rest),
   rr) : List<&2, Bool>}:
-  Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => List.append(&2, Bool, xs, List.append(&2, Bool, M3.acbits(rest),
+  Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => List.append(&2, Bool, xs, List.append(&2, Bool,
+    Laws.jpg.acbits(cls, rest),
       rr)),
     ex, [], xe)
 
 # an EOB token ends the block
 def sim.eob(
+  +cls: Bool,
   +pp: Nat,
   +kk: U32,
   +zz: List<&2, U32>,
@@ -3235,15 +3271,17 @@ def sim.eob(
   +rest: List<&2, Laws.JTok>,
   +rr: List<&2, Bool>,
   f1: {Bool.and(rshort(s1), roct8(s1)) == True{} : Bool},
-  er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, M3.acbits(rest), rr)) : List<&2, Bool>},
+  er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)) : List<&2, Bool>},
   hk: {Laws.jpg.isnil(ex) == True{} : Bool},
   hr: {Laws.jpg.acwf(rest, Laws.JAcSt{kk, pp, True{}}) == True{} : Bool}
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(s1, 1), 1, 1}, actb()), rr):
-  acres.done(pp, kk, zz, s1, rr, Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex, List.append(&2,
-    Bool, M3.acbits(rest), rr)), rr, er, tail.nil(ex, rest, rr, isnil.eq(ex, hk), acwf.fin(rest, kk, pp, hr))), f1)
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.Ac{kk, zz, rbits(s1, 1), 1, 1}, actab(cls)), rr):
+  acres.done(cls, pp, kk, zz, s1, rr, Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex, List.append(&2,
+    Bool, Laws.jpg.acbits(cls, rest), rr)), rr, er, tail.nil(cls, ex, rest, rr, isnil.eq(ex, hk), acwf.fin(rest, kk,
+    pp, hr))), f1)
 
 # a ZRL token that reaches index 64 ends the block
 def sim.zrl2(
+  +cls: Bool,
   c2: Bool,
   +pp: Nat,
   +kk: U32,
@@ -3253,23 +3291,24 @@ def sim.zrl2(
   +rest: List<&2, Laws.JTok>,
   +rr: List<&2, Bool>,
   f1: {Bool.and(rshort(s1), roct8(s1)) == True{} : Bool},
-  er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, M3.acbits(rest), rr)) : List<&2, Bool>},
+  er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)) : List<&2, Bool>},
   +hk: {Bool.and(Laws.jpg.isnil(ex), Bool.or(False{}, c2)) == True{} : Bool},
   hr: {Laws.jpg.acwf(rest, Laws.JAcSt{(kk + 16 : U32), pp, True{}}) == True{} : Bool}
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(c2, zz, rbits(s1, 1), 1), actb()), rr):
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(c2, zz, rbits(s1, 1), 1), actab(cls)), rr):
   match c2:
     case True{}:
-      acres.done(pp, 64, zz, s1, rr, Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex,
-        List.append(&2, Bool, M3.acbits(rest), rr)), rr, er, tail.nil(ex, rest, rr, isnil.eq(ex,
+      acres.done(cls, pp, 64, zz, s1, rr, Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex,
+        List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)), rr, er, tail.nil(cls, ex, rest, rr, isnil.eq(ex,
             M3.and_l(Laws.jpg.isnil(ex),
         True{}, hk)), acwf.fin(rest, (kk + 16 : U32), pp, hr))), f1)
     case False{}:
-      Empty.absurd(AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(False{}, zz, rbits(s1, 1), 1), actb()), rr),
+      Empty.absurd(AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(False{}, zz, rbits(s1, 1), 1), actab(cls)), rr),
         M1.huf.false_true(Equal.trans(Bool, False{}, Bool.and(Laws.jpg.isnil(ex), False{}), True{}, Equal.sym(Bool,
         Bool.and(Laws.jpg.isnil(ex), False{}), False{}, M6.and_false_r(Laws.jpg.isnil(ex))), hk)))
 
 # a ZRL token: sixteen zeros, then the loop goes on or the block ends at index 64
 def sim.zrl(
+  +cls: Bool,
   c1: Bool,
   c2: Bool,
   +pp: Nat,
@@ -3280,26 +3319,29 @@ def sim.zrl(
   +rest: List<&2, Laws.JTok>,
   +rr: List<&2, Bool>,
   +f1: {Bool.and(rshort(s1), roct8(s1)) == True{} : Bool},
-  +er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, M3.acbits(rest), rr)) : List<&2, Bool>},
+  +er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)) : List<&2, Bool>},
   h2: {U32.is_eq((kk + 16 : U32), 64) == c2 : Bool},
   +hk: {Bool.and(Laws.jpg.isnil(ex), Bool.or(c1, c2)) == True{} : Bool},
   hr: {Laws.jpg.acwf(rest, Laws.JAcSt{(kk + 16 : U32), pp, Bool.not(c1)}) == True{} : Bool},
-  ih: IhAc(rest, pp, rr)
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.k(c1, (kk + 16 : U32), zz, rbits(s1, 1), 1), actb()), rr):
+  ih: IhAc(cls, rest, pp, rr)
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.k(c1, (kk + 16 : U32), zz, rbits(s1, 1), 1), actab(cls)), rr):
   match c1:
     case True{}:
       ih((kk + 16 : U32), zz, s1, M3.and_l(rshort(s1), roct8(s1), f1), M3.and_r(rshort(s1), roct8(s1), f1),
-        Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex, List.append(&2, Bool, M3.acbits(rest), rr)),
-        List.append(&2, Bool, M3.acbits(rest), rr), er, tail.ex(ex, rest, rr, isnil.eq(ex, M3.and_l(Laws.jpg.isnil(ex),
+        Equal.trans(List<&2, Bool>, rem(s1), List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls,
+        rest), rr)),
+        List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr), er, tail.ex(cls, ex, rest, rr, isnil.eq(ex,
+          M3.and_l(Laws.jpg.isnil(ex),
           True{},
         hk)))), hr)
     case False{}:
       sh = Equal.sym(Bool, U32.is_eq((kk + 16 : U32), 64), c2, h2)
-      %sh : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(_, zz, rbits(s1, 1), 1), actb()), rr)
-      sim.zrl2(c2, pp, kk, zz, s1, ex, rest, rr, f1, er, hk, hr)
+      %sh : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.zrl.eq(_, zz, rbits(s1, 1), 1), actab(cls)), rr)
+      sim.zrl2(cls, c2, pp, kk, zz, s1, ex, rest, rr, f1, er, hk, hr)
 
 # a stored coefficient: the loop goes on, or the block ends at index 64
 def sim.st(
+  +cls: Bool,
   c3: Bool,
   +pp: Nat,
   +n2: U32,
@@ -3308,14 +3350,16 @@ def sim.st(
   +rest: List<&2, Laws.JTok>,
   +rr: List<&2, Bool>,
   +f2: {Bool.and(rshort(s2), roct8(s2)) == True{} : Bool},
-  +e2: {rem(s2) == List.append(&2, Bool, M3.acbits(rest), rr) : List<&2, Bool>},
+  +e2: {rem(s2) == List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr) : List<&2, Bool>},
   hr: {Laws.jpg.acwf(rest, Laws.JAcSt{n2, pp, c3}) == True{} : Bool},
-  ih: IhAc(rest, pp, rr)
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.stored(c3, n2, zz, rbits(s2, 1), 1), actb()), rr):
+  ih: IhAc(cls, rest, pp, rr)
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.stored(c3, n2, zz, rbits(s2, 1), 1), actab(cls)), rr):
   match c3:
     case True{}:
-      acres.done(pp, n2, zz, s2, rr, Equal.trans(List<&2, Bool>, rem(s2), List.append(&2, Bool, M3.acbits(rest), rr),
-        rr, e2, Equal.cong(List<&2, Laws.JTok>, List<&2, Bool>, ts => List.append(&2, Bool, M3.acbits(ts), rr), rest,
+      acres.done(cls, pp, n2, zz, s2, rr, Equal.trans(List<&2, Bool>, rem(s2), List.append(&2, Bool,
+        Laws.jpg.acbits(cls, rest), rr),
+        rr, e2, Equal.cong(List<&2, Laws.JTok>, List<&2, Bool>, ts => List.append(&2, Bool, Laws.jpg.acbits(cls, ts),
+          rr), rest,
             [],
         acwf.fin(rest, n2, pp, hr))), f2)
     case False{}:
@@ -3334,6 +3378,7 @@ def RunRest(-rest: List<&2, Laws.JTok>, +kk: U32, +sym: U32, +pp: Nat) -> Type:
 
 # a run and size token: its magnitude bits read, the coefficient stored at its index
 def sim.run(
+  +cls: Bool,
   c1: Bool,
   c2: Bool,
   +pp: Nat,
@@ -3345,26 +3390,26 @@ def sim.run(
   +rest: List<&2, Laws.JTok>,
   +rr: List<&2, Bool>,
   +f1: {Bool.and(rshort(s1), roct8(s1)) == True{} : Bool},
-  +er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, M3.acbits(rest), rr)) : List<&2, Bool>},
+  +er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)) : List<&2, Bool>},
   hk: RunOk(c1, c2, sym, ex),
   hr: RunRest(rest, kk, sym, pp),
-  ih: IhAc(rest, pp, rr)
+  ih: IhAc(cls, rest, pp, rr)
 ) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.run.b(c1, c2, U32.and(15, sym), (kk + U32.shrn(sym, 4n) : U32), rbits(s1,
-  1), zz, 1), actb()), rr):
+  1), zz, 1), actab(cls)), rr):
   match c1:
     case True{}:
       Empty.absurd(AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.run.b(True{}, c2, U32.and(15, sym), (kk + U32.shrn(sym,
-        4n) : U32), rbits(s1, 1), zz, 1), actb()), rr), M1.huf.false_true(hk))
+        4n) : U32), rbits(s1, 1), zz, 1), actab(cls)), rr), M1.huf.false_true(hk))
     case False{}:
       match c2:
         case True{}:
           Empty.absurd(AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.run.b(False{}, True{}, U32.and(15, sym), (kk +
-            U32.shrn(sym, 4n) : U32), rbits(s1, 1), zz, 1), actb()), rr), M1.huf.false_true(hk))
+            U32.shrn(sym, 4n) : U32), rbits(s1, 1), zz, 1), actab(cls)), rr), M1.huf.false_true(hk))
         case False{}:
           +sz = U32.and(15, sym)
           +nk = (kk + U32.shrn(sym, 4n) : U32)
           +ln = List.length(&2, Bool, ex)
-          +mr = List.append(&2, Bool, M3.acbits(rest), rr)
+          +mr = List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)
           +s2 = radv(ln, s1)
           +hs1 = {M3.and_l(rshort(s1), roct8(s1), f1) : {rshort(s1) == True{} : Bool}}
           +h81 = {M3.and_r(rshort(s1), roct8(s1), f1) : {roct8(s1) == True{} : Bool}}
@@ -3381,13 +3426,14 @@ def sim.run(
             el)), rread(ln, s1, 1, 0, hs1, h81, hl))) : {Jpeg.decode.read.n(sz, rbits(s1, 1)) ==
             (rbits(s2, 1), vv) : Jpeg.Bits & U32}}
           sr = Equal.sym(Jpeg.Bits & U32, Jpeg.decode.read.n(sz, rbits(s1, 1)), (rbits(s2, 1), vv), erd)
-          %sr : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.store(_, sz, nk, zz, 1), actb()), rr)
-          sim.st(U32.is_eq((nk + 1 : U32), 64), pp, (nk + 1 : U32), List.set(&2, U32, zz, U32.to_nat(nk),
+          %sr : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.store(_, sz, nk, zz, 1), actab(cls)), rr)
+          sim.st(cls, U32.is_eq((nk + 1 : U32), 64), pp, (nk + 1 : U32), List.set(&2, U32, zz, U32.to_nat(nk),
             Jpeg.decode.extend(sz, vv)), s2, rest, rr, radv_ok(ln, s1, hs1, h81), rem_after(ex, s1, mr, hs1, h81,
             er), hr, ih)
 
 # one token's step, by its kind
 def sim.k(
+  +cls: Bool,
   e0: Bool,
   e2: Bool,
   +pp: Nat,
@@ -3399,25 +3445,28 @@ def sim.k(
   +rest: List<&2, Laws.JTok>,
   +rr: List<&2, Bool>,
   +f1: {Bool.and(rshort(s1), roct8(s1)) == True{} : Bool},
-  +er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, M3.acbits(rest), rr)) : List<&2, Bool>},
+  +er: {rem(s1) == List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr)) : List<&2, Bool>},
   +hk: {Laws.jpg.acok.k(e0, e2, sym, ex, kk) == True{} : Bool},
   +hr: {Laws.jpg.acwf(rest, Laws.jpg.acnx.k(e0, e2, sym, kk, 1n+pp)) == True{} : Bool},
-  ih: IhAc(rest, pp, rr)
-) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.sym.b(e0, e2, sym, rbits(s1, 1), kk, zz, 1), actb()), rr):
+  ih: IhAc(cls, rest, pp, rr)
+) -> AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.sym.b(e0, e2, sym, rbits(s1, 1), kk, zz, 1), actab(cls)), rr):
   match e0:
     case True{}:
-      sim.eob(pp, kk, zz, s1, ex, rest, rr, f1, er, hk, hr)
+      sim.eob(cls, pp, kk, zz, s1, ex, rest, rr, f1, er, hk, hr)
     case False{}:
       match e2:
         case True{}:
-          sim.zrl(U32.is_lt((kk + 16 : U32), 64), U32.is_eq((kk + 16 : U32), 64), pp, kk, zz, s1, ex, rest, rr, f1, er,
+          sim.zrl(cls, U32.is_lt((kk + 16 : U32), 64), U32.is_eq((kk + 16 : U32), 64), pp, kk, zz, s1, ex, rest, rr,
+            f1, er,
             {==}, hk, hr, ih)
         case False{}:
-          sim.run(U32.is_eq(U32.and(15, sym), 0), U32.is_ge((kk + U32.shrn(sym, 4n) : U32), 64), pp, sym, kk, zz, s1,
+          sim.run(cls, U32.is_eq(U32.and(15, sym), 0), U32.is_ge((kk + U32.shrn(sym, 4n) : U32), 64), pp, sym, kk, zz,
+            s1,
             ex, rest, rr, f1, er, hk, hr, ih)
 
 # the decoder's AC loop over AC tokens' bits: every token read, the reader left at the tail, ok still 1
 def huf.sim(
+  +cls: Bool,
   ts: List<&2, Laws.JTok>,
   +left: Nat,
   +kk: U32,
@@ -3426,18 +3475,19 @@ def huf.sim(
   +rr: List<&2, Bool>,
   +hs: {rshort(ss) == True{} : Bool},
   +h8: {roct8(ss) == True{} : Bool},
-  +he: {rem(ss) == List.append(&2, Bool, M3.acbits(ts), rr) : List<&2, Bool>},
+  +he: {rem(ss) == List.append(&2, Bool, Laws.jpg.acbits(cls, ts), rr) : List<&2, Bool>},
   +hw: {Laws.jpg.acwf(ts, Laws.JAcSt{kk, left, False{}}) == True{} : Bool}
-) -> AcRes(Jpeg.decode.ac(left, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actb()), rr):
+) -> AcRes(Jpeg.decode.ac(left, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actab(cls)), rr):
   match ts:
     case Nil{}:
-      Empty.absurd(AcRes(Jpeg.decode.ac(left, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actb()), rr), M1.huf.false_true(hw))
+      Empty.absurd(AcRes(Jpeg.decode.ac(left, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actab(cls)), rr),
+        M1.huf.false_true(hw))
     case +tt <> +rest:
       match tt:
         case Laws.JTok{+sym, +ex}:
           match left:
             case 0n:
-              Empty.absurd(AcRes(Jpeg.decode.ac(0n, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actb()), rr),
+              Empty.absurd(AcRes(Jpeg.decode.ac(0n, Jpeg.Ac{kk, zz, rbits(ss, 1), 0, 1}, actab(cls)), rr),
                 M1.huf.false_true(hw))
             case 1n+ +pp:
               +e0 = U32.is_eq(sym, 0)
@@ -3450,38 +3500,37 @@ def huf.sim(
               +hr = {M1.also_r(Laws.jpg.acok(Laws.JTok{sym, ex}, Laws.JAcSt{kk, 1n+pp, False{}}), Laws.jpg.acwf(rest,
                 Laws.jpg.acnx(Laws.JTok{sym, ex}, Laws.JAcSt{kk, 1n+pp,
                 False{}})), hw) : {Laws.jpg.acwf(rest, Laws.jpg.acnx.k(e0, e2, sym, kk, 1n+pp)) == True{} : Bool}}
-              +cc = M3.code.ac(sym)
-              +tl = List.append(&2, Bool, ex, List.append(&2, Bool, M3.acbits(rest), rr))
+              +cc = Laws.jpg.acode(cls, sym)
+              +tl = List.append(&2, Bool, ex, List.append(&2, Bool, Laws.jpg.acbits(cls, rest), rr))
               +he1 = {Equal.trans(List<&2, Bool>, rem(ss), List.append(&2, Bool, List.append(&2, Bool, cc,
-                List.append(&2, Bool, ex, M3.acbits(rest))), rr), List.append(&2, Bool, cc, tl), he,
+                List.append(&2, Bool, ex, Laws.jpg.acbits(cls, rest))), rr), List.append(&2, Bool, cc, tl), he,
                 Equal.trans(List<&2, Bool>, List.append(&2, Bool, List.append(&2, Bool, cc, List.append(&2, Bool, ex,
-                M3.acbits(rest))), rr), List.append(&2, Bool, cc, List.append(&2, Bool, List.append(&2, Bool, ex,
-                M3.acbits(rest)), rr)), List.append(&2, Bool, cc, tl), M3.huf.app_assoc(cc, List.append(&2, Bool, ex,
-                M3.acbits(rest)), rr), Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => List.append(&2, Bool, cc, xs),
-                List.append(&2, Bool, List.append(&2, Bool, ex, M3.acbits(rest)), rr), tl, M3.huf.app_assoc(ex,
-                    M3.acbits(rest),
+                Laws.jpg.acbits(cls, rest))), rr), List.append(&2, Bool, cc, List.append(&2, Bool, List.append(&2,
+                  Bool, ex,
+                Laws.jpg.acbits(cls, rest)), rr)), List.append(&2, Bool, cc, tl), M3.huf.app_assoc(cc, List.append(&2,
+                  Bool, ex,
+                Laws.jpg.acbits(cls, rest)), rr), Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => List.append(&2,
+                  Bool, cc, xs),
+                List.append(&2, Bool, List.append(&2, Bool, ex, Laws.jpg.acbits(cls, rest)), rr), tl,
+                  M3.huf.app_assoc(ex,
+                    Laws.jpg.acbits(cls, rest),
                 rr)))) : {rem(ss) == List.append(&2, Bool, cc, tl) : List<&2, Bool>}}
               +s1 = radv(List.length(&2, Bool, cc), ss)
-              +eh = {huff.ac(ss, 1, sym, tl, hs, h8, he1, memb.ac(Jenc.encode.acsyms(), sym, M3.and_l(Laws.jpg.memb(sym,
-                Jenc.encode.acsyms()), Laws.jpg.acok.k(e0, e2, sym, ex, kk), ha), all.ac.ok())) : {Jpeg.decode.huff(16n,
-                Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)}, actb()) == Jpeg.Hit{sym, rbits(s1, 1), 1} : Jpeg.Hit}}
-              sh = Equal.sym(Jpeg.Hit, Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)}, actb()),
+              +eh = {huff.ac(cls, ss, 1, sym, tl, hs, h8, he1, memb.ac(cls, Jenc.encode.acsyms(), sym,
+                M3.and_l(Laws.jpg.memb(sym,
+                Jenc.encode.acsyms()), Laws.jpg.acok.k(e0, e2, sym, ex, kk), ha),
+                  all.ac.ok(cls))) : {Jpeg.decode.huff(16n,
+                Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)}, actab(cls)) == Jpeg.Hit{sym, rbits(s1, 1), 1} : Jpeg.Hit}}
+              sh = Equal.sym(Jpeg.Hit, Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)}, actab(cls)),
                 Jpeg.Hit{sym, rbits(s1, 1), 1}, eh)
-              %sh : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.step(_, kk, zz, 1), actb()), rr)
-              sim.k(e0, e2, pp, sym, kk, zz, s1, ex, rest, rr, radv_ok(List.length(&2, Bool, cc), ss, hs, h8),
+              %sh : AcRes(Jpeg.decode.ac(pp, Jpeg.decode.ac.step(_, kk, zz, 1), actab(cls)), rr)
+              sim.k(cls, e0, e2, pp, sym, kk, zz, s1, ex, rest, rr, radv_ok(List.length(&2, Bool, cc), ss, hs, h8),
                 rem_after(cc, ss, tl, hs, h8, he1), M3.and_r(Laws.jpg.memb(sym, Jenc.encode.acsyms()),
                   Laws.jpg.acok.k(e0, e2,
-                sym, ex, kk), ha), hr, k2 => z2 => s2 => a2 => b2 => c2 => d2 => huf.sim(rest, pp, k2, z2, s2, rr, a2,
+                sym, ex, kk), ha), hr, k2 => z2 => s2 => a2 => b2 => c2 => d2 => huf.sim(cls, rest, pp, k2, z2, s2,
+                  rr, a2,
                     b2,
                 c2, d2))
-
-# the DC table the decoder holds, in groups
-def dctb() -> Jpeg.Huff:
-  dctab()
-
-# the quantisation table the decoder holds for the encoder's frame: 64 ones
-def ones64() -> List<&2, U32>:
-  List.replicate(U32, 64n, 1)
 
 # the reader and the ok flag of a decoded block
 def blkbo(bk: Jpeg.Blk) -> Jpeg.Bits & U32:
@@ -3511,18 +3560,22 @@ def blk.ac.eq(
     case Jpeg.Ac{_k, _zz, _bits, _d, _ok}:
       {==}
 
-# a block from an AC loop that ended well
+# a block from an AC loop that ended well, with a quantisation table of 64 entries
 def blk.from.ac(
   xx: Jpeg.Ac,
   +pred: U32,
+  +qt: List<&2, U32>,
+  +hq: {Jpeg.decode.qok(qt) == 1 : U32},
   +rr: List<&2, Bool>,
   res: AcRes(xx, rr)
-) -> BlkRes(Jpeg.decode.block.ac(xx, pred, ones64(), Jpeg.decode.qok(ones64())), rr):
+) -> BlkRes(Jpeg.decode.block.ac(xx, pred, qt, Jpeg.decode.qok(qt)), rr):
   (se, e1, e2, e3) = res
-  +qo = Jpeg.decode.qok(ones64())
-  (se, Equal.trans(Jpeg.Bits & U32, blkbo(Jpeg.decode.block.ac(xx, pred, ones64(), qo)), bomul(acbo(xx), qo),
-    (rbits(se, 1), 1), blk.ac.eq(xx, pred, ones64(), qo), Equal.cong(Jpeg.Bits & U32, Jpeg.Bits & U32, bo =>
-    bomul(bo, qo), acbo(xx), (rbits(se, 1), 1), e1)), e2, e3)
+  +qo = Jpeg.decode.qok(qt)
+  (se, Equal.trans(Jpeg.Bits & U32, blkbo(Jpeg.decode.block.ac(xx, pred, qt, qo)), bomul(acbo(xx), qo),
+    (rbits(se, 1), 1), blk.ac.eq(xx, pred, qt, qo), Equal.trans(Jpeg.Bits & U32, bomul(acbo(xx), qo),
+    bomul((rbits(se, 1), 1), qo), (rbits(se, 1), 1), Equal.cong(Jpeg.Bits & U32, Jpeg.Bits & U32, bo => bomul(bo,
+    qo), acbo(xx), (rbits(se, 1), 1), e1), Equal.cong(U32, Jpeg.Bits & U32, oo => bomul((rbits(se, 1), 1), oo), qo,
+    1, hq))), e2, e3)
 
 # a list of length zero is empty
 def len0(
@@ -3537,24 +3590,27 @@ def len0(
 
 # the DC magnitude, none for size 0, then the AC loop
 def bsim.z(
+  +cls: Bool,
   zz: Bool,
   +dcs: U32,
   +dcx: List<&2, Bool>,
   +acs: List<&2, Laws.JTok>,
   +pred: U32,
+  +qt: List<&2, U32>,
+  +hq: {Jpeg.decode.qok(qt) == 1 : U32},
   +s1: RS,
   +rr: List<&2, Bool>,
   +f1: {Bool.and(rshort(s1), roct8(s1)) == True{} : Bool},
-  +er: {rem(s1) == List.append(&2, Bool, dcx, List.append(&2, Bool, M3.acbits(acs), rr)) : List<&2, Bool>},
+  +er: {rem(s1) == List.append(&2, Bool, dcx, List.append(&2, Bool, Laws.jpg.acbits(cls, acs), rr)) : List<&2, Bool>},
   +hz: {U32.is_eq(dcs, 0) == zz : Bool},
   +hl: {Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(dcs)) == True{} : Bool},
   +hw: {Laws.jpg.acwf(acs, Laws.JAcSt{1, 63n, False{}}) == True{} : Bool}
-) -> BlkRes(Jpeg.decode.block.cat(zz, dcs, rbits(s1, 1), pred, 1, actb(), ones64(), Jpeg.decode.qok(ones64())), rr):
+) -> BlkRes(Jpeg.decode.block.cat(zz, dcs, rbits(s1, 1), pred, 1, actab(cls), qt, Jpeg.decode.qok(qt)), rr):
   match zz:
     case True{}:
       +hs1 = {M3.and_l(rshort(s1), roct8(s1), f1) : {rshort(s1) == True{} : Bool}}
       +h81 = {M3.and_r(rshort(s1), roct8(s1), f1) : {roct8(s1) == True{} : Bool}}
-      +mr = List.append(&2, Bool, M3.acbits(acs), rr)
+      +mr = List.append(&2, Bool, Laws.jpg.acbits(cls, acs), rr)
       +dz = {M1.ueq(dcs, 0, hz) : {dcs == 0 : U32}}
       +hl0 = {Equal.trans(Bool, Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(0)), Nat.is_eq(List.length(&2, Bool,
         dcx), U32.to_nat(dcs)), True{}, Equal.cong(U32, Bool, xx => Nat.is_eq(List.length(&2, Bool, dcx),
@@ -3564,12 +3620,12 @@ def bsim.z(
         List<&2, Bool>, xs => List.append(&2, Bool, xs, mr), dcx, [], len0(dcx, hl0))) : {rem(s1) == mr :
         List<&2, Bool>}}
       +dc = (pred + Jpeg.decode.extend(0, 0) : U32)
-      blk.from.ac(Jpeg.decode.ac(63n, Jpeg.Ac{1, dc <> Jpeg.decode.zeros(63n, []), rbits(s1, 1), 0, 1}, actb()),
-        dc, rr, huf.sim(acs, 63n, 1, dc <> Jpeg.decode.zeros(63n, []), s1, rr, hs1, h81, e1, hw))
+      blk.from.ac(Jpeg.decode.ac(63n, Jpeg.Ac{1, dc <> Jpeg.decode.zeros(63n, []), rbits(s1, 1), 0, 1}, actab(cls)),
+        dc, qt, hq, rr, huf.sim(cls, acs, 63n, 1, dc <> Jpeg.decode.zeros(63n, []), s1, rr, hs1, h81, e1, hw))
     case False{}:
       +hs1 = {M3.and_l(rshort(s1), roct8(s1), f1) : {rshort(s1) == True{} : Bool}}
       +h81 = {M3.and_r(rshort(s1), roct8(s1), f1) : {roct8(s1) == True{} : Bool}}
-      +mr = List.append(&2, Bool, M3.acbits(acs), rr)
+      +mr = List.append(&2, Bool, Laws.jpg.acbits(cls, acs), rr)
       +ln = List.length(&2, Bool, dcx)
       +s2 = radv(ln, s1)
       +el = {M1.ras.nat_eq_true(ln, U32.to_nat(dcs), hl) : {ln == U32.to_nat(dcs) : Nat}}
@@ -3585,119 +3641,327 @@ def bsim.z(
         hs1, h81, hl2))) : {Jpeg.decode.read.n(dcs, rbits(s1, 1)) == (rbits(s2, 1), vv) : Jpeg.Bits & U32}}
       +dc = (pred + Jpeg.decode.extend(dcs, vv) : U32)
       sr = Equal.sym(Jpeg.Bits & U32, Jpeg.decode.read.n(dcs, rbits(s1, 1)), (rbits(s2, 1), vv), erd)
-      %sr : BlkRes(Jpeg.decode.block.diff(_, dcs, pred, 1, actb(), ones64(), Jpeg.decode.qok(ones64())), rr)
-      blk.from.ac(Jpeg.decode.ac(63n, Jpeg.Ac{1, dc <> Jpeg.decode.zeros(63n, []), rbits(s2, 1), 0, 1}, actb()),
-        dc, rr, huf.sim(acs, 63n, 1, dc <> Jpeg.decode.zeros(63n, []), s2, rr, M3.and_l(rshort(s2), roct8(s2),
+      %sr : BlkRes(Jpeg.decode.block.diff(_, dcs, pred, 1, actab(cls), qt, Jpeg.decode.qok(qt)), rr)
+      blk.from.ac(Jpeg.decode.ac(63n, Jpeg.Ac{1, dc <> Jpeg.decode.zeros(63n, []), rbits(s2, 1), 0, 1}, actab(cls)),
+        dc, qt, hq, rr, huf.sim(cls, acs, 63n, 1, dc <> Jpeg.decode.zeros(63n, []), s2, rr, M3.and_l(rshort(s2),
+        roct8(s2),
         radv_ok(ln, s1, hs1, h81)), M3.and_r(rshort(s2), roct8(s2), radv_ok(ln, s1, hs1, h81)),
         rem_after(dcx, s1, mr, hs1, h81, er), hw))
 
 # the decoder reads one block's bits whole: the reader left at the tail, ok still 1
 def bsim(
-  bt: Laws.JBlkTok,
+  +cls: Bool,
+  +dcs: U32,
+  +dcx: List<&2, Bool>,
+  +acs: List<&2, Laws.JTok>,
   +pred: U32,
+  +qt: List<&2, U32>,
+  +hq: {Jpeg.decode.qok(qt) == 1 : U32},
   +ss: RS,
   +rr: List<&2, Bool>,
   +hs: {rshort(ss) == True{} : Bool},
   +h8: {roct8(ss) == True{} : Bool},
-  +he: {rem(ss) == List.append(&2, Bool, M3.blkbits(bt), rr) : List<&2, Bool>},
-  +hw: {Laws.jpg.blkwf(bt) == True{} : Bool}
-) -> BlkRes(Jpeg.decode.block.go(rbits(ss, 1), pred, dctb(), actb(), ones64()), rr):
-  match bt:
-    case Laws.JBlkTok{+dcs, +dcx, +acs}:
-      +cc = M3.code.dc(dcs)
-      +tl = List.append(&2, Bool, dcx, List.append(&2, Bool, M3.acbits(acs), rr))
-      +he1 = {Equal.trans(List<&2, Bool>, rem(ss), List.append(&2, Bool, List.append(&2, Bool, cc, List.append(&2,
-        Bool, dcx, M3.acbits(acs))), rr), List.append(&2, Bool, cc, tl), he, Equal.trans(List<&2, Bool>,
-        List.append(&2, Bool, List.append(&2, Bool, cc, List.append(&2, Bool, dcx, M3.acbits(acs))), rr),
-        List.append(&2, Bool, cc, List.append(&2, Bool, List.append(&2, Bool, dcx, M3.acbits(acs)), rr)),
-        List.append(&2, Bool, cc, tl), M3.huf.app_assoc(cc, List.append(&2, Bool, dcx, M3.acbits(acs)), rr),
-        Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => List.append(&2, Bool, cc, xs), List.append(&2, Bool,
-        List.append(&2, Bool, dcx, M3.acbits(acs)), rr), tl, M3.huf.app_assoc(dcx, M3.acbits(acs), rr)))) : {rem(ss) ==
-        List.append(&2, Bool, cc, tl) : List<&2, Bool>}}
-      +ha = {M3.and_r(Laws.jpg.memb(dcs, Jenc.encode.dcsyms()), Bool.and(Nat.is_eq(List.length(&2, Bool, dcx),
-        U32.to_nat(dcs)), Laws.jpg.acwf(acs, Laws.JAcSt{1, 63n, False{}})), hw) : {Bool.and(Nat.is_eq(List.length(&2,
-          Bool, dcx),
-        U32.to_nat(dcs)), Laws.jpg.acwf(acs, Laws.JAcSt{1, 63n, False{}})) == True{} : Bool}}
-      +s1 = radv(List.length(&2, Bool, cc), ss)
-      +eh = {huff.dc(ss, 1, dcs, tl, hs, h8, he1, memb.dc(Jenc.encode.dcsyms(), dcs, M3.and_l(Laws.jpg.memb(dcs,
-        Jenc.encode.dcsyms()), Bool.and(Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(dcs)), Laws.jpg.acwf(acs,
-          Laws.JAcSt{1,
-        63n, False{}})), hw), all.dc.ok())) : {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)},
-        dctb()) == Jpeg.Hit{dcs, rbits(s1, 1), 1} : Jpeg.Hit}}
-      sh = Equal.sym(Jpeg.Hit, Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)}, dctb()), Jpeg.Hit{dcs,
-        rbits(s1, 1), 1}, eh)
-      %sh : BlkRes(Jpeg.decode.block.dc(_, pred, actb(), ones64(), Jpeg.decode.qok(ones64())), rr)
-      bsim.z(U32.is_eq(dcs, 0), dcs, dcx, acs, pred, s1, rr, radv_ok(List.length(&2, Bool, cc), ss, hs, h8),
-        rem_after(cc, ss, tl, hs, h8, he1), {==}, M3.and_l(Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(dcs)),
-        Laws.jpg.acwf(acs, Laws.JAcSt{1, 63n, False{}}), ha), M3.and_r(Nat.is_eq(List.length(&2, Bool, dcx),
-          U32.to_nat(dcs)),
-        Laws.jpg.acwf(acs, Laws.JAcSt{1, 63n, False{}}), ha))
+  +he: {rem(ss) == List.append(&2, Bool, Laws.jpg.blkbits(Laws.JBlkTok{cls, dcs, dcx, acs}), rr) : List<&2, Bool>},
+  +hw: {Laws.jpg.blkwf(Laws.JBlkTok{cls, dcs, dcx, acs}) == True{} : Bool}
+) -> BlkRes(Jpeg.decode.block.go(rbits(ss, 1), pred, dctab(cls), actab(cls), qt), rr):
+  +cc = Laws.jpg.dcode(cls, dcs)
+  +tl = List.append(&2, Bool, dcx, List.append(&2, Bool, Laws.jpg.acbits(cls, acs), rr))
+  +he1 = {Equal.trans(List<&2, Bool>, rem(ss), List.append(&2, Bool, List.append(&2, Bool, cc, List.append(&2,
+    Bool, dcx, Laws.jpg.acbits(cls, acs))), rr), List.append(&2, Bool, cc, tl), he, Equal.trans(List<&2, Bool>,
+    List.append(&2, Bool, List.append(&2, Bool, cc, List.append(&2, Bool, dcx, Laws.jpg.acbits(cls, acs))), rr),
+    List.append(&2, Bool, cc, List.append(&2, Bool, List.append(&2, Bool, dcx, Laws.jpg.acbits(cls, acs)), rr)),
+    List.append(&2, Bool, cc, tl), M3.huf.app_assoc(cc, List.append(&2, Bool, dcx, Laws.jpg.acbits(cls, acs)), rr),
+    Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => List.append(&2, Bool, cc, xs), List.append(&2, Bool,
+    List.append(&2, Bool, dcx, Laws.jpg.acbits(cls, acs)), rr), tl, M3.huf.app_assoc(dcx, Laws.jpg.acbits(cls, acs),
+      rr)))) : {rem(ss) ==
+    List.append(&2, Bool, cc, tl) : List<&2, Bool>}}
+  +ha = {M3.and_r(Laws.jpg.memb(dcs, Jenc.encode.dcsyms()), Bool.and(Nat.is_eq(List.length(&2, Bool, dcx),
+    U32.to_nat(dcs)), Laws.jpg.acwf(acs, Laws.JAcSt{1, 63n, False{}})), hw) : {Bool.and(Nat.is_eq(List.length(&2,
+      Bool, dcx),
+    U32.to_nat(dcs)), Laws.jpg.acwf(acs, Laws.JAcSt{1, 63n, False{}})) == True{} : Bool}}
+  +s1 = radv(List.length(&2, Bool, cc), ss)
+  +eh = {huff.dc(cls, ss, 1, dcs, tl, hs, h8, he1, memb.dc(cls, Jenc.encode.dcsyms(), dcs, M3.and_l(Laws.jpg.memb(dcs,
+    Jenc.encode.dcsyms()), Bool.and(Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(dcs)), Laws.jpg.acwf(acs,
+      Laws.JAcSt{1,
+    63n, False{}})), hw), all.dc.ok(cls))) : {Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)},
+    dctab(cls)) == Jpeg.Hit{dcs, rbits(s1, 1), 1} : Jpeg.Hit}}
+  sh = Equal.sym(Jpeg.Hit, Jpeg.decode.huff(16n, Jpeg.Ask{None{}, 0, 0, rbits(ss, 1)}, dctab(cls)), Jpeg.Hit{dcs,
+    rbits(s1, 1), 1}, eh)
+  %sh : BlkRes(Jpeg.decode.block.dc(_, pred, actab(cls), qt, Jpeg.decode.qok(qt)), rr)
+  bsim.z(cls, U32.is_eq(dcs, 0), dcs, dcx, acs, pred, qt, hq, s1, rr, radv_ok(List.length(&2, Bool, cc), ss, hs, h8),
+    rem_after(cc, ss, tl, hs, h8, he1), {==}, M3.and_l(Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(dcs)),
+    Laws.jpg.acwf(acs, Laws.JAcSt{1, 63n, False{}}), ha), M3.and_r(Nat.is_eq(List.length(&2, Bool, dcx),
+      U32.to_nat(dcs)),
+    Laws.jpg.acwf(acs, Laws.JAcSt{1, 63n, False{}}), ha))
 
-# the tables the decoder holds after the encoder's header, the Huffman tables in groups
-def tabsg() -> Jpeg.Tabs:
-  Jpeg.Tabs{List.replicate(U32, 64n, 1), [], [], [], dctb(), Jpeg.decode.huff0(), Jpeg.decode.huff0(),
-    Jpeg.decode.huff0(), actb(), Jpeg.decode.huff0(), Jpeg.decode.huff0(), Jpeg.decode.huff0()}
+# a class's quantisation table the encoder's DQT gives the decoder: K.1 at quality qq for luminance, K.2 for
+# chrominance, in zigzag order
+def qof(+cls: Bool, +qq: U32) -> List<&2, U32>:
+  match cls:
+    case False{}:
+      Jenc.encode.qz(Jenc.encode.lumq(), qq)
+    case True{}:
+      Jenc.encode.qz(Jenc.encode.chrq(), qq)
 
-# the decoder's tables after the encoder's header are the ones in groups
-def tabs.eq() -> {Laws.jpg.enc.tabs() == tabsg() : Jpeg.Tabs}:
-  Equal.trans(Jpeg.Tabs, Laws.jpg.enc.tabs(), Jpeg.Tabs{List.replicate(U32, 64n, 1), [], [], [], dctb(),
-    Jpeg.decode.huff0(), Jpeg.decode.huff0(), Jpeg.decode.huff0(), Jpeg.decode.canon(272n, 0n,
-    Jenc.encode.accounts(), Jenc.encode.acsyms(), 0, 0, [], [], []), Jpeg.decode.huff0(), Jpeg.decode.huff0(),
-    Jpeg.decode.huff0()}, tabsg(), Equal.cong(Jpeg.Huff, Jpeg.Tabs, hh => Jpeg.Tabs{List.replicate(U32, 64n, 1), [],
-    [], [], hh, Jpeg.decode.huff0(), Jpeg.decode.huff0(), Jpeg.decode.huff0(), Jpeg.decode.canon(272n, 0n,
-    Jenc.encode.accounts(), Jenc.encode.acsyms(), 0, 0, [], [], []), Jpeg.decode.huff0(), Jpeg.decode.huff0(),
-    Jpeg.decode.huff0()}, Jpeg.decode.canon(272n, 0n, Jenc.encode.dccounts(), Jenc.encode.dcsyms(), 0, 0, [], [], []),
-    dctb(), dctab.eq()), Equal.cong(Jpeg.Huff, Jpeg.Tabs, hh => Jpeg.Tabs{List.replicate(U32, 64n, 1), [], [],
-    [], dctb(), Jpeg.decode.huff0(), Jpeg.decode.huff0(), Jpeg.decode.huff0(), hh, Jpeg.decode.huff0(),
-    Jpeg.decode.huff0(), Jpeg.decode.huff0()}, Jpeg.decode.canon(272n, 0n, Jenc.encode.accounts(),
-    Jenc.encode.acsyms(), 0, 0, [], [], []), actb(), actab.eq()))
+# a class's quantisation table has its 64 entries
+def qof.ok(+cls: Bool, +qq: U32) -> {Jpeg.decode.qok(qof(cls, qq)) == 1 : U32}:
+  match cls:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
 
-# an entry of [0, 0, 0] at a natural index, or its default
-def at000.n(nn: Nat) -> {Jpeg.decode.at.m(List.get(&2, U32, [0, 0, 0], nn)) == 0 : U32}:
+# a block of class cls at scan component cc of a layout's frame is one its tables hold
+def ClsOk(+kd: Jenc.Layout, +cls: Bool, +cc: U32, +ww: U32, +hh: U32) -> Data:
+  {Laws.jpg.clsok(cls, cc, Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)) == True{} : Bool}
+
+# the DC table the encoder's header leaves at a class's table number is the class's, in groups
+def dcsel(
+  +cls: Bool,
+  +qq: U32
+) -> {Jpeg.decode.dc.get(Laws.jpg.enc.tabs(Jenc.K444{}, qq),
+  Laws.jpg.bitn(cls)) == dctab(cls) :
+  Jpeg.Huff}:
+  match cls:
+    case False{}:
+      dctab.eq(False{})
+    case True{}:
+      dctab.eq(True{})
+
+# the AC table the encoder's header leaves at a class's table number is the class's, in groups
+def acsel(
+  +cls: Bool,
+  +qq: U32
+) -> {Jpeg.decode.ac.get(Laws.jpg.enc.tabs(Jenc.K444{}, qq),
+  Laws.jpg.bitn(cls)) == actab(cls) :
+  Jpeg.Huff}:
+  match cls:
+    case False{}:
+      actab.eq(False{})
+    case True{}:
+      actab.eq(True{})
+
+# the quantisation table the encoder's header leaves at a class's table number is the class's
+def qsel(
+  +cls: Bool,
+  +qq: U32
+) -> {Jpeg.decode.q.get(Laws.jpg.enc.tabs(Jenc.K444{}, qq),
+  Laws.jpg.bitn(cls)) == qof(cls, qq) :
+  List<&2, U32>}:
+  match cls:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a block read with the tables at a class's table numbers is read with the class's tables
+def selc(
+  +cls: Bool,
+  +qq: U32,
+  +bits: Jpeg.Bits,
+  +pred: U32
+) -> {Jpeg.decode.block.go(bits, pred, Jpeg.decode.dc.get(Laws.jpg.enc.tabs(Jenc.K444{}, qq), Laws.jpg.bitn(cls)),
+  Jpeg.decode.ac.get(Laws.jpg.enc.tabs(Jenc.K444{}, qq), Laws.jpg.bitn(cls)),
+  Jpeg.decode.q.get(Laws.jpg.enc.tabs(Jenc.K444{}, qq),
+  Laws.jpg.bitn(cls))) == Jpeg.decode.block.go(bits, pred, dctab(cls), actab(cls), qof(cls, qq)) : Jpeg.Blk}:
+  +tb = Laws.jpg.enc.tabs(Jenc.K444{}, qq)
+  +kk = Laws.jpg.bitn(cls)
+  Equal.trans(Jpeg.Blk, Jpeg.decode.block.go(bits, pred, Jpeg.decode.dc.get(tb, kk), Jpeg.decode.ac.get(tb, kk),
+    Jpeg.decode.q.get(tb, kk)), Jpeg.decode.block.go(bits, pred, dctab(cls), Jpeg.decode.ac.get(tb, kk),
+    Jpeg.decode.q.get(tb, kk)), Jpeg.decode.block.go(bits, pred, dctab(cls), actab(cls), qof(cls, qq)),
+    Equal.cong(Jpeg.Huff, Jpeg.Blk, hf => Jpeg.decode.block.go(bits, pred, hf, Jpeg.decode.ac.get(tb, kk),
+    Jpeg.decode.q.get(tb, kk)), Jpeg.decode.dc.get(tb, kk), dctab(cls), dcsel(cls, qq)), Equal.trans(Jpeg.Blk,
+    Jpeg.decode.block.go(bits, pred, dctab(cls), Jpeg.decode.ac.get(tb, kk), Jpeg.decode.q.get(tb, kk)),
+    Jpeg.decode.block.go(bits, pred, dctab(cls), actab(cls), Jpeg.decode.q.get(tb, kk)), Jpeg.decode.block.go(bits,
+    pred, dctab(cls), actab(cls), qof(cls, qq)), Equal.cong(Jpeg.Huff, Jpeg.Blk, hf => Jpeg.decode.block.go(bits,
+    pred, dctab(cls), hf, Jpeg.decode.q.get(tb, kk)), Jpeg.decode.ac.get(tb, kk), actab(cls), acsel(cls, qq)),
+    Equal.cong(List<&2, U32>, Jpeg.Blk, qs => Jpeg.decode.block.go(bits, pred, dctab(cls), actab(cls), qs),
+    Jpeg.decode.q.get(tb, kk), qof(cls, qq), qsel(cls, qq))))
+
+# a block of a class, at a scan component of the encoder's 4:4:4 frame whose tables are the class's, is read with
+# the class's tables
+def selok3(
+  +cls: Bool,
+  +cc: U32,
+  +bits: Jpeg.Bits,
+  +preds: Jpeg.Preds,
+  +ww: U32,
+  +hh: U32,
+  +qq: U32,
+  +hc: ClsOk(Jenc.K444{}, cls, cc, ww, hh)
+) -> {Jpeg.decode.block.of(bits, cc, preds, Laws.jpg.enc.frame(Jenc.K444{}, ww, hh), Laws.jpg.enc.scan(Jenc.K444{}),
+  Laws.jpg.enc.tabs(Jenc.K444{}, qq)) == Jpeg.decode.block.go(bits, Jpeg.decode.pred.get(preds, cc), dctab(cls),
+  actab(cls),
+  qof(cls, qq)) : Jpeg.Blk}:
+  +kk = Laws.jpg.bitn(cls)
+  +tb = Laws.jpg.enc.tabs(Jenc.K444{}, qq)
+  +pr = Jpeg.decode.pred.get(preds, cc)
+  +ti = Jpeg.decode.at([0, 1, 1], cc)
+  +fi = Jpeg.decode.at([0, 1, 1], Jpeg.decode.index([1, 2, 3], False{}, Jpeg.decode.at([1, 2, 3], cc), 0))
+  +hr = {M3.and_r(U32.is_eq(ti, kk), Bool.and(U32.is_eq(ti, kk), U32.is_eq(fi, kk)), hc) : {Bool.and(U32.is_eq(ti,
+    kk), U32.is_eq(fi, kk)) == True{} : Bool}}
+  e1 = Equal.sym(U32, ti, kk, M1.ueq(ti, kk, M3.and_l(U32.is_eq(ti, kk), Bool.and(U32.is_eq(ti, kk), U32.is_eq(fi,
+    kk)), hc)))
+  e3 = Equal.sym(U32, fi, kk, M1.ueq(fi, kk, M3.and_r(U32.is_eq(ti, kk), U32.is_eq(fi, kk), hr)))
+  %e1 : {Jpeg.decode.block.go(bits, pr, Jpeg.decode.dc.get(tb, _), Jpeg.decode.ac.get(tb, _), Jpeg.decode.q.get(tb,
+    fi)) == Jpeg.decode.block.go(bits, pr, dctab(cls), actab(cls), qof(cls, qq)) : Jpeg.Blk}
+  %e3 : {Jpeg.decode.block.go(bits, pr, Jpeg.decode.dc.get(tb, kk), Jpeg.decode.ac.get(tb, kk),
+    Jpeg.decode.q.get(tb, _)) == Jpeg.decode.block.go(bits, pr, dctab(cls), actab(cls), qof(cls, qq)) : Jpeg.Blk}
+  selc(cls, qq, bits, pr)
+
+# a gray block read with the tables at table number 0 is read with the luminance tables
+def selcg(
+  +qq: U32,
+  +bits: Jpeg.Bits,
+  +pred: U32
+) -> {Jpeg.decode.block.go(bits, pred, Jpeg.decode.dc.get(Laws.jpg.enc.tabs(Jenc.KGray{}, qq), 0),
+  Jpeg.decode.ac.get(Laws.jpg.enc.tabs(Jenc.KGray{}, qq), 0), Jpeg.decode.q.get(Laws.jpg.enc.tabs(Jenc.KGray{}, qq),
+  0)) == Jpeg.decode.block.go(bits, pred, dctab(False{}), actab(False{}), qof(False{}, qq)) : Jpeg.Blk}:
+  +tb = Laws.jpg.enc.tabs(Jenc.KGray{}, qq)
+  Equal.trans(Jpeg.Blk, Jpeg.decode.block.go(bits, pred, Jpeg.decode.dc.get(tb, 0), Jpeg.decode.ac.get(tb, 0),
+    Jpeg.decode.q.get(tb, 0)), Jpeg.decode.block.go(bits, pred, dctab(False{}), Jpeg.decode.ac.get(tb, 0),
+    Jpeg.decode.q.get(tb, 0)), Jpeg.decode.block.go(bits, pred, dctab(False{}), actab(False{}), qof(False{}, qq)),
+    Equal.cong(Jpeg.Huff, Jpeg.Blk, hf => Jpeg.decode.block.go(bits, pred, hf, Jpeg.decode.ac.get(tb, 0),
+    Jpeg.decode.q.get(tb, 0)), Jpeg.decode.dc.get(tb, 0), dctab(False{}), dctab.eq(False{})),
+    Equal.cong(Jpeg.Huff, Jpeg.Blk, hf => Jpeg.decode.block.go(bits, pred, dctab(False{}), hf, Jpeg.decode.q.get(tb,
+    0)), Jpeg.decode.ac.get(tb, 0), actab(False{}), actab.eq(False{})))
+
+# a luminance block at a scan component of the gray frame whose tables are table 0 is read with the luminance
+# tables
+def selokg(
+  +cc: U32,
+  +bits: Jpeg.Bits,
+  +preds: Jpeg.Preds,
+  +ww: U32,
+  +hh: U32,
+  +qq: U32,
+  +hc: ClsOk(Jenc.KGray{}, False{}, cc, ww, hh)
+) -> {Jpeg.decode.block.of(bits, cc, preds, Laws.jpg.enc.frame(Jenc.KGray{}, ww, hh), Laws.jpg.enc.scan(Jenc.KGray{}),
+  Laws.jpg.enc.tabs(Jenc.KGray{}, qq)) == Jpeg.decode.block.go(bits, Jpeg.decode.pred.get(preds, cc),
+  dctab(False{}), actab(False{}), qof(False{}, qq)) : Jpeg.Blk}:
+  +tb = Laws.jpg.enc.tabs(Jenc.KGray{}, qq)
+  +pr = Jpeg.decode.pred.get(preds, cc)
+  +ti = Jpeg.decode.at([0], cc)
+  +fi = Jpeg.decode.at([0], Jpeg.decode.index([1], False{}, Jpeg.decode.at([1], cc), 0))
+  +hr = {M3.and_r(U32.is_eq(ti, 0), Bool.and(U32.is_eq(ti, 0), U32.is_eq(fi, 0)), hc) : {Bool.and(U32.is_eq(ti, 0),
+    U32.is_eq(fi, 0)) == True{} : Bool}}
+  e1 = Equal.sym(U32, ti, 0, M1.ueq(ti, 0, M3.and_l(U32.is_eq(ti, 0), Bool.and(U32.is_eq(ti, 0), U32.is_eq(fi, 0)),
+    hc)))
+  e3 = Equal.sym(U32, fi, 0, M1.ueq(fi, 0, M3.and_r(U32.is_eq(ti, 0), U32.is_eq(fi, 0), hr)))
+  %e1 : {Jpeg.decode.block.go(bits, pr, Jpeg.decode.dc.get(tb, _), Jpeg.decode.ac.get(tb, _), Jpeg.decode.q.get(tb,
+    fi)) == Jpeg.decode.block.go(bits, pr, dctab(False{}), actab(False{}), qof(False{}, qq)) : Jpeg.Blk}
+  %e3 : {Jpeg.decode.block.go(bits, pr, Jpeg.decode.dc.get(tb, 0), Jpeg.decode.ac.get(tb, 0), Jpeg.decode.q.get(tb,
+    _)) == Jpeg.decode.block.go(bits, pr, dctab(False{}), actab(False{}), qof(False{}, qq)) : Jpeg.Blk}
+  selcg(qq, bits, pr)
+
+# an entry of [0] at a natural index, or its default
+def at0.n(nn: Nat) -> {Jpeg.decode.at.m(List.get(&2, U32, [0], nn)) == 0 : U32}:
   match nn:
     case 0n:
       {==}
-    case 1n+0n:
-      {==}
-    case 1n+1n+0n:
-      {==}
-    case 1n+1n+1n+_m:
+    case 1n+_m:
       {==}
 
-# every entry of [0, 0, 0] is 0, and so is its default
-def at000(+cc: U32) -> {Jpeg.decode.at([0, 0, 0], cc) == 0 : U32}:
-  at000.n(U32.to_nat(cc))
+# every entry of [0] is 0, and so is its default
+def at0(+cc: U32) -> {Jpeg.decode.at([0], cc) == 0 : U32}:
+  at0.n(U32.to_nat(cc))
 
-# a block of the encoder's frame and scan reads with the tables in groups and the quantisation table of ones
-def bof(
-  +bits: Jpeg.Bits,
+# no place of the gray frame holds the chrominance tables
+def gray_cr(
   +cc: U32,
+  +ww: U32,
+  +hh: U32,
+  +hc: ClsOk(Jenc.KGray{}, True{}, cc, ww, hh)
+) -> Empty:
+  +ti = Jpeg.decode.at([0], cc)
+  +hl = {M3.and_l(U32.is_eq(ti, 1), Bool.and(U32.is_eq(ti, 1), U32.is_eq(Jpeg.decode.at([0], Jpeg.decode.index([1],
+    False{}, Jpeg.decode.at([1], cc), 0)), 1)), hc) : {U32.is_eq(ti, 1) == True{} : Bool}}
+  M1.huf.false_true(Equal.trans(Bool, U32.is_eq(0, 1), U32.is_eq(ti, 1), True{}, Equal.cong(U32, Bool, xx =>
+    U32.is_eq(xx, 1), 0, ti, Equal.sym(U32, ti, 0, at0(cc))), hl))
+
+# a block of a class, at a scan component of the encoder's frame of any layout whose tables are the class's, is
+# read with the class's tables (4:2:0's tables and places are 4:4:4's)
+def selok(
+  +kd: Jenc.Layout,
+  +cls: Bool,
+  +cc: U32,
+  +bits: Jpeg.Bits,
   +preds: Jpeg.Preds,
   +ww: U32,
-  +hh: U32
-) -> {Jpeg.decode.block.of(bits, cc, preds, Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(),
-  tabsg()) == Jpeg.decode.block.go(bits, Jpeg.decode.pred.get(preds, cc), dctb(), actb(), ones64()) : Jpeg.Blk}:
-  +ez = at000(cc)
-  +ei = at000(Jpeg.decode.index([1, 2, 3], False{}, Jpeg.decode.at([1, 2, 3], cc), 0))
-  ez1 = Equal.sym(U32, Jpeg.decode.at([0, 0, 0], cc), 0, ez)
-  ei1 = Equal.sym(U32, Jpeg.decode.at([0, 0, 0], Jpeg.decode.index([1, 2, 3], False{}, Jpeg.decode.at([1, 2, 3], cc),
-    0)), 0, ei)
-  %ez1 : {Jpeg.decode.block.go(bits, Jpeg.decode.pred.get(preds, cc), Jpeg.decode.dc.get(tabsg(), _),
-    Jpeg.decode.ac.get(tabsg(), _), Jpeg.decode.q.get(tabsg(), Jpeg.decode.at([0, 0, 0], Jpeg.decode.index([1, 2, 3],
-    False{}, Jpeg.decode.at([1, 2, 3], cc), 0)))) == Jpeg.decode.block.go(bits, Jpeg.decode.pred.get(preds, cc),
-    dctb(), actb(), ones64()) : Jpeg.Blk}
-  %ei1 : {Jpeg.decode.block.go(bits, Jpeg.decode.pred.get(preds, cc), Jpeg.decode.dc.get(tabsg(), 0),
-    Jpeg.decode.ac.get(tabsg(), 0), Jpeg.decode.q.get(tabsg(), _)) == Jpeg.decode.block.go(bits,
-    Jpeg.decode.pred.get(preds, cc), dctb(), actb(), ones64()) : Jpeg.Blk}
-  {==}
+  +hh: U32,
+  +qq: U32,
+  +hc: {Laws.jpg.clsok(cls, cc, Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)) == True{} : Bool}
+) -> {Jpeg.decode.block.of(bits, cc, preds, Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd),
+  Laws.jpg.enc.tabs(kd, qq)) == Jpeg.decode.block.go(bits, Jpeg.decode.pred.get(preds, cc), dctab(cls), actab(cls),
+  qof(cls, qq)) : Jpeg.Blk}:
+  match kd:
+    case Jenc.K444{}:
+      selok3(cls, cc, bits, preds, ww, hh, qq, hc)
+    case Jenc.KGray{}:
+      match cls:
+        case False{}:
+          selokg(cc, bits, preds, ww, hh, qq, hc)
+        case True{}:
+          Empty.absurd({Jpeg.decode.block.of(bits, cc, preds, Laws.jpg.enc.frame(Jenc.KGray{}, ww, hh),
+            Laws.jpg.enc.scan(Jenc.KGray{}), Laws.jpg.enc.tabs(Jenc.KGray{}, qq)) == Jpeg.decode.block.go(bits,
+            Jpeg.decode.pred.get(preds, cc), dctab(True{}), actab(True{}), qof(True{}, qq)) : Jpeg.Blk}, gray_cr(cc,
+            ww, hh, hc))
+    case Jenc.K420{}:
+      selok3(cls, cc, bits, preds, ww, hh, qq, hc)
 
-# the next block after a step of the walk: the component the step names, read with the tables in groups
-def NextBlk(-aa: Jpeg.Adv, +bits: Jpeg.Bits, +preds: Jpeg.Preds, +pred: U32, +cc: U32, +ww: U32, +hh: U32) -> Type:
-  {Jpeg.decode.block.next.go(aa, bits, preds, pred, cc, Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), tabsg()) ==
-    Jpeg.decode.block.go(bits, Jpeg.decode.pred.get(Jpeg.decode.preds.next(0, preds, cc, pred),
-    Jpeg.decode.ctrl.comp(Jpeg.decode.adv.ctrl(aa))), dctb(), actb(), ones64()) : Jpeg.Blk}
+# the place of the decoder's walk: its scan component and data unit
+def cpos(ctrl: Jpeg.Ctrl) -> U32 & U32:
+  match ctrl:
+    case Jpeg.Ctrl{+cc, +bi, _mx, _my, _mcu, _rst}:
+      (cc, bi)
 
-# the walk to the next MCU, in its row or the next: component 0, no restart marker
+# the place after a place, in a frame and scan
+def nxp(pp: U32 & U32, +fr: Jpeg.Frame, +sc: Jpeg.Scan) -> U32 & U32:
+  match pp:
+    case (+cc, +bi):
+      Laws.jpg.nxt(cc, bi, fr, sc)
+
+# the first of a place
+def pfst(pp: U32 & U32) -> U32:
+  match pp:
+    case (+aa, _b):
+      aa
+
+# the second of a place
+def psnd(pp: U32 & U32) -> U32:
+  match pp:
+    case (_a, +bb):
+      bb
+
+# a place is its two parts
+def peta(pp: U32 & U32) -> {pp == (pfst(pp), psnd(pp)) : U32 & U32}:
+  match pp:
+    case (+aa, +bb):
+      {==}
+
+# the walk's scan component is the first of its place
+def comp_fst(ctrl: Jpeg.Ctrl) -> {Jpeg.decode.ctrl.comp(ctrl) == pfst(cpos(ctrl)) : U32}:
+  match ctrl:
+    case Jpeg.Ctrl{+cc, +bi, +mx, +my, +mcu, +rst}:
+      {==}
+
+# the block after a step of the walk with no restart interval: read at the component the step names, no marker
+# read, the predictor kept
+def NextOf(
+  -aa: Jpeg.Adv,
+  +bits: Jpeg.Bits,
+  +preds: Jpeg.Preds,
+  +pred: U32,
+  +cc: U32,
+  +fr: Jpeg.Frame,
+  +sc: Jpeg.Scan,
+  +tb: Jpeg.Tabs
+) -> Type:
+  {Jpeg.decode.block.next.go(aa, bits, preds, pred, cc, fr, sc, tb) == Jpeg.decode.block.of(bits,
+    Jpeg.decode.ctrl.comp(Jpeg.decode.adv.ctrl(aa)), Jpeg.decode.preds.next(0, preds, cc, pred), fr, sc, tb) :
+    Jpeg.Blk}
+
+# the walk to the next MCU, in its row or the next
 def nx.mx(
   inb: Bool,
   +mcu: U32,
@@ -3708,14 +3972,15 @@ def nx.mx(
   +preds: Jpeg.Preds,
   +pred: U32,
   +cc: U32,
-  +ww: U32,
-  +hh: U32
-) -> NextBlk(Jpeg.decode.adv.mx(inb, mcu, mx, my, rst, 0), bits, preds, pred, cc, ww, hh):
+  +fr: Jpeg.Frame,
+  +sc: Jpeg.Scan,
+  +tb: Jpeg.Tabs
+) -> NextOf(Jpeg.decode.adv.mx(inb, mcu, mx, my, rst, 0), bits, preds, pred, cc, fr, sc, tb):
   match inb:
     case True{}:
-      bof(bits, 0, Jpeg.decode.preds.next(0, preds, cc, pred), ww, hh)
+      {==}
     case False{}:
-      bof(bits, 0, Jpeg.decode.preds.next(0, preds, cc, pred), ww, hh)
+      {==}
 
 # the walk to the next component, or to the next MCU
 def nx.comp(
@@ -3725,18 +3990,21 @@ def nx.comp(
   +my: U32,
   +mcu: U32,
   +rst: U32,
+  +ww: U32,
+  +hmax: U32,
   +bits: Jpeg.Bits,
   +preds: Jpeg.Preds,
   +pred: U32,
-  +ww: U32,
-  +hh: U32
-) -> NextBlk(Jpeg.decode.adv.comp(more, cc, mx, my, mcu, rst, ww, 1, 0), bits, preds, pred, cc, ww, hh):
+  +fr: Jpeg.Frame,
+  +sc: Jpeg.Scan,
+  +tb: Jpeg.Tabs
+) -> NextOf(Jpeg.decode.adv.comp(more, cc, mx, my, mcu, rst, ww, hmax, 0), bits, preds, pred, cc, fr, sc, tb):
   match more:
     case True{}:
-      bof(bits, (cc + 1 : U32), Jpeg.decode.preds.next(0, preds, cc, pred), ww, hh)
+      {==}
     case False{}:
-      nx.mx(U32.is_lt((mx + 1 : U32), Jpeg.decode.ceil(ww, (1 * 8 : U32))), (mcu + 1 : U32), (mx + 1 : U32), my, rst,
-        bits, preds, pred, cc, ww, hh)
+      nx.mx(U32.is_lt((mx + 1 : U32), Jpeg.decode.ceil(ww, (hmax * 8 : U32))), (mcu + 1 : U32), (mx + 1 : U32), my,
+        rst, bits, preds, pred, cc, fr, sc, tb)
 
 # the walk to the next data unit, or to the next component
 def nx.bi(
@@ -3747,36 +4015,115 @@ def nx.bi(
   +my: U32,
   +mcu: U32,
   +rst: U32,
+  +ww: U32,
+  +hmax: U32,
+  +ns: U32,
   +bits: Jpeg.Bits,
   +preds: Jpeg.Preds,
   +pred: U32,
-  +ww: U32,
-  +hh: U32
-) -> NextBlk(Jpeg.decode.adv.bi(more, cc, bi, mx, my, mcu, rst, ww, 1, 3, 0), bits, preds, pred, cc, ww, hh):
+  +fr: Jpeg.Frame,
+  +sc: Jpeg.Scan,
+  +tb: Jpeg.Tabs
+) -> NextOf(Jpeg.decode.adv.bi(more, cc, bi, mx, my, mcu, rst, ww, hmax, ns, 0), bits, preds, pred, cc, fr, sc, tb):
   match more:
     case True{}:
-      bof(bits, cc, Jpeg.decode.preds.next(0, preds, cc, pred), ww, hh)
+      {==}
     case False{}:
-      nx.comp(U32.is_lt((cc + 1 : U32), 3), cc, mx, my, mcu, rst, bits, preds, pred, ww, hh)
+      nx.comp(U32.is_lt((cc + 1 : U32), ns), cc, mx, my, mcu, rst, ww, hmax, bits, preds, pred, fr, sc, tb)
 
-# with no restart interval, the decoder's next block is the next component's, read with the tables in groups
+# with no restart interval, the decoder's next block is read at the component its walk names, in any frame
 def bnext(
   +bits: Jpeg.Bits,
   +preds: Jpeg.Preds,
   +pred: U32,
   ctrl: Jpeg.Ctrl,
-  +ww: U32,
-  +hh: U32
-) -> {Jpeg.decode.block.next(bits, preds, pred, ctrl, Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), tabsg(),
-  0) == Jpeg.decode.block.go(bits, Jpeg.decode.pred.get(Jpeg.decode.preds.next(0, preds, Jpeg.decode.ctrl.comp(ctrl),
-  pred), Jpeg.decode.ctrl.comp(Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ctrl, Laws.jpg.enc.frame(ww, hh),
-  Laws.jpg.enc.scan(), 0)))), dctb(), actb(), ones64()) : Jpeg.Blk}:
+  fr: Jpeg.Frame,
+  sc: Jpeg.Scan,
+  +tb: Jpeg.Tabs
+) -> NextOf(Jpeg.decode.adv(ctrl, fr, sc, 0), bits, preds, pred, Jpeg.decode.ctrl.comp(ctrl), fr, sc, tb):
   match ctrl:
     case Jpeg.Ctrl{+cc, +bi, +mx, +my, +mcu, +rst}:
-      +fi = Jpeg.decode.index([1, 2, 3], False{}, Jpeg.decode.at([1, 2, 3], cc), 0)
-      +hi = Jpeg.decode.at([1, 1, 1], fi)
-      +vi = Jpeg.decode.at([1, 1, 1], fi)
-      nx.bi(U32.is_lt((bi + 1 : U32), (hi * vi : U32)), cc, bi, mx, my, mcu, rst, bits, preds, pred, ww, hh)
+      match fr:
+        case Jpeg.Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
+          match sc:
+            case Jpeg.Scan{+ns, +sids, +td, +ta, +ss, +se, +ah}:
+              +fi = Jpeg.decode.index(ids, False{}, Jpeg.decode.at(sids, cc), 0)
+              nx.bi(U32.is_lt((bi + 1 : U32), (Jpeg.decode.at(hs, fi) * Jpeg.decode.at(vs, fi) : U32)), cc, bi, mx,
+                my, mcu, rst, w, hmax, ns, bits, preds, pred, Jpeg.Frame{w, h, nf, ids, hs, vs, tq, hmax, vmax},
+                Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, tb)
+
+# the walk's place after the walk to the next MCU: its first component's first data unit
+def ps.mx(
+  inb: Bool,
+  +mcu: U32,
+  +mx: U32,
+  +my: U32,
+  +rst: U32,
+  +cc: U32,
+  +bi: U32
+) -> {cpos(Jpeg.decode.adv.ctrl(Jpeg.decode.adv.mx(inb, mcu, mx, my, rst, 0))) == Laws.jpg.nxt.k(False{}, False{},
+  cc, bi) : U32 & U32}:
+  match inb:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# the walk's place after the walk to the next component or MCU
+def ps.comp(
+  more: Bool,
+  +cc: U32,
+  +bi: U32,
+  +mx: U32,
+  +my: U32,
+  +mcu: U32,
+  +rst: U32,
+  +ww: U32,
+  +hmax: U32
+) -> {cpos(Jpeg.decode.adv.ctrl(Jpeg.decode.adv.comp(more, cc, mx, my, mcu, rst, ww, hmax, 0))) ==
+  Laws.jpg.nxt.k(False{}, more, cc, bi) : U32 & U32}:
+  match more:
+    case True{}:
+      {==}
+    case False{}:
+      ps.mx(U32.is_lt((mx + 1 : U32), Jpeg.decode.ceil(ww, (hmax * 8 : U32))), (mcu + 1 : U32), (mx + 1 : U32), my,
+        rst, cc, bi)
+
+# the walk's place after the walk to the next data unit, component or MCU
+def ps.bi(
+  more: Bool,
+  +cc: U32,
+  +bi: U32,
+  +mx: U32,
+  +my: U32,
+  +mcu: U32,
+  +rst: U32,
+  +ww: U32,
+  +hmax: U32,
+  +ns: U32
+) -> {cpos(Jpeg.decode.adv.ctrl(Jpeg.decode.adv.bi(more, cc, bi, mx, my, mcu, rst, ww, hmax, ns, 0))) ==
+  Laws.jpg.nxt.k(more, U32.is_lt((cc + 1 : U32), ns), cc, bi) : U32 & U32}:
+  match more:
+    case True{}:
+      {==}
+    case False{}:
+      ps.comp(U32.is_lt((cc + 1 : U32), ns), cc, bi, mx, my, mcu, rst, ww, hmax)
+
+# with no restart interval, the decoder's walk goes to the place after its own, in any frame (T.81 A.2.3)
+def pnext(
+  ctrl: Jpeg.Ctrl,
+  fr: Jpeg.Frame,
+  sc: Jpeg.Scan
+) -> {cpos(Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ctrl, fr, sc, 0))) == nxp(cpos(ctrl), fr, sc) : U32 & U32}:
+  match ctrl:
+    case Jpeg.Ctrl{+cc, +bi, +mx, +my, +mcu, +rst}:
+      match fr:
+        case Jpeg.Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
+          match sc:
+            case Jpeg.Scan{+ns, +sids, +td, +ta, +ss, +se, +ah}:
+              +fi = Jpeg.decode.index(ids, False{}, Jpeg.decode.at(sids, cc), 0)
+              ps.bi(U32.is_lt((bi + 1 : U32), (Jpeg.decode.at(hs, fi) * Jpeg.decode.at(vs, fi) : U32)), cc, bi, mx,
+                my, mcu, rst, w, hmax, ns)
 
 # the flag of a reader and a flag
 def bo.ok(bo: Jpeg.Bits & U32) -> U32:
@@ -3807,77 +4154,225 @@ def FlTy(
   +blk: Jpeg.Blk,
   +ctrl: Jpeg.Ctrl,
   +preds: Jpeg.Preds,
+  +kd: Jenc.Layout,
   +ww: U32,
   +hh: U32,
+  +qq: U32,
   -yy: Array<U32>,
   -cb: Array<U32>,
   -cr: Array<U32>
 ) -> Type:
-  {Laws.jpg.psome(Jpeg.decode.blocks(left, Jpeg.decode.blk.live(blk), blk, ctrl, preds, Laws.jpg.enc.frame(ww, hh),
-    Laws.jpg.enc.scan(), tabsg(), 0, False{}, yy, cb, cr, 1)) == True{} : Bool}
+  {Laws.jpg.psome(Jpeg.decode.blocks(left, Jpeg.decode.blk.live(blk), blk, ctrl, preds, Laws.jpg.enc.frame(kd, ww, hh),
+    Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq), 0, False{}, yy, cb, cr, 1)) == True{} : Bool}
 
-# the decoder's block loop over blocks that each read whole returns a picture
+# the blocks' tags from the place after ctrl, in the encoder's frame
+def FlTag(
+  +_ts: List<&2, Laws.JBlkTok>,
+  +_ctrl: Jpeg.Ctrl,
+  +_kd: Jenc.Layout,
+  +_ww: U32,
+  +_hh: U32
+) -> Data:
+  {Laws.jpg.tagok(_ts, nxp(cpos(_ctrl), Laws.jpg.enc.frame(_kd, _ww, _hh), Laws.jpg.enc.scan(_kd)),
+    Laws.jpg.enc.frame(_kd, _ww,
+    _hh), Laws.jpg.enc.scan(_kd)) == True{} : Bool}
+
+# a block of class cls and then rest, tagged from the place after ct, that place split into its parts
+def FlHt(
+  +cls: Bool,
+  +ct: Jpeg.Ctrl,
+  +rest: List<&2, Laws.JBlkTok>,
+  +kd: Jenc.Layout,
+  +ww: U32,
+  +hh: U32
+) -> Type:
+  {Laws.jpg.also(Laws.jpg.clsok(cls, pfst(nxp(cpos(ct), Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd))),
+    Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)), Laws.jpg.tagok(rest, Laws.jpg.nxt(pfst(nxp(cpos(ct),
+    Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd))), psnd(nxp(cpos(ct), Laws.jpg.enc.frame(kd, ww, hh),
+    Laws.jpg.enc.scan(kd))), Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)), Laws.jpg.enc.frame(kd, ww, hh),
+    Laws.jpg.enc.scan(kd))) == True{} : Bool}
+
+# the class's tables are at the next block's place, from the blocks' tags at the place after ct
+def fl.cls(
+  +cls: Bool,
+  +ct: Jpeg.Ctrl,
+  +rest: List<&2, Laws.JBlkTok>,
+  +kd: Jenc.Layout,
+  +ww: U32,
+  +hh: U32,
+  ht: FlHt(cls, ct, rest, kd, ww, hh)
+) -> {Laws.jpg.clsok(cls, Jpeg.decode.ctrl.comp(Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ct, Laws.jpg.enc.frame(kd, ww,
+  hh), Laws.jpg.enc.scan(kd), 0))), Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)) == True{} : Bool}:
+  +fr = Laws.jpg.enc.frame(kd, ww, hh)
+  +sc = Laws.jpg.enc.scan(kd)
+  +c2 = Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ct, fr, sc, 0))
+  +ep = {pnext(ct, fr, sc) : {cpos(c2) == nxp(cpos(ct), fr, sc) : U32 & U32}}
+  +ec = {Equal.trans(U32, Jpeg.decode.ctrl.comp(c2), pfst(cpos(c2)), pfst(nxp(cpos(ct), fr, sc)), comp_fst(c2),
+    Equal.cong(U32 & U32, U32,
+    pp => pfst(pp), cpos(c2), nxp(cpos(ct), fr, sc), ep)) : {Jpeg.decode.ctrl.comp(c2) == pfst(nxp(cpos(ct), fr,
+      sc)) : U32}}
+  +hc = {M1.also_l(Laws.jpg.clsok(cls, pfst(nxp(cpos(ct), fr, sc)), fr, sc), Laws.jpg.tagok(rest,
+    Laws.jpg.nxt(pfst(nxp(cpos(ct), fr, sc)), psnd(nxp(cpos(ct), fr, sc)), fr, sc), fr, sc), ht) :
+    {Laws.jpg.clsok(cls, pfst(nxp(cpos(ct), fr, sc)), fr, sc) == True{} : Bool}}
+  Equal.trans(Bool, Laws.jpg.clsok(cls, Jpeg.decode.ctrl.comp(c2), fr, sc), Laws.jpg.clsok(cls, pfst(nxp(cpos(ct), fr,
+    sc)), fr, sc), True{},
+    Equal.cong(U32, Bool, kk => Laws.jpg.clsok(cls, kk, fr, sc), Jpeg.decode.ctrl.comp(c2), pfst(nxp(cpos(ct), fr,
+      sc)), ec), hc)
+
+# the rest's tags hold from the next block's place on, from the blocks' tags at the place after ct
+def fl.tag(
+  +cls: Bool,
+  +ct: Jpeg.Ctrl,
+  +rest: List<&2, Laws.JBlkTok>,
+  +kd: Jenc.Layout,
+  +ww: U32,
+  +hh: U32,
+  ht: FlHt(cls, ct, rest, kd, ww, hh)
+) -> {Laws.jpg.tagok(rest, nxp(cpos(Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ct, Laws.jpg.enc.frame(kd, ww, hh),
+  Laws.jpg.enc.scan(kd), 0))), Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)), Laws.jpg.enc.frame(kd, ww, hh),
+  Laws.jpg.enc.scan(kd)) == True{} : Bool}:
+  +fr = Laws.jpg.enc.frame(kd, ww, hh)
+  +sc = Laws.jpg.enc.scan(kd)
+  +c2 = Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ct, fr, sc, 0))
+  +ep = {pnext(ct, fr, sc) : {cpos(c2) == nxp(cpos(ct), fr, sc) : U32 & U32}}
+  +hr = {M1.also_r(Laws.jpg.clsok(cls, pfst(nxp(cpos(ct), fr, sc)), fr, sc), Laws.jpg.tagok(rest,
+    Laws.jpg.nxt(pfst(nxp(cpos(ct), fr, sc)), psnd(nxp(cpos(ct), fr, sc)), fr, sc), fr, sc), ht) :
+    {Laws.jpg.tagok(rest, Laws.jpg.nxt(pfst(nxp(cpos(ct), fr, sc)), psnd(nxp(cpos(ct), fr, sc)), fr, sc), fr,
+      sc) == True{} : Bool}}
+  Equal.trans(Bool, Laws.jpg.tagok(rest, nxp(cpos(c2), fr, sc), fr, sc), Laws.jpg.tagok(rest, nxp(nxp(cpos(ct), fr,
+    sc), fr, sc), fr,
+    sc), True{}, Equal.cong(U32 & U32, Bool, pp => Laws.jpg.tagok(rest, nxp(pp, fr, sc), fr, sc), cpos(c2),
+      nxp(cpos(ct), fr, sc), ep),
+    Equal.trans(Bool, Laws.jpg.tagok(rest, nxp(nxp(cpos(ct), fr, sc), fr, sc), fr, sc), Laws.jpg.tagok(rest,
+      nxp((pfst(nxp(cpos(ct), fr, sc)), psnd(nxp(cpos(ct), fr, sc))), fr, sc), fr,
+    sc), True{}, Equal.cong(U32 & U32, Bool, pp => Laws.jpg.tagok(rest, nxp(pp, fr, sc), fr, sc), nxp(cpos(ct), fr,
+      sc), (pfst(nxp(cpos(ct), fr, sc)), psnd(nxp(cpos(ct), fr, sc))),
+    peta(nxp(cpos(ct), fr, sc))), hr))
+
+# the blocks' tags at the place after ct, that place split into its parts
+def fl.ht(
+  +cls: Bool,
+  +ct: Jpeg.Ctrl,
+  +dcs: U32,
+  +dcx: List<&2, Bool>,
+  +acs: List<&2, Laws.JTok>,
+  +rest: List<&2, Laws.JBlkTok>,
+  +kd: Jenc.Layout,
+  +ww: U32,
+  +hh: U32,
+  ht: FlTag(Laws.JBlkTok{cls, dcs, dcx, acs} <> rest, ct, kd, ww, hh)
+) -> {Laws.jpg.tagok(Laws.JBlkTok{cls, dcs, dcx, acs} <> rest, (pfst(nxp(cpos(ct), Laws.jpg.enc.frame(kd, ww, hh),
+  Laws.jpg.enc.scan(kd))), psnd(nxp(cpos(ct), Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)))),
+  Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)) == True{} : Bool}:
+  +fr = Laws.jpg.enc.frame(kd, ww, hh)
+  +sc = Laws.jpg.enc.scan(kd)
+  +tk = {Laws.JBlkTok{cls, dcs, dcx, acs} <> rest : List<&2, Laws.JBlkTok>}
+  Equal.trans(Bool, Laws.jpg.tagok(tk, (pfst(nxp(cpos(ct), fr, sc)), psnd(nxp(cpos(ct), fr, sc))), fr, sc),
+    Laws.jpg.tagok(tk, nxp(cpos(ct), fr, sc), fr, sc), True{},
+    Equal.cong(U32 & U32, Bool, pp => Laws.jpg.tagok(tk, pp, fr, sc), (pfst(nxp(cpos(ct), fr, sc)), psnd(nxp(cpos(ct),
+      fr, sc))), nxp(cpos(ct), fr, sc), Equal.sym(U32 & U32,
+    nxp(cpos(ct), fr, sc), (pfst(nxp(cpos(ct), fr, sc)), psnd(nxp(cpos(ct), fr, sc))), peta(nxp(cpos(ct), fr, sc)))),
+      ht)
+
+# the decoder's block loop after its last block, which read with ok 1, returns a picture in either layout's frame
+def fl.nil(
+  +kd: Jenc.Layout,
+  +ss: List<&2, U32>,
+  +bb: Jpeg.Bits,
+  +pd: U32,
+  +ctrl: Jpeg.Ctrl,
+  +preds: Jpeg.Preds,
+  +ww: U32,
+  +hh: U32,
+  +qq: U32,
+  -yy: Array<U32>,
+  -cb: Array<U32>,
+  -cr: Array<U32>
+) -> FlTy(0n, Jpeg.Blk{ss, bb, pd, 1}, ctrl, preds, kd, ww, hh, qq, yy, cb, cr):
+  match kd:
+    case Jenc.K444{}:
+      {==}
+    case Jenc.KGray{}:
+      {==}
+    case Jenc.K420{}:
+      {==}
+
+# the decoder's block loop over blocks that each read whole, each of the class its place's tables hold, returns a
+# picture
 def huf.fl(
   ts: List<&2, Laws.JBlkTok>,
   blk: Jpeg.Blk,
   ctrl: Jpeg.Ctrl,
   +preds: Jpeg.Preds,
+  +kd: Jenc.Layout,
   +ww: U32,
   +hh: U32,
+  +qq: U32,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>,
   +tl: List<&2, Bool>,
-  res: BlkRes(blk, List.append(&2, Bool, M2.tbits(ts), tl)),
-  +hw: {Laws.jpg.allwf(ts) == True{} : Bool}
-) -> FlTy(List.length(&2, Laws.JBlkTok, ts), blk, ctrl, preds, ww, hh, yy, cb, cr):
+  res: BlkRes(blk, List.append(&2, Bool, Laws.jpg.tbits(ts), tl)),
+  +hw: {Laws.jpg.allwf(ts) == True{} : Bool},
+  +ht: FlTag(ts, ctrl, kd, ww, hh)
+) -> FlTy(List.length(&2, Laws.JBlkTok, ts), blk, ctrl, preds, kd, ww, hh, qq, yy, cb, cr):
   match ts:
     case Nil{}:
       match blk:
         case Jpeg.Blk{+ss, +bb, +pd, +oo}:
           (+se, e1, _e2, _e3) = res
           eo = Equal.sym(U32, oo, 1, Equal.cong(Jpeg.Bits & U32, U32, xx => bo.ok(xx), (bb, oo), (rbits(se, 1), 1), e1))
-          %eo : FlTy(0n, Jpeg.Blk{ss, bb, pd, _}, ctrl, preds, ww, hh, yy, cb, cr)
-          {==}
-    case +tt <> +rest:
+          %eo : FlTy(0n, Jpeg.Blk{ss, bb, pd, _}, ctrl, preds, kd, ww, hh, qq, yy, cb, cr)
+          fl.nil(kd, ss, bb, pd, ctrl, preds, ww, hh, qq, yy, cb, cr)
+    case Laws.JBlkTok{+cls, +dcs, +dcx, +acs} <> +rest:
       match blk:
         case Jpeg.Blk{+ss, +bb, +pd, +oo}:
           match ctrl:
             case Jpeg.Ctrl{+cc, +bi, +mx, +my, +mcu, +rst}:
               (+se, e1x, e2, e3x) = res
+              +tt = {Laws.JBlkTok{cls, dcs, dcx, acs} : Laws.JBlkTok}
               +e1 = {e1x : {(bb, oo) == (rbits(se, 1), 1) : Jpeg.Bits & U32}}
               +e3 = {e3x : {Bool.and(rshort(se), roct8(se)) == True{} : Bool}}
               +ct = {Jpeg.Ctrl{cc, bi, mx, my, mcu, rst} : Jpeg.Ctrl}
-              +fr = Laws.jpg.enc.frame(ww, hh)
-              +sc = Laws.jpg.enc.scan()
+              +fr = Laws.jpg.enc.frame(kd, ww, hh)
+              +sc = Laws.jpg.enc.scan(kd)
+              +tb = Laws.jpg.enc.tabs(kd, qq)
               eo = Equal.sym(U32, oo, 1, Equal.cong(Jpeg.Bits & U32, U32, xx => bo.ok(xx), (bb, oo), (rbits(se, 1), 1),
                 e1))
               eb = Equal.sym(Jpeg.Bits, bb, rbits(se, 1), Equal.cong(Jpeg.Bits & U32, Jpeg.Bits, xx => bo.bits(xx),
                 (bb, oo), (rbits(se, 1), 1), e1))
               +hs = {M3.and_l(rshort(se), roct8(se), e3) : {rshort(se) == True{} : Bool}}
               +h8 = {M3.and_r(rshort(se), roct8(se), e3) : {roct8(se) == True{} : Bool}}
-              +mr = List.append(&2, Bool, M2.tbits(rest), tl)
-              +he = {Equal.trans(List<&2, Bool>, rem(se), List.append(&2, Bool, List.append(&2, Bool, M3.blkbits(tt),
-                M2.tbits(rest)), tl), List.append(&2, Bool, M3.blkbits(tt), mr), e2, M3.huf.app_assoc(M3.blkbits(tt),
-                M2.tbits(rest), tl)) : {rem(se) == List.append(&2, Bool, M3.blkbits(tt), mr) : List<&2, Bool>}}
-              +pn = Jpeg.decode.pred.get(Jpeg.decode.preds.next(0, preds, cc, pd),
-                Jpeg.decode.ctrl.comp(Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ct, fr, sc, 0))))
-              +nb = Jpeg.decode.block.next(rbits(se, 1), preds, pd, ct, fr, sc, tabsg(), 0)
-              +gb = Jpeg.decode.block.go(rbits(se, 1), pn, dctb(), actb(), ones64())
-              +en = {bnext(rbits(se, 1), preds, pd, ct, ww, hh) : {nb == gb : Jpeg.Blk}}
-              %eo : FlTy(1n+List.length(&2, Laws.JBlkTok, rest), Jpeg.Blk{ss, bb, pd, _}, ct, preds, ww, hh, yy, cb, cr)
-              %eb : FlTy(1n+List.length(&2, Laws.JBlkTok, rest), Jpeg.Blk{ss, _, pd, 1}, ct, preds, ww, hh, yy, cb, cr)
-              huf.fl(rest, nb, Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ct, fr, sc, 0)),
-                Jpeg.decode.preds.next(Jpeg.decode.adv.duef(Jpeg.decode.adv(ct, fr, sc, 0)), preds, cc, pd), ww, hh,
-                Jpeg.decode.paint.use(Jpeg.decode.geom(ct, fr, sc), U32.is_eq(cc, 0), ss, yy),
+              +mr = List.append(&2, Bool, Laws.jpg.tbits(rest), tl)
+              +he = {Equal.trans(List<&2, Bool>, rem(se), List.append(&2, Bool, List.append(&2, Bool,
+                Laws.jpg.blkbits(tt), Laws.jpg.tbits(rest)), tl), List.append(&2, Bool, Laws.jpg.blkbits(tt), mr), e2,
+                M3.huf.app_assoc(Laws.jpg.blkbits(tt), Laws.jpg.tbits(rest), tl)) : {rem(se) == List.append(&2, Bool,
+                Laws.jpg.blkbits(tt), mr) : List<&2, Bool>}}
+              +c2 = Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ct, fr, sc, 0))
+              +p0 = Jpeg.decode.preds.next(0, preds, cc, pd)
+              +pn = Jpeg.decode.pred.get(p0, Jpeg.decode.ctrl.comp(c2))
+              +nb = Jpeg.decode.block.next(rbits(se, 1), preds, pd, ct, fr, sc, tb, 0)
+              +ob = Jpeg.decode.block.of(rbits(se, 1), Jpeg.decode.ctrl.comp(c2), p0, fr, sc, tb)
+              +gb = Jpeg.decode.block.go(rbits(se, 1), pn, dctab(cls), actab(cls), qof(cls, qq))
+              +hcl = fl.cls(cls, ct, rest, kd, ww, hh, fl.ht(cls, ct, dcs, dcx, acs, rest, kd, ww, hh, ht))
+              +htn = fl.tag(cls, ct, rest, kd, ww, hh, fl.ht(cls, ct, dcs, dcx, acs, rest, kd, ww, hh, ht))
+              +en = {Equal.trans(Jpeg.Blk, nb, ob, gb, bnext(rbits(se, 1), preds, pd, ct, fr, sc, tb), selok(kd, cls,
+                Jpeg.decode.ctrl.comp(c2), rbits(se, 1), p0, ww, hh, qq, hcl)) : {nb == gb : Jpeg.Blk}}
+              %eo : FlTy(1n+List.length(&2, Laws.JBlkTok, rest), Jpeg.Blk{ss, bb, pd, _}, ct, preds, kd, ww, hh, qq, yy,
+                cb, cr)
+              %eb : FlTy(1n+List.length(&2, Laws.JBlkTok, rest), Jpeg.Blk{ss, _, pd, 1}, ct, preds, kd, ww, hh, qq, yy,
+                cb, cr)
+              huf.fl(rest, nb, c2, Jpeg.decode.preds.next(Jpeg.decode.adv.duef(Jpeg.decode.adv(ct, fr, sc, 0)), preds,
+                cc, pd), kd, ww, hh, qq, Jpeg.decode.paint.use(Jpeg.decode.geom(ct, fr, sc), U32.is_eq(cc, 0), ss, yy),
                 Jpeg.decode.paint.use(Jpeg.decode.geom(ct, fr, sc), U32.is_eq(cc, 1), ss, cb),
                 Jpeg.decode.paint.use(Jpeg.decode.geom(ct, fr, sc), U32.is_eq(cc, 2), ss, cr), tl, blkres.tr(gb, nb,
-                mr, Equal.sym(Jpeg.Blk, nb, gb, en), bsim(tt, pn, se, mr, hs, h8, he, M1.also_l(Laws.jpg.blkwf(tt),
-                Laws.jpg.allwf(rest), hw))), M1.also_r(Laws.jpg.blkwf(tt), Laws.jpg.allwf(rest), hw))
+                mr, Equal.sym(Jpeg.Blk, nb, gb, en), bsim(cls, dcs, dcx, acs, pn, qof(cls, qq), qof.ok(cls, qq), se,
+                mr, hs, h8, he, M1.also_l(Laws.jpg.blkwf(tt), Laws.jpg.allwf(rest), hw))), M1.also_r(Laws.jpg.blkwf(tt),
+                Laws.jpg.allwf(rest), hw), htn)
 
 # the frame's block count is the number of blocks
-def NBlk(+ww: U32, +hh: U32, -rest: List<&2, Laws.JBlkTok>) -> Type:
-  {U32.to_nat(Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1)) == 1n+List.length(&2, Laws.JBlkTok, rest) : Nat}
+def NBlk(+kd: Jenc.Layout, +ww: U32, +hh: U32, -rest: List<&2, Laws.JBlkTok>) -> Type:
+  {U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh))) == 1n+List.length(&2, Laws.JBlkTok, rest) : Nat}
 
 # the length of bits appended is the sum of the lengths
 def blen_app(
@@ -3906,71 +4401,78 @@ def le_front(
       M1.le_trans(xx, Nat.add(pp, yy), 1n+Nat.add(pp, yy), le_front(pp, xx, yy, hh), M6.le_succ(Nat.add(pp, yy)))
 
 # a symbol's DC code has at least two bits
-def len2.dc(+ss: U32) -> Bool:
-  Nat.is_le(2n, List.length(&2, Bool, M3.code.dc(ss)))
+def len2.dc(+cls: Bool, +ss: U32) -> Bool:
+  Nat.is_le(2n, List.length(&2, Bool, Laws.jpg.dcode(cls, ss)))
 
 # the two-bit check for every symbol of a list
-def all.len2(xs: List<&2, U32>) -> Bool:
+def all.len2(+cls: Bool, xs: List<&2, U32>) -> Bool:
   match xs:
     case Nil{}:
       True{}
     case +xx <> rest:
-      Laws.jpg.also(len2.dc(xx), all.len2(rest))
+      Laws.jpg.also(len2.dc(cls, xx), all.len2(cls, rest))
 
 # every DC symbol's code has at least two bits
-def all.len2.ok() -> {all.len2(Jenc.encode.dcsyms()) == True{} : Bool}:
-  {==}
+def all.len2.ok(+cls: Bool) -> {all.len2(cls, Jenc.encode.dcsyms()) == True{} : Bool}:
+  match cls:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
 
 # the rest of the list, as the membership step needs it
-def MembIh.len2(+_sy: U32, -rest: List<&2, U32>) -> Type:
-  @hr: {Laws.jpg.memb(_sy, rest) == True{} : Bool} -> @ha: {all.len2(rest) == True{} : Bool} -> {len2.dc(_sy) == True{}
+def MembIh.len2(+cls: Bool, +_sy: U32, -rest: List<&2, U32>) -> Type:
+  @hr: {Laws.jpg.memb(_sy, rest) == True{} : Bool} -> @ha: {all.len2(cls, rest) == True{} : Bool} -> {len2.dc(cls,
+    _sy) == True{}
     : Bool}
 
 # one of the symbols passes the two-bit check, by whether it is the list's first
 def memb.len2.b(
+  +cls: Bool,
   eq: Bool,
   +ss: U32,
   +xx: U32,
   +rest: List<&2, U32>,
   he: {U32.is_eq(ss, xx) == eq : Bool},
   hin: {Laws.jpg.eith(eq, Laws.jpg.memb(ss, rest)) == True{} : Bool},
-  hall: {Laws.jpg.also(len2.dc(xx), all.len2(rest)) == True{} : Bool},
-  ih: MembIh.len2(ss, rest)
-) -> {len2.dc(ss) == True{} : Bool}:
+  hall: {Laws.jpg.also(len2.dc(cls, xx), all.len2(cls, rest)) == True{} : Bool},
+  ih: MembIh.len2(cls, ss, rest)
+) -> {len2.dc(cls, ss) == True{} : Bool}:
   match eq:
     case True{}:
       es = Equal.sym(U32, ss, xx, M1.ueq(ss, xx, he))
-      %es : {len2.dc(_) == True{} : Bool}
-      M1.also_l(len2.dc(xx), all.len2(rest), hall)
+      %es : {len2.dc(cls, _) == True{} : Bool}
+      M1.also_l(len2.dc(cls, xx), all.len2(cls, rest), hall)
     case False{}:
-      ih(hin, M1.also_r(len2.dc(xx), all.len2(rest), hall))
+      ih(hin, M1.also_r(len2.dc(cls, xx), all.len2(cls, rest), hall))
 
 # a symbol of a list whose symbols all pass the two-bit check passes it
 def memb.len2(
+  +cls: Bool,
   xs: List<&2, U32>,
   +ss: U32,
   hin: {Laws.jpg.memb(ss, xs) == True{} : Bool},
-  hall: {all.len2(xs) == True{} : Bool}
-) -> {len2.dc(ss) == True{} : Bool}:
+  hall: {all.len2(cls, xs) == True{} : Bool}
+) -> {len2.dc(cls, ss) == True{} : Bool}:
   match xs:
     case Nil{}:
-      Empty.absurd({len2.dc(ss) == True{} : Bool}, M1.huf.false_true(hin))
+      Empty.absurd({len2.dc(cls, ss) == True{} : Bool}, M1.huf.false_true(hin))
     case +xx <> +rest:
-      memb.len2.b(U32.is_eq(ss, xx), ss, xx, rest, {==}, hin, hall, hr => ha => memb.len2(rest, ss, hr, ha))
+      memb.len2.b(cls, U32.is_eq(ss, xx), ss, xx, rest, {==}, hin, hall, hr => ha => memb.len2(cls, rest, ss, hr, ha))
 
 # a well-formed block's bits are at least two
 def blk2(
   bt: Laws.JBlkTok,
   hw: {Laws.jpg.blkwf(bt) == True{} : Bool}
-) -> {Nat.is_le(2n, List.length(&2, Bool, M3.blkbits(bt))) == True{} : Bool}:
+) -> {Nat.is_le(2n, List.length(&2, Bool, Laws.jpg.blkbits(bt))) == True{} : Bool}:
   match bt:
-    case Laws.JBlkTok{+dcs, +dcx, +acs}:
+    case Laws.JBlkTok{+cls, +dcs, +dcx, +acs}:
       +hm = {M3.and_l(Laws.jpg.memb(dcs, Jenc.encode.dcsyms()), Bool.and(Nat.is_eq(List.length(&2, Bool, dcx),
         U32.to_nat(dcs)), Laws.jpg.acwf(acs, Laws.JAcSt{1, 63n, False{}})), hw) : {Laws.jpg.memb(dcs,
         Jenc.encode.dcsyms()) == True{} : Bool}}
-      +h2 = {memb.len2(Jenc.encode.dcsyms(), dcs, hm, all.len2.ok()) : {len2.dc(dcs) == True{} : Bool}}
-      +cd = M3.code.dc(dcs)
-      +tl = List.append(&2, Bool, dcx, M3.acbits(acs))
+      +h2 = {memb.len2(cls, Jenc.encode.dcsyms(), dcs, hm, all.len2.ok(cls)) : {len2.dc(cls, dcs) == True{} : Bool}}
+      +cd = Laws.jpg.dcode(cls, dcs)
+      +tl = List.append(&2, Bool, dcx, Laws.jpg.acbits(cls, acs))
       el = Equal.sym(Nat, List.length(&2, Bool, List.append(&2, Bool, cd, tl)), Nat.add(List.length(&2, Bool, cd),
         List.length(&2, Bool, tl)), blen_app(cd, tl))
       %el : {Nat.is_le(2n, _) == True{} : Bool}
@@ -3998,14 +4500,14 @@ def le2add(
 def tb2(
   ts: List<&2, Laws.JBlkTok>,
   +hw: {Laws.jpg.allwf(ts) == True{} : Bool}
-) -> {Nat.is_le(Jpeg.decode.need.bits(List.length(&2, Laws.JBlkTok, ts)), List.length(&2, Bool, M2.tbits(ts))) ==
+) -> {Nat.is_le(Jpeg.decode.need.bits(List.length(&2, Laws.JBlkTok, ts)), List.length(&2, Bool, Laws.jpg.tbits(ts))) ==
   True{} : Bool}:
   match ts:
     case Nil{}:
       {==}
     case +tt <> +rest:
-      +bb = M3.blkbits(tt)
-      +rb = M2.tbits(rest)
+      +bb = Laws.jpg.blkbits(tt)
+      +rb = Laws.jpg.tbits(rest)
       +nr = Jpeg.decode.need.bits(List.length(&2, Laws.JBlkTok, rest))
       el = Equal.sym(Nat, List.length(&2, Bool, List.append(&2, Bool, bb, rb)), Nat.add(List.length(&2, Bool, bb),
         List.length(&2, Bool, rb)), blen_app(bb, rb))
@@ -4059,14 +4561,99 @@ def stf.le(xs: List<&2, U32>) -> {Nat.is_le(Jpeg.decode.ent.bits(xs), Jpeg.decod
       stf.put.le(U32.is_eq(bb, 255), bb, stf(rest, []), Jpeg.decode.ent.bits(rest), stf.le(rest))
 
 
+# bytes enough for the blocks of a layout's frame
+def RunBits(+kd: Jenc.Layout, +ww: U32, +hh: U32, +ent: List<&2, U32>) -> Data:
+  {Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh)))),
+    Jpeg.decode.ent.bits(ent)) == True{} : Bool}
+
+# the scan decode of the encoder's frame of either layout, of sides 1 to 65535 and at most 2^31 points, with bytes
+# enough for its blocks, starts its block loop
+def run_ok(
+  +kd: Jenc.Layout,
+  +ww: U32,
+  +hh: U32,
+  +tb: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  hw0: {U32.is_eq(ww, 0) == False{} : Bool},
+  hh0: {U32.is_eq(hh, 0) == False{} : Bool},
+  +hz: {Jpeg.decode.area.ok(ww, hh) == True{} : Bool},
+  +hl: RunBits(kd, ww, hh, ent)
+) -> {Laws.jpg.psome(Jpeg.decode.run(Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd), tb, ent, 0, False{})) ==
+  Laws.jpg.psome(Jpeg.decode.start(U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh))), Jpeg.Bits{0, 1, 0,
+  ent}, Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd), tb, 0, False{}, Jpeg.decode.plane((ww * hh : U32)),
+  Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)))) : Bool}:
+  match kd:
+    case Jenc.K444{}:
+      +eb = Jpeg.decode.ent.bits(ent)
+      s1 = Equal.sym(Bool, U32.is_eq(ww, 0), False{}, hw0)
+      s2 = Equal.sym(Bool, U32.is_eq(hh, 0), False{}, hh0)
+      +fr = Laws.jpg.enc.frame(Jenc.K444{}, ww, hh)
+      +sc = Laws.jpg.enc.scan(Jenc.K444{})
+      +nbu = Laws.jpg.blocks(fr)
+      +st = Laws.jpg.psome(Jpeg.decode.start(U32.to_nat(nbu), Jpeg.Bits{0, 1, 0, ent}, fr, sc, tb, 0, False{},
+        Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)),
+        Jpeg.decode.plane((ww * hh : U32))))
+      +sm = Jpeg.decode.scan.match(3, 3, [1, 2, 3], [1, 2, 3])
+      +hf = {M3.and_tt(Jpeg.decode.area.ok(ww, hh), Bool.and(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb),
+        sm), hz, M3.and_tt(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb), sm, hl, {==})) :
+        {Jpeg.decode.fits(ww, hh, nbu, ent, 3, [1, 2, 3], sc) == True{} : Bool}}
+      sf = Equal.sym(Bool, Jpeg.decode.fits(ww, hh, nbu, ent, 3, [1, 2, 3], sc), True{}, hf)
+      %s1 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(_, U32.is_eq(hh, 0)), ww, hh, fr, sc, tb, ent, 0, False{})) ==
+        st : Bool}
+      %s2 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(False{}, _), ww, hh, fr, sc, tb, ent, 0, False{})) == st : Bool}
+      %sf : {Laws.jpg.psome(Jpeg.decode.run.fit(_, nbu, ww, hh, fr, sc, tb, ent, 0, False{})) == st : Bool}
+      {==}
+    case Jenc.KGray{}:
+      +eb = Jpeg.decode.ent.bits(ent)
+      s1 = Equal.sym(Bool, U32.is_eq(ww, 0), False{}, hw0)
+      s2 = Equal.sym(Bool, U32.is_eq(hh, 0), False{}, hh0)
+      +fr = Laws.jpg.enc.frame(Jenc.KGray{}, ww, hh)
+      +sc = Laws.jpg.enc.scan(Jenc.KGray{})
+      +nbu = Laws.jpg.blocks(fr)
+      +st = Laws.jpg.psome(Jpeg.decode.start(U32.to_nat(nbu), Jpeg.Bits{0, 1, 0, ent}, fr, sc, tb, 0, False{},
+        Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)),
+        Jpeg.decode.plane((ww * hh : U32))))
+      +sm = Jpeg.decode.scan.match(1, 1, [1], [1])
+      +hf = {M3.and_tt(Jpeg.decode.area.ok(ww, hh), Bool.and(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb),
+        sm), hz, M3.and_tt(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb), sm, hl, {==})) :
+        {Jpeg.decode.fits(ww, hh, nbu, ent, 1, [1], sc) == True{} : Bool}}
+      sf = Equal.sym(Bool, Jpeg.decode.fits(ww, hh, nbu, ent, 1, [1], sc), True{}, hf)
+      %s1 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(_, U32.is_eq(hh, 0)), ww, hh, fr, sc, tb, ent, 0, False{})) ==
+        st : Bool}
+      %s2 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(False{}, _), ww, hh, fr, sc, tb, ent, 0, False{})) == st : Bool}
+      %sf : {Laws.jpg.psome(Jpeg.decode.run.fit(_, nbu, ww, hh, fr, sc, tb, ent, 0, False{})) == st : Bool}
+      {==}
+    case Jenc.K420{}:
+      +eb = Jpeg.decode.ent.bits(ent)
+      s1 = Equal.sym(Bool, U32.is_eq(ww, 0), False{}, hw0)
+      s2 = Equal.sym(Bool, U32.is_eq(hh, 0), False{}, hh0)
+      +fr = Laws.jpg.enc.frame(Jenc.K420{}, ww, hh)
+      +sc = Laws.jpg.enc.scan(Jenc.K420{})
+      +nbu = Laws.jpg.blocks(fr)
+      +st = Laws.jpg.psome(Jpeg.decode.start(U32.to_nat(nbu), Jpeg.Bits{0, 1, 0, ent}, fr, sc, tb, 0, False{},
+        Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)),
+        Jpeg.decode.plane((ww * hh : U32))))
+      +sm = Jpeg.decode.scan.match(3, 3, [1, 2, 3], [1, 2, 3])
+      +hf = {M3.and_tt(Jpeg.decode.area.ok(ww, hh), Bool.and(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb),
+        sm), hz, M3.and_tt(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb), sm, hl, {==})) :
+        {Jpeg.decode.fits(ww, hh, nbu, ent, 3, [1, 2, 3], sc) == True{} : Bool}}
+      sf = Equal.sym(Bool, Jpeg.decode.fits(ww, hh, nbu, ent, 3, [1, 2, 3], sc), True{}, hf)
+      %s1 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(_, U32.is_eq(hh, 0)), ww, hh, fr, sc, tb, ent, 0, False{})) ==
+        st : Bool}
+      %s2 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(False{}, _), ww, hh, fr, sc, tb, ent, 0, False{})) == st : Bool}
+      %sf : {Laws.jpg.psome(Jpeg.decode.run.fit(_, nbu, ww, hh, fr, sc, tb, ent, 0, False{})) == st : Bool}
+      {==}
+
 # the decoder's scan decode, in the encoder's frame, of bytes holding blocks that each read whole, as many as the
-# frame's block count, returns a picture
+# frame's block count, each of the class its place's tables hold, returns a picture
 def dec(
   +tt: Laws.JBlkTok,
   +rest: List<&2, Laws.JBlkTok>,
   +tl: List<&2, Bool>,
   +ww: U32,
   +hh: U32,
+  +qq: U32,
+  +kd: Jenc.Layout,
   +os: List<&2, List<&2, Bool>>,
   hw0: {U32.is_eq(ww, 0) == False{} : Bool},
   hh0: {U32.is_eq(hh, 0) == False{} : Bool},
@@ -4074,187 +4661,116 @@ def dec(
   +hhl: {U32.is_le(hh, 65535) == True{} : Bool},
   +har: {U32.is_le((ww * hh : U32), 2147483648) == True{} : Bool},
   +h8: {oct8(os) == True{} : Bool},
-  +he: {rem(RS{[], os}) == List.append(&2, Bool, M2.tbits(tt <> rest), tl) : List<&2, Bool>},
+  +he: {rem(RS{[], os}) == List.append(&2, Bool, Laws.jpg.tbits(tt <> rest), tl) : List<&2, Bool>},
   +hw: {Laws.jpg.allwf(tt <> rest) == True{} : Bool},
-  +hn: {U32.to_nat(Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1)) == 1n+List.length(&2, Laws.JBlkTok, rest) :
-    Nat}
-) -> {Laws.jpg.psome(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), tabsg(), rxs(os), 0, False{})) ==
-  True{} : Bool}:
-  +fr = Laws.jpg.enc.frame(ww, hh)
-  +sc = Laws.jpg.enc.scan()
-  +s0 = {RS{[], os} : RS}
-  +mr = List.append(&2, Bool, M2.tbits(rest), tl)
-  +he1 = {Equal.trans(List<&2, Bool>, rem(s0), List.append(&2, Bool, List.append(&2, Bool, M3.blkbits(tt),
-    M2.tbits(rest)), tl), List.append(&2, Bool, M3.blkbits(tt), mr), he, M3.huf.app_assoc(M3.blkbits(tt),
-    M2.tbits(rest), tl)) : {rem(s0) == List.append(&2, Bool, M3.blkbits(tt), mr) : List<&2, Bool>}}
-  +bo = Jpeg.decode.block.of(rbits(s0, 1), 0, Jpeg.decode.pred.zero(), fr, sc, tabsg())
-  +bg = Jpeg.decode.block.go(rbits(s0, 1), Jpeg.decode.pred.get(Jpeg.decode.pred.zero(), 0), dctb(), actb(), ones64())
-  +nbu = Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1)
-  +tb = M2.tbits(tt <> rest)
-  +lt = List.length(&2, Bool, tb)
-  +eb = Jpeg.decode.ent.bits(rxs(os))
-  +hb = {Equal.trans(Bool, Nat.is_le(lt, List.length(&2, Bool, List.concat(&2, Bool, os))), Nat.is_le(lt, Nat.add(lt,
-    List.length(&2, Bool, tl))), True{}, Equal.trans(Bool, Nat.is_le(lt, List.length(&2, Bool, List.concat(&2, Bool,
-    os))), Nat.is_le(lt, List.length(&2, Bool, List.append(&2, Bool, tb, tl))), Nat.is_le(lt, Nat.add(lt,
-    List.length(&2, Bool, tl))), Equal.cong(List<&2, Bool>, Bool, xs => Nat.is_le(lt, List.length(&2, Bool, xs)),
-    rem(s0), List.append(&2, Bool, tb, tl), he), Equal.cong(Nat, Bool, nn => Nat.is_le(lt, nn), List.length(&2, Bool,
-    List.append(&2, Bool, tb, tl)), Nat.add(lt, List.length(&2, Bool, tl)), blen_app(tb, tl))), M6.le_add_more(lt, lt,
-    List.length(&2, Bool, tl), M1.le_refl(lt))) : {Nat.is_le(lt, List.length(&2, Bool, List.concat(&2, Bool, os))) ==
-    True{} : Bool}}
-  +hbo = {Equal.trans(Bool, Nat.is_le(lt, Jpeg.decode.ent.bits(M2.obytes(os))), Nat.is_le(lt, List.length(&2, Bool,
-    List.concat(&2, Bool, os))), True{}, Equal.cong(Nat, Bool, nn => Nat.is_le(lt, nn),
-    Jpeg.decode.ent.bits(M2.obytes(os)), List.length(&2, Bool, List.concat(&2, Bool, os)), Equal.sym(Nat,
-    List.length(&2, Bool, List.concat(&2, Bool, os)), Jpeg.decode.ent.bits(M2.obytes(os)), oct.len(os, h8))), hb) :
-    {Nat.is_le(lt, Jpeg.decode.ent.bits(M2.obytes(os))) == True{} : Bool}}
-  +hl0 = {M1.le_trans(Jpeg.decode.need.bits(1n+List.length(&2, Laws.JBlkTok, rest)), lt, eb, tb2(tt <> rest, hw),
-    M1.le_trans(lt, Jpeg.decode.ent.bits(M2.obytes(os)), eb, hbo, stf.le(M2.obytes(os)))) :
-    {Nat.is_le(Jpeg.decode.need.bits(1n+List.length(&2, Laws.JBlkTok, rest)), eb) == True{} : Bool}}
-  +hl = {Equal.trans(Bool, Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb),
-    Nat.is_le(Jpeg.decode.need.bits(1n+List.length(&2, Laws.JBlkTok, rest)), eb), True{}, Equal.cong(Nat, Bool, nn =>
-    Nat.is_le(Jpeg.decode.need.bits(nn), eb), U32.to_nat(nbu), 1n+List.length(&2, Laws.JBlkTok, rest), hn), hl0) :
-    {Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb) == True{} : Bool}}
-  +hz = {M3.and_tt(Bool.and(U32.is_le(ww, 65535), U32.is_le(hh, 65535)), U32.is_le((ww * hh : U32), 2147483648),
-    M3.and_tt(U32.is_le(ww, 65535), U32.is_le(hh, 65535), hwl, hhl), har) : {Jpeg.decode.area.ok(ww, hh) == True{} :
-    Bool}}
-  +sm = Jpeg.decode.scan.match(3, 3, [1, 2, 3], [1, 2, 3])
-  +hf = {M3.and_tt(Jpeg.decode.area.ok(ww, hh), Bool.and(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb), sm),
-    hz, M3.and_tt(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb), sm, hl, {==})) :
-    {Jpeg.decode.fits(ww, hh, nbu, rxs(os), 3, [1, 2, 3], sc) == True{} : Bool}}
-  s1 = Equal.sym(Bool, U32.is_eq(ww, 0), False{}, hw0)
-  s2 = Equal.sym(Bool, U32.is_eq(hh, 0), False{}, hh0)
-  sf = Equal.sym(Bool, Jpeg.decode.fits(ww, hh, nbu, rxs(os), 3, [1, 2, 3], sc), True{}, hf)
-  s3 = Equal.sym(Nat, U32.to_nat(nbu), 1n+List.length(&2, Laws.JBlkTok, rest), hn)
-  %s1 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(_, U32.is_eq(hh, 0)), ww, hh, fr, sc, tabsg(), rxs(os), 0, False{}))
-    == True{} : Bool}
-  %s2 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(False{}, _), ww, hh, fr, sc, tabsg(), rxs(os), 0, False{})) == True{}
-    : Bool}
-  %sf : {Laws.jpg.psome(Jpeg.decode.run.fit(_, nbu, ww, hh, fr, sc, tabsg(), rxs(os), 0, False{})) == True{} : Bool}
-  %s3 : {Laws.jpg.psome(Jpeg.decode.start(_, Jpeg.Bits{0, 1, 0, rxs(os)}, fr, sc, tabsg(), 0, False{},
-    Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)))) ==
-    True{} : Bool}
-  huf.fl(rest, bo, Jpeg.Ctrl{0, 0, 0, 0, 0, 0}, Jpeg.decode.pred.zero(), ww, hh, Jpeg.decode.plane((ww * hh : U32)),
-    Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)), tl, blkres.tr(bg, bo, mr,
-    Equal.sym(Jpeg.Blk, bo, bg, bof(rbits(s0, 1), 0, Jpeg.decode.pred.zero(), ww, hh)), bsim(tt,
-    Jpeg.decode.pred.get(Jpeg.decode.pred.zero(), 0), s0, mr, {==}, h8, he1, M1.also_l(Laws.jpg.blkwf(tt),
-    Laws.jpg.allwf(rest), hw))), M1.also_r(Laws.jpg.blkwf(tt), Laws.jpg.allwf(rest), hw))
+  +hg: {Laws.jpg.inorder(tt <> rest, Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)) == True{} : Bool},
+  +hn: {U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh))) == 1n+List.length(&2, Laws.JBlkTok, rest) : Nat}
+) -> {Laws.jpg.psome(Jpeg.decode.run(Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq),
+  rxs(os), 0, False{})) == True{} : Bool}:
+  match tt:
+    case Laws.JBlkTok{+cls, +dcs, +dcx, +acs}:
+      +tk = {Laws.JBlkTok{cls, dcs, dcx, acs} : Laws.JBlkTok}
+      +fr = Laws.jpg.enc.frame(kd, ww, hh)
+      +sc = Laws.jpg.enc.scan(kd)
+      +s0 = {RS{[], os} : RS}
+      +mr = List.append(&2, Bool, Laws.jpg.tbits(rest), tl)
+      +he1 = {Equal.trans(List<&2, Bool>, rem(s0), List.append(&2, Bool, List.append(&2, Bool, Laws.jpg.blkbits(tk),
+        Laws.jpg.tbits(rest)), tl), List.append(&2, Bool, Laws.jpg.blkbits(tk), mr), he,
+        M3.huf.app_assoc(Laws.jpg.blkbits(tk),
+        Laws.jpg.tbits(rest), tl)) : {rem(s0) == List.append(&2, Bool, Laws.jpg.blkbits(tk), mr) : List<&2, Bool>}}
+      +tab = Laws.jpg.enc.tabs(kd, qq)
+      +bo = Jpeg.decode.block.of(rbits(s0, 1), 0, Jpeg.decode.pred.zero(), fr, sc, tab)
+      +bg = Jpeg.decode.block.go(rbits(s0, 1), Jpeg.decode.pred.get(Jpeg.decode.pred.zero(), 0), dctab(cls), actab(cls),
+        qof(cls, qq))
+      +hc0 = {M1.also_l(Laws.jpg.clsok(cls, 0, fr, sc), Laws.jpg.tagok(rest, Laws.jpg.nxt(0, 0, fr, sc), fr, sc), hg) :
+        {Laws.jpg.clsok(cls, 0, fr, sc) == True{} : Bool}}
+      +hgr = {M1.also_r(Laws.jpg.clsok(cls, 0, fr, sc), Laws.jpg.tagok(rest, Laws.jpg.nxt(0, 0, fr, sc), fr, sc), hg) :
+        {Laws.jpg.tagok(rest, Laws.jpg.nxt(0, 0, fr, sc), fr, sc) == True{} : Bool}}
+      +nbu = Laws.jpg.blocks(fr)
+      +bt = Laws.jpg.tbits(tk <> rest)
+      +lt = List.length(&2, Bool, bt)
+      +eb = Jpeg.decode.ent.bits(rxs(os))
+      +hb = {Equal.trans(Bool, Nat.is_le(lt, List.length(&2, Bool, List.concat(&2, Bool, os))), Nat.is_le(lt,
+        Nat.add(lt,
+        List.length(&2, Bool, tl))), True{}, Equal.trans(Bool, Nat.is_le(lt, List.length(&2, Bool, List.concat(&2, Bool,
+        os))), Nat.is_le(lt, List.length(&2, Bool, List.append(&2, Bool, bt, tl))), Nat.is_le(lt, Nat.add(lt,
+        List.length(&2, Bool, tl))), Equal.cong(List<&2, Bool>, Bool, xs => Nat.is_le(lt, List.length(&2, Bool, xs)),
+        rem(s0), List.append(&2, Bool, bt, tl), he), Equal.cong(Nat, Bool, nn => Nat.is_le(lt, nn), List.length(&2,
+          Bool,
+        List.append(&2, Bool, bt, tl)), Nat.add(lt, List.length(&2, Bool, tl)), blen_app(bt, tl))), M6.le_add_more(lt,
+          lt,
+        List.length(&2, Bool, tl), M1.le_refl(lt))) : {Nat.is_le(lt, List.length(&2, Bool, List.concat(&2, Bool,
+          os))) ==
+        True{} : Bool}}
+      +hbo = {Equal.trans(Bool, Nat.is_le(lt, Jpeg.decode.ent.bits(M2.obytes(os))), Nat.is_le(lt, List.length(&2, Bool,
+        List.concat(&2, Bool, os))), True{}, Equal.cong(Nat, Bool, nn => Nat.is_le(lt, nn),
+        Jpeg.decode.ent.bits(M2.obytes(os)), List.length(&2, Bool, List.concat(&2, Bool, os)), Equal.sym(Nat,
+        List.length(&2, Bool, List.concat(&2, Bool, os)), Jpeg.decode.ent.bits(M2.obytes(os)), oct.len(os, h8))), hb) :
+        {Nat.is_le(lt, Jpeg.decode.ent.bits(M2.obytes(os))) == True{} : Bool}}
+      +hl0 = {M1.le_trans(Jpeg.decode.need.bits(1n+List.length(&2, Laws.JBlkTok, rest)), lt, eb, tb2(tk <> rest, hw),
+        M1.le_trans(lt, Jpeg.decode.ent.bits(M2.obytes(os)), eb, hbo, stf.le(M2.obytes(os)))) :
+        {Nat.is_le(Jpeg.decode.need.bits(1n+List.length(&2, Laws.JBlkTok, rest)), eb) == True{} : Bool}}
+      +hl = {Equal.trans(Bool, Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb),
+        Nat.is_le(Jpeg.decode.need.bits(1n+List.length(&2, Laws.JBlkTok, rest)), eb), True{}, Equal.cong(Nat, Bool,
+        nn =>
+        Nat.is_le(Jpeg.decode.need.bits(nn), eb), U32.to_nat(nbu), 1n+List.length(&2, Laws.JBlkTok, rest), hn), hl0) :
+        {Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb) == True{} : Bool}}
+      +hz = {M3.and_tt(Bool.and(U32.is_le(ww, 65535), U32.is_le(hh, 65535)), U32.is_le((ww * hh : U32), 2147483648),
+        M3.and_tt(U32.is_le(ww, 65535), U32.is_le(hh, 65535), hwl, hhl), har) : {Jpeg.decode.area.ok(ww, hh) == True{} :
+        Bool}}
+      er = Equal.sym(Bool, Laws.jpg.psome(Jpeg.decode.run(fr, sc, tab, rxs(os), 0, False{})),
+        Laws.jpg.psome(Jpeg.decode.start(U32.to_nat(nbu), Jpeg.Bits{0, 1, 0, rxs(os)}, fr, sc, tab, 0, False{},
+        Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)),
+        Jpeg.decode.plane((ww * hh : U32)))), run_ok(kd, ww, hh, tab, rxs(os), hw0, hh0, hz, hl))
+      s3 = Equal.sym(Nat, U32.to_nat(nbu), 1n+List.length(&2, Laws.JBlkTok, rest), hn)
+      %er : {_ == True{} : Bool}
+      %s3 : {Laws.jpg.psome(Jpeg.decode.start(_, Jpeg.Bits{0, 1, 0, rxs(os)}, fr, sc, tab, 0, False{},
+        Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)))) ==
+        True{} : Bool}
+      huf.fl(rest, bo, Jpeg.Ctrl{0, 0, 0, 0, 0, 0}, Jpeg.decode.pred.zero(), kd, ww, hh, qq,
+        Jpeg.decode.plane((ww * hh :
+        U32)), Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)), tl, blkres.tr(bg, bo, mr,
+        Equal.sym(Jpeg.Blk, bo, bg, selok(kd, cls, 0, rbits(s0, 1), Jpeg.decode.pred.zero(), ww, hh, qq, hc0)),
+          bsim(cls,
+        dcs, dcx, acs, Jpeg.decode.pred.get(Jpeg.decode.pred.zero(), 0), qof(cls, qq), qof.ok(cls, qq), s0, mr, {==},
+          h8,
+        he1, M1.also_l(Laws.jpg.blkwf(tk), Laws.jpg.allwf(rest), hw))), M1.also_r(Laws.jpg.blkwf(tk),
+        Laws.jpg.allwf(rest), hw), hgr)
 
-# the code the encoder's AC book holds for a symbol is the literal book's
-def acode.eq(+sy: U32) -> {Laws.jpg.acode(sy) == M3.code.ac(sy) : List<&2, Bool>}:
-  Equal.cong(Array<U32>, List<&2, Bool>, bk => Laws.jpg.cbw(D2.jpg.val(Array.get(U32, bk, sy))),
-    Jenc.encode.huff(Jenc.encode.accounts(), Jenc.encode.acsyms()), M3.acbook.lit(), M2.acbook.eq())
-
-# the code the encoder's DC book holds for a symbol is the literal book's
-def dcode.eq(+sy: U32) -> {Laws.jpg.dcode(sy) == M3.code.dc(sy) : List<&2, Bool>}:
-  Equal.cong(Array<U32>, List<&2, Bool>, bk => Laws.jpg.cbw(D2.jpg.val(Array.get(U32, bk, sy))),
-    Jenc.encode.huff(Jenc.encode.dccounts(), Jenc.encode.dcsyms()), M3.dcbook.lit(), M2.dcbook.eq())
-
-# AC tokens' bits over the encoder's book are their bits over the literal book
-def acbits.eq(ts: List<&2, Laws.JTok>) -> {Laws.jpg.acbits(ts) == M3.acbits(ts) : List<&2, Bool>}:
-  match ts:
-    case Nil{}:
-      {==}
-    case Laws.JTok{+sym, +ex} <> +rest:
-      Equal.trans(List<&2, Bool>, List.append(&2, Bool, Laws.jpg.acode(sym), List.append(&2, Bool, ex,
-        Laws.jpg.acbits(rest))), List.append(&2, Bool, M3.code.ac(sym), List.append(&2, Bool, ex,
-        Laws.jpg.acbits(rest))), List.append(&2, Bool, M3.code.ac(sym), List.append(&2, Bool, ex, M3.acbits(rest))),
-        Equal.cong(List<&2, Bool>, List<&2, Bool>, xs => List.append(&2, Bool, xs, List.append(&2, Bool, ex,
-        Laws.jpg.acbits(rest))), Laws.jpg.acode(sym), M3.code.ac(sym), acode.eq(sym)), Equal.cong(List<&2, Bool>,
-        List<&2, Bool>, ys => List.append(&2, Bool, M3.code.ac(sym), List.append(&2, Bool, ex, ys)),
-        Laws.jpg.acbits(rest), M3.acbits(rest), acbits.eq(rest)))
-
-# a block's bits over the encoder's books are its bits over the literal books
-def blkbits.eq(bt: Laws.JBlkTok) -> {Laws.jpg.blkbits(bt) == M3.blkbits(bt) : List<&2, Bool>}:
-  match bt:
-    case Laws.JBlkTok{+dcs, +dcx, +acs}:
-      Equal.trans(List<&2, Bool>, List.append(&2, Bool, Laws.jpg.dcode(dcs), List.append(&2, Bool, dcx,
-        Laws.jpg.acbits(acs))), List.append(&2, Bool, M3.code.dc(dcs), List.append(&2, Bool, dcx,
-            Laws.jpg.acbits(acs))),
-        List.append(&2, Bool, M3.code.dc(dcs), List.append(&2, Bool, dcx, M3.acbits(acs))), Equal.cong(List<&2, Bool>,
-        List<&2, Bool>, xs => List.append(&2, Bool, xs, List.append(&2, Bool, dcx, Laws.jpg.acbits(acs))),
-        Laws.jpg.dcode(dcs), M3.code.dc(dcs), dcode.eq(dcs)), Equal.cong(List<&2, Bool>, List<&2, Bool>,
-        ys => List.append(&2, Bool, M3.code.dc(dcs), List.append(&2, Bool, dcx, ys)), Laws.jpg.acbits(acs),
-            M3.acbits(acs),
-        acbits.eq(acs)))
-
-# blocks' bits over the encoder's books are their bits over the literal books
-def tbits.eq(ts: List<&2, Laws.JBlkTok>) -> {Laws.jpg.tbits(ts) == M2.tbits(ts) : List<&2, Bool>}:
-  match ts:
-    case Nil{}:
-      {==}
-    case +tt <> +rest:
-      Equal.trans(List<&2, Bool>, List.append(&2, Bool, Laws.jpg.blkbits(tt), Laws.jpg.tbits(rest)), List.append(&2,
-        Bool, M3.blkbits(tt), Laws.jpg.tbits(rest)), List.append(&2, Bool, M3.blkbits(tt), M2.tbits(rest)),
-            Equal.cong(List<&2,
-        Bool>, List<&2, Bool>, xs => List.append(&2, Bool, xs, Laws.jpg.tbits(rest)), Laws.jpg.blkbits(tt),
-        M3.blkbits(tt), blkbits.eq(tt)), Equal.cong(List<&2, Bool>, List<&2, Bool>, ys => List.append(&2, Bool,
-        M3.blkbits(tt), ys), Laws.jpg.tbits(rest), M2.tbits(rest), tbits.eq(rest)))
-
-# the scan side of the round trip: blocks the decoder reads whole, as many as the frame has, written by the
-# encoder's bit writer, decode to a picture
+# the scan side of the round trip: blocks the decoder reads whole, as many as the frame has, each of the class its
+# place's tables hold, written by the encoder's bit writer, decode to a picture
 def scan_some(
   +tt: Laws.JBlkTok,
   +rest: List<&2, Laws.JBlkTok>,
   +ww: U32,
   +hh: U32,
+  +qq: U32,
+  +kd: Jenc.Layout,
   hw0: {U32.is_eq(ww, 0) == False{} : Bool},
   hh0: {U32.is_eq(hh, 0) == False{} : Bool},
   +hwl: {U32.is_le(ww, 65535) == True{} : Bool},
   +hhl: {U32.is_le(hh, 65535) == True{} : Bool},
   +har: {U32.is_le((ww * hh : U32), 2147483648) == True{} : Bool},
-  hw: {Laws.jpg.allwf(tt <> rest) == True{} : Bool},
-  hn: NBlk(ww, hh, rest)
-) -> {Laws.jpg.psome(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(),
+  +hw: {Laws.jpg.allwf(tt <> rest) == True{} : Bool},
+  +hg: {Laws.jpg.inorder(tt <> rest, Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)) == True{} : Bool},
+  hn: NBlk(kd, ww, hh, rest)
+) -> {Laws.jpg.psome(Jpeg.decode.run(Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq),
   Jenc.encode.pad(Laws.jpg.feed(Laws.jpg.tbits(tt <> rest), Jenc.encode.put0())), 0, False{})) == True{} : Bool}:
-  +bs = M2.tbits(tt <> rest)
+  +bs = Laws.jpg.tbits(tt <> rest)
   +os = moct(bs, [])
-  +fr = Laws.jpg.enc.frame(ww, hh)
-  +sc = Laws.jpg.enc.scan()
-  eb = Equal.sym(List<&2, Bool>, Laws.jpg.tbits(tt <> rest), bs, tbits.eq(tt <> rest))
-  et = Equal.sym(Jpeg.Tabs, Laws.jpg.enc.tabs(), tabsg(), tabs.eq())
+  +fr = Laws.jpg.enc.frame(kd, ww, hh)
+  +sc = Laws.jpg.enc.scan(kd)
+  +tab = Laws.jpg.enc.tabs(kd, qq)
   ep = Equal.sym(List<&2, U32>, Jenc.encode.pad(Laws.jpg.feed(bs, Jenc.encode.put0())), rxs(os), Equal.trans(List<&2,
     U32>, Jenc.encode.pad(Laws.jpg.feed(bs, M2.wput(M2.WS{[], []}))), Jenc.encode.pad(M2.wput(M2.wm(bs, M2.WS{[],
-        []}))), rxs(os),
-    Equal.cong(Jenc.Put, List<&2, U32>, qq => Jenc.encode.pad(qq), Laws.jpg.feed(bs, M2.wput(M2.WS{[], []})),
-        M2.wput(M2.wm(bs,
-    M2.WS{[], []})), M2.wfeed(bs, M2.WS{[], []}, {==})), pad_m(bs, [], [], {==})))
-  %eb : {Laws.jpg.psome(Jpeg.decode.run(fr, sc, Laws.jpg.enc.tabs(), Jenc.encode.pad(Laws.jpg.feed(_,
-    Jenc.encode.put0())), 0, False{})) == True{} : Bool}
-  %et : {Laws.jpg.psome(Jpeg.decode.run(fr, sc, _, Jenc.encode.pad(Laws.jpg.feed(bs, Jenc.encode.put0())),
-    0, False{})) == True{} : Bool}
-  %ep : {Laws.jpg.psome(Jpeg.decode.run(fr, sc, tabsg(), _, 0, False{})) == True{} : Bool}
-  dec(tt, rest, mpad(bs, []), ww, hh, os, hw0, hh0, hwl, hhl, har, oct8_moct(bs, [], {==}), concat_moct(bs, []), hw, hn)
+    []}))), rxs(os), Equal.cong(Jenc.Put, List<&2, U32>, pp => Jenc.encode.pad(pp), Laws.jpg.feed(bs,
+    M2.wput(M2.WS{[], []})), M2.wput(M2.wm(bs, M2.WS{[], []})), M2.wfeed(bs, M2.WS{[], []}, {==})), pad_m(bs, [], [],
+    {==})))
+  %ep : {Laws.jpg.psome(Jpeg.decode.run(fr, sc, tab, _, 0, False{})) == True{} : Bool}
+  dec(tt, rest, mpad(bs, []), ww, hh, qq, kd, os, hw0, hh0, hwl, hhl, har, oct8_moct(bs, [], {==}), concat_moct(bs, []),
+    hw, hg, hn)
 
-# whatever the watch finds, its colour and samples together
-def arm_use2(
-  +tag: U32,
-  rest: U32 & List<&2, U32>,
-  +ww: U32,
-  +hh: U32,
-  hn: {1n+U32.to_nat((M2.mcun(ww, hh) - 1 : U32)) == U32.to_nat(M2.mcun(ww, hh)) : Nat}
-) -> M2.PathOut(Jenc.encode.arm.use((tag, rest), ww, hh), U32.to_nat(M2.mcun(ww, hh))):
-  match rest:
-    case (+color, +px):
-      M2.disp(U32.is_eq(tag, 0), U32.is_eq(tag, 1), color, px, ww, hh, hn)
 
-# whatever the watch finds
-def arm_use(
-  got: U32 & U32 & List<&2, U32>,
-  +ww: U32,
-  +hh: U32,
-  hn: {1n+U32.to_nat((M2.mcun(ww, hh) - 1 : U32)) == U32.to_nat(M2.mcun(ww, hh)) : Nat}
-) -> M2.PathOut(Jenc.encode.arm.use(got, ww, hh), U32.to_nat(M2.mcun(ww, hh))):
-  match got:
-    case (+tag, rest):
-      arm_use2(tag, rest, ww, hh, hn)
-
-# the encoder's entropy-coded bytes are blocks the decoder reads whole, three per MCU, fed to the writer and padded
-def arm_ok(
-  +ww: U32,
-  +hh: U32,
-  +px: List<&2, U32>,
-  hn: {1n+U32.to_nat((M2.mcun(ww, hh) - 1 : U32)) == U32.to_nat(M2.mcun(ww, hh)) : Nat}
-) -> M2.PathOut(Jenc.encode.arm(ww, hh, px), U32.to_nat(M2.mcun(ww, hh))):
-  arm_use(Jenc.encode.watch(U32.to_nat((ww * hh : U32)), px), ww, hh, hn)
 
 # the first of a pair
 def fst.bw(+pp: Nat, pr: Bool & Word(pp)) -> Bool:
@@ -4598,6 +5114,204 @@ def udiv8(
   match xx:
     case U32{+xw}:
       udiv8.fin(xw, divinv(32n, xw))
+
+# a long division by 16 of a word of m bits: the word is the remainder and sixteen times the quotient, the remainder
+# below 16
+def DivInv16(+mm: Nat, -aa: Word(mm)) -> Type:
+  &_e: {Word.to_nat(mm, aa) == Nat.add(U32.to_nat(jenc.dr(mm, U32.divmod.go(mm, aa, 16))), M1.sixteen(Word.to_nat(mm,
+      jenc.dq(mm,
+    U32.divmod.go(mm, aa, 16))))) : Nat} -> {U32.is_lt(jenc.dr(mm, U32.divmod.go(mm, aa, 16)), 16) == True{} : Bool}
+
+# the type of divg16's parameter eh
+def divg16.eh.ty(+_pp: Nat, +_a0: Bool, +_hi: Word(_pp), +_qq: Word(_pp), +_rn: Nat) -> Type:
+  {Word.to_nat(1n+_pp, WCon{_a0, _hi}) == Nat.add(Nat.add(M1.bit(_a0), Nat.double(_rn)),
+    Nat.double(M1.sixteen(Word.to_nat(_pp, _qq)))) : Nat}
+
+# the long division's shifted remainder, the new quotient bit decided by g
+def divg16(
+  gg: Bool,
+  +pp: Nat,
+  +a0: Bool,
+  -hi: Word(pp),
+  +qq: Word(pp),
+  +ss: Word(32n),
+  +rn: Nat,
+  +hg: {U32.is_ge(U32{ss}, 16) == gg : Bool},
+  +es: {Word.to_nat(32n, ss) == Nat.add(M1.bit(a0), Nat.double(rn)) : Nat},
+  eh0: divg16.eh.ty(pp, a0, hi, qq, rn),
+  +hr: {Nat.is_lt(rn, 16n) == True{} : Bool}
+) -> &_e: {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(U32.to_nat(jenc.dr(1n+pp, U32.divmod.go.fin(pp, qq, U32{ss}, 16,
+  gg))), M1.sixteen(Word.to_nat(1n+pp, jenc.dq(1n+pp, U32.divmod.go.fin(pp, qq, U32{ss}, 16,
+  gg))))) : Nat} -> {U32.is_lt(jenc.dr(1n+pp, U32.divmod.go.fin(pp, qq, U32{ss}, 16, gg)), 16) == True{} : Bool}:
+  match gg:
+    case False{}:
+      +eh = {eh0 : {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)),
+        Nat.double(M1.sixteen(Word.to_nat(pp, qq)))) : Nat}}
+      +sn = Word.to_nat(32n, ss)
+      (Equal.trans(Nat, Word.to_nat(1n+pp, WCon{a0, hi}), Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)),
+          Nat.double(M1.sixteen(
+        Word.to_nat(pp, qq)))), Nat.add(sn, Nat.double(M1.sixteen(Word.to_nat(pp, qq)))), eh, Equal.cong(Nat, Nat, xx =>
+        Nat.add(xx, Nat.double(M1.sixteen(Word.to_nat(pp, qq)))), Nat.add(M1.bit(a0), Nat.double(rn)), sn,
+          Equal.sym(Nat,
+            sn,
+        Nat.add(M1.bit(a0), Nat.double(rn)), es))), nge_lt(U32.cmp(U32{ss}, 16), hg))
+    case True{}:
+      +eh = {eh0 : {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)),
+        Nat.double(M1.sixteen(Word.to_nat(pp, qq)))) : Nat}}
+      +sn = Word.to_nat(32n, ss)
+      +dd = Nat.double(M1.sixteen(Word.to_nat(pp, qq)))
+      +h8 = {Equal.trans(Bool, Nat.is_le(16n, sn), Cmp.is_ge(Nat.cmp(sn, 16n)), True{}, Equal.sym(Bool,
+        Cmp.is_ge(Nat.cmp(sn,
+        16n)), Nat.is_le(16n, sn), M3.ge_le(sn, 16n)), Equal.trans(Bool, Cmp.is_ge(Nat.cmp(sn, 16n)),
+          U32.is_ge(U32{ss}, 16),
+        True{}, Equal.cong(Cmp, Bool, cc => Cmp.is_ge(cc), Nat.cmp(sn, 16n), U32.cmp(U32{ss}, 16), Equal.sym(Cmp,
+        U32.cmp(U32{ss}, 16), Nat.cmp(sn, 16n), M3.jenc.u_cmp(U32{ss}, 16))), hg)) : {Nat.is_le(16n,
+          sn) == True{} : Bool}}
+      +er = {M6.ras.u32_sub_nat(U32{ss}, 16, h8) : {U32.to_nat((U32{ss} - 16 : U32)) == Nat.sub(sn, 16n) : Nat}}
+      +h16 = {Equal.trans(Bool, Nat.is_lt(sn, 32n), Nat.is_lt(Nat.add(M1.bit(a0), Nat.double(rn)), 32n), True{},
+        Equal.cong(Nat, Bool, xx => Nat.is_lt(xx, 32n), sn, Nat.add(M1.bit(a0), Nat.double(rn)), es), jenc.lt_dbl(a0,
+            rn, 16n,
+        hr)) : {Nat.is_lt(sn, 32n) == True{} : Bool}}
+      (Equal.trans(Nat, Word.to_nat(1n+pp, WCon{a0, hi}), Nat.add(sn, dd), Nat.add(U32.to_nat((U32{ss} - 16 : U32)),
+        16n+dd), Equal.trans(Nat, Word.to_nat(1n+pp, WCon{a0, hi}), Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)), dd),
+        Nat.add(sn, dd), eh, Equal.cong(Nat, Nat, xx => Nat.add(xx, dd), Nat.add(M1.bit(a0), Nat.double(rn)), sn,
+        Equal.sym(Nat, sn, Nat.add(M1.bit(a0), Nat.double(rn)), es))), Equal.sym(Nat, Nat.add(U32.to_nat((U32{ss} - 16 :
+        U32)), 16n+dd), Nat.add(sn, dd), Equal.trans(Nat, Nat.add(U32.to_nat((U32{ss} - 16 : U32)), 16n+dd), Nat.add(
+        Nat.sub(sn, 16n), 16n+dd), Nat.add(sn, dd), Equal.cong(Nat, Nat, xx => Nat.add(xx, 16n+dd),
+          U32.to_nat((U32{ss} - 16
+        : U32)), Nat.sub(sn, 16n), er), Equal.trans(Nat, Nat.add(Nat.sub(sn, 16n), Nat.add(16n, dd)), Nat.add(16n,
+          Nat.add(
+        Nat.sub(sn, 16n), dd)), Nat.add(sn, dd), M1.add_swap(Nat.sub(sn, 16n), 16n, dd), Equal.trans(Nat, Nat.add(16n,
+        Nat.add(Nat.sub(sn, 16n), dd)), Nat.add(Nat.add(16n, Nat.sub(sn, 16n)), dd), Nat.add(sn, dd), Equal.sym(Nat,
+        Nat.add(Nat.add(16n, Nat.sub(sn, 16n)), dd), Nat.add(16n, Nat.add(Nat.sub(sn, 16n), dd)), M1.ras.add_assoc(16n,
+        Nat.sub(sn, 16n), dd)), Equal.cong(Nat, Nat, xx => Nat.add(xx, dd), Nat.add(16n, Nat.sub(sn, 16n)), sn,
+          M6.add_sub(16n,
+        sn, h8))))))), M3.n_ult((U32{ss} - 16 : U32), 16, Equal.trans(Bool, Nat.is_lt(U32.to_nat((U32{ss} - 16 : U32)),
+            16n),
+        Nat.is_lt(Nat.sub(sn, 16n), 16n), True{}, Equal.cong(Nat, Bool, xx => Nat.is_lt(xx, 16n),
+          U32.to_nat((U32{ss} - 16 :
+        U32)), Nat.sub(sn, 16n), er), M6.sub_lt(16n, sn, 16n, h8, h16))))
+
+# the division by 16 invariant for a long division's result x of a word of p + 1 bits
+def DivR16(+pp: Nat, -aa: Word(1n+pp), xx: Word(1n+pp) & U32) -> Type:
+  &_e: {Word.to_nat(1n+pp, aa) == Nat.add(U32.to_nat(jenc.dr(1n+pp, xx)), M1.sixteen(Word.to_nat(1n+pp, jenc.dq(1n+pp,
+      xx)))) : Nat} ->
+    {U32.is_lt(jenc.dr(1n+pp, xx), 16) == True{} : Bool}
+
+# the invariant moved along an equality of results
+def divr16_tr(
+  +pp: Nat,
+  -aa: Word(1n+pp),
+  xx: Word(1n+pp) & U32,
+  yy: Word(1n+pp) & U32,
+  ee: {xx == yy : Word(1n+pp) & U32},
+  hh: DivR16(pp, aa, yy)
+) -> DivR16(pp, aa, xx):
+  es = Equal.sym(Word(1n+pp) & U32, xx, yy, ee)
+  %es : DivR16(pp, aa, _)
+  hh
+
+# one step of the long division by 16, the remainder a word
+def divstep16.r(
+  +pp: Nat,
+  +a0: Bool,
+  -hi: Word(pp),
+  +qq: Word(pp),
+  +rw: Word(32n),
+  ee: {Word.to_nat(pp, hi) == Nat.add(Word.to_nat(32n, rw), M1.sixteen(Word.to_nat(pp, qq))) : Nat},
+  +hl: {U32.is_lt(U32{rw}, 16) == True{} : Bool}
+) -> DivR16(pp, WCon{a0, hi}, U32.divmod.go.rec(pp, a0, 16, (qq, U32{rw}))):
+  +ss = snd.bw(32n, Word.shl.out(32n, a0, rw))
+  +rn = Word.to_nat(32n, rw)
+  +qn = Word.to_nat(pp, qq)
+  +ht = {M3.ngt_top(31n, rw, M3.uw(16), {==}, M3.lt_ngt(Word.cmp(32n, rw, M3.uw(16)), hl)) : {M3.wtop(31n,
+      rw) == False{} :
+    Bool}}
+  +hf = {Equal.trans(Bool, fst.bw(32n, Word.shl.out(32n, a0, rw)), M3.wtop(31n, rw), False{}, shl_top(31n, a0, rw),
+    ht) : {fst.bw(32n, Word.shl.out(32n, a0, rw)) ==
+    False{} : Bool}}
+  +es = {jenc.shl_nat(31n, a0, rw, ht) : {Word.to_nat(32n, ss) == Nat.add(M1.bit(a0), Nat.double(rn)) : Nat}}
+  +eh = {Equal.trans(Nat, Word.to_nat(1n+pp, WCon{a0, hi}), Nat.add(M1.bit(a0), Nat.double(Word.to_nat(pp, hi))),
+    Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)), Nat.double(M1.sixteen(qn))), M1.to_nat_con(pp, a0, hi),
+    Equal.trans(Nat,
+    Nat.add(M1.bit(a0), Nat.double(Word.to_nat(pp, hi))), Nat.add(M1.bit(a0), Nat.double(Nat.add(rn, M1.sixteen(qn)))),
+    Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)), Nat.double(M1.sixteen(qn))), Equal.cong(Nat, Nat,
+        xx => Nat.add(M1.bit(a0),
+    Nat.double(xx)), Word.to_nat(pp, hi), Nat.add(rn, M1.sixteen(qn)), ee), Equal.trans(Nat, Nat.add(M1.bit(a0),
+    Nat.double(Nat.add(rn, M1.sixteen(qn)))), Nat.add(M1.bit(a0), Nat.add(Nat.double(rn), Nat.double(M1.sixteen(qn)))),
+    Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)), Nat.double(M1.sixteen(qn))), Equal.cong(Nat, Nat,
+        xx => Nat.add(M1.bit(a0),
+    xx), Nat.double(Nat.add(rn, M1.sixteen(qn))), Nat.add(Nat.double(rn), Nat.double(M1.sixteen(qn))),
+      M1.double_dist(rn,
+    M1.sixteen(qn))), Equal.sym(Nat, Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)), Nat.double(M1.sixteen(qn))),
+        Nat.add(M1.bit(a0),
+    Nat.add(Nat.double(rn), Nat.double(M1.sixteen(qn)))), M1.ras.add_assoc(M1.bit(a0), Nat.double(rn),
+        Nat.double(M1.sixteen(qn))))))) :
+    {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)),
+      Nat.double(M1.sixteen(qn))) : Nat}}
+  +gg = U32.is_ge(U32{ss}, 16)
+  divr16_tr(pp, WCon{a0, hi}, U32.divmod.go.rec(pp, a0, 16, (qq, U32{rw})), U32.divmod.go.fin(pp, qq, U32{ss}, 16, gg),
+    Equal.trans(Word(1n+pp) & U32, U32.divmod.go.shl(pp, qq, 16, Word.shl.out(32n, a0, rw)), U32.divmod.go.shl(pp, qq,
+      16, (fst.bw(32n, Word.shl.out(32n, a0, rw)), ss)),
+    U32.divmod.go.fin(pp, qq, U32{ss}, 16, gg), Equal.cong(Bool & Word(32n), Word(1n+pp) & U32, tt =>
+    U32.divmod.go.shl(pp, qq, 16, tt), Word.shl.out(32n, a0, rw), (fst.bw(32n, Word.shl.out(32n, a0, rw)), ss),
+      bw_eta(32n, Word.shl.out(32n, a0, rw))), Equal.cong(Bool, Word(1n+pp) & U32,
+    bb => U32.divmod.go.fin(pp, qq, U32{ss}, 16, Bool.or(bb, gg)), fst.bw(32n, Word.shl.out(32n, a0, rw)), False{},
+      hf)), divg16(gg, pp, a0, hi,
+    qq, ss, rn, {==}, es, eh, M3.ult_n(U32{rw}, 16, hl)))
+
+# the type of divstep16's parameter inv
+def divstep16.inv.ty(+_pp: Nat, +_hi: Word(_pp), _qr: Word(_pp) & U32) -> Type:
+  &_e: {Word.to_nat(_pp, _hi) == Nat.add(U32.to_nat(jenc.dr(_pp, _qr)), M1.sixteen(Word.to_nat(_pp, jenc.dq(_pp,
+    _qr)))) : Nat} -> {U32.is_lt(jenc.dr(_pp, _qr), 16) == True{} : Bool}
+
+# one step of the long division by 16, whatever the division of the higher bits returned
+def divstep16(
+  +pp: Nat,
+  +a0: Bool,
+  -hi: Word(pp),
+  qr: Word(pp) & U32,
+  inv: divstep16.inv.ty(pp, hi, qr)
+) -> DivR16(pp, WCon{a0, hi}, U32.divmod.go.rec(pp, a0, 16, qr)):
+  match qr:
+    case (+qq, rr):
+      match rr:
+        case U32{+rw}:
+          (e, hl) = inv
+          divstep16.r(pp, a0, hi, qq, rw, e, hl)
+
+# the long division by 16: the word is the remainder and sixteen times the quotient, the remainder below 16
+def divinv16(mm: Nat, aa: Word(mm)) -> DivInv16(mm, aa):
+  match mm aa:
+    case 0n WNil{}:
+      ({==}, {==})
+    case 1n+ +pp WCon{+a0, +hi}:
+      divstep16(pp, a0, hi, U32.divmod.go(pp, hi, 16), divinv16(pp, hi))
+
+# the division of a word by 16, its invariant named
+def udiv16.fin(
+  +xw: Word(32n),
+  inv: DivInv16(32n, xw)
+) -> &rr: U32 -> &_e: {U32.to_nat(U32{xw}) == Nat.add(U32.to_nat(rr), M1.sixteen(U32.to_nat(U32.div(U32{xw},
+  16)))) : Nat} -> {U32.is_lt(rr, 16) == True{} : Bool}:
+  (e, hl) = inv
+  (jenc.dr(32n, U32.divmod.go(32n, xw, 16)), Equal.trans(Nat, Word.to_nat(32n, xw), Nat.add(U32.to_nat(jenc.dr(32n,
+    U32.divmod.go(32n, xw, 16))), M1.sixteen(Word.to_nat(32n, jenc.dq(32n,
+    U32.divmod.go(32n, xw, 16))))), Nat.add(U32.to_nat(jenc.dr(32n, U32.divmod.go(32n, xw, 16))),
+      M1.sixteen(U32.to_nat(U32.div(U32{xw}, 16)))), e, Equal.cong(U32, Nat, uu =>
+    Nat.add(U32.to_nat(jenc.dr(32n, U32.divmod.go(32n, xw, 16))), M1.sixteen(U32.to_nat(uu))), U32{jenc.dq(32n,
+        U32.divmod.go(32n, xw,
+      16))}, U32.div(U32{xw}, 16), Equal.sym(U32,
+    U32.div(U32{xw}, 16), U32{jenc.dq(32n, U32.divmod.go(32n, xw, 16))}, divfin_eta(U32.divmod.go(32n, xw, 16))))), hl)
+
+# a U32 is a remainder below 16 and sixteen times its quotient by 16
+def udiv16(
+  xx: U32
+) -> &rr: U32 -> &_e: {U32.to_nat(xx) == Nat.add(U32.to_nat(rr), M1.sixteen(U32.to_nat(U32.div(xx,
+  16)))) : Nat} -> {U32.is_lt(rr, 16) == True{} : Bool}:
+  match xx:
+    case U32{+xw}:
+      udiv16.fin(xw, divinv16(32n, xw))
 
 # the multiplier, when the product is below 2^n, is the product
 def word_mul_pow(
@@ -5204,13 +5918,11 @@ def ceil_eq(
         U32.to_nat((ww + 7 : U32)),
     Nat.add(wn, 7n), e7)))))
 
-# the encoder's MCU count and the decoder's block count, for sides of 1 to 65535: three blocks per MCU, at least one
-# MCU
-def CountOut(+ww: U32, +hh: U32) -> Type:
-  &_n: {U32.to_nat(Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1)) == M2.tri(U32.to_nat(M2.mcun(ww,
-      hh))) : Nat} ->
-    &_p: {Nat.is_lt(0n, U32.to_nat(M2.mcun(ww, hh))) == True{} : Bool} -> {1n+U32.to_nat((M2.mcun(ww, hh) - 1 : U32)) ==
-    U32.to_nat(M2.mcun(ww, hh)) : Nat}
+# the encoder's MCU count and the decoder's block count of a layout's frame, for sides of 1 to 65535: as many blocks
+# per MCU as the layout has, at least one MCU
+def CountOut(+kd: Jenc.Layout, +ww: U32, +hh: U32) -> Type:
+  &_n: {U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh))) == M2.kcnt(kd, U32.to_nat(M2.mcunk(kd, ww,
+    hh))) : Nat} -> {Nat.is_lt(0n, U32.to_nat(M2.mcunk(kd, ww, hh))) == True{} : Bool}
 
 # a product of two numbers above 0 is above 0
 def pos_mul(
@@ -5225,14 +5937,30 @@ def pos_mul(
     case 1n+ +pp:
       M1.lt_le_trans(0n, bb, Nat.add(bb, Nat.mul(pp, bb)), hb, M6.le_add_more(bb, bb, Nat.mul(pp, bb), M1.le_refl(bb)))
 
-# the type of count_fin's parameter pr
-def count_fin.pr.ty(+_ww: U32, +_hh: U32) -> Type:
+# the type of count_fin's parameter pr: the MCU count and k times it, without U32 wrap
+def count_fin.pr.ty(+_ww: U32, +_hh: U32, +_kk: U32) -> Type:
   &_p: {U32.to_nat(M2.mcun(_ww, _hh)) == Nat.mul(U32.to_nat(U32.div((_ww + 7 : U32), 8)),
-    U32.to_nat(U32.div((_hh + 7 : U32), 8))) : Nat} -> {U32.to_nat((M2.mcun(_ww,
-    _hh) * 3 : U32)) == Nat.mul(Nat.mul(U32.to_nat(U32.div((_ww + 7 : U32), 8)), U32.to_nat(U32.div((_hh + 7 : U32),
-    8))), 3n) : Nat}
+    U32.to_nat(U32.div((_hh + 7 : U32), 8))) : Nat} -> {U32.to_nat((M2.mcun(_ww, _hh) * _kk : U32)) ==
+    Nat.mul(Nat.mul(U32.to_nat(U32.div((_ww + 7 : U32), 8)), U32.to_nat(U32.div((_hh + 7 : U32), 8))),
+    U32.to_nat(_kk)) : Nat}
 
-# the counts, the products named
+# the decoder's MCU count, its sides' ceilings by 8, is the encoder's, the blocks per MCU after it
+def nb_eq(
+  +ww: U32,
+  +hh: U32,
+  +kk: U32,
+  +cw: {((ww + 8 : U32) - 1 : U32) == (ww + 7 : U32) : U32},
+  +ch: {((hh + 8 : U32) - 1 : U32) == (hh + 7 : U32) : U32}
+) -> {((U32.div(((ww + 8 : U32) - 1 : U32), 8) * U32.div(((hh + 8 : U32) - 1 : U32), 8) : U32) * kk : U32) ==
+  (M2.mcun(ww, hh) * kk : U32) : U32}:
+  +mw = U32.div((ww + 7 : U32), 8)
+  +h8 = U32.div(((hh + 8 : U32) - 1 : U32), 8)
+  Equal.cong(U32, U32, uu => (uu * kk : U32), (U32.div(((ww + 8 : U32) - 1 : U32), 8) * h8 : U32), M2.mcun(ww, hh),
+    Equal.trans(U32, (U32.div(((ww + 8 : U32) - 1 : U32), 8) * h8 : U32), (mw * h8 : U32), M2.mcun(ww, hh),
+    Equal.cong(U32, U32, uu => (U32.div(uu, 8) * h8 : U32), ((ww + 8 : U32) - 1 : U32), (ww + 7 : U32), cw),
+    Equal.cong(U32, U32, uu => (mw * U32.div(uu, 8) : U32), ((hh + 8 : U32) - 1 : U32), (hh + 7 : U32), ch)))
+
+# the 4:4:4 counts, the products named
 def count_fin(
   +ww: U32,
   +hh: U32,
@@ -5240,8 +5968,8 @@ def count_fin(
   +ch: {((hh + 8 : U32) - 1 : U32) == (hh + 7 : U32) : U32},
   +pw: {Nat.is_lt(0n, U32.to_nat(U32.div((ww + 7 : U32), 8))) == True{} : Bool},
   +ph: {Nat.is_lt(0n, U32.to_nat(U32.div((hh + 7 : U32), 8))) == True{} : Bool},
-  pr: count_fin.pr.ty(ww, hh)
-) -> CountOut(ww, hh):
+  pr: count_fin.pr.ty(ww, hh, 3)
+) -> CountOut(Jenc.K444{}, ww, hh):
   (em0, e30) = pr
   +mw = U32.div((ww + 7 : U32), 8)
   +mh = U32.div((hh + 7 : U32), 8)
@@ -5252,51 +5980,243 @@ def count_fin(
   +e3 = {e30 : {U32.to_nat((mm * 3 : U32)) == Nat.mul(pn, 3n) : Nat}}
   +hp = {M1.lt_rw_r(0n, pn, mn, Equal.sym(Nat, mn, pn, em), pos_mul(U32.to_nat(mw), U32.to_nat(mh), pw, ph)) :
     {Nat.is_lt(0n, mn) == True{} : Bool}}
-  +h1 = {Equal.trans(Bool, Nat.is_le(1n, mn), Nat.is_lt(0n, mn), True{}, Equal.sym(Bool, Nat.is_lt(0n, mn),
-    Nat.is_le(1n,
-    mn), M1.lt_le_succ(0n, mn)), hp) : {Nat.is_le(1n, mn) == True{} : Bool}}
-  +nb = {Equal.cong(U32, U32, uu => (uu * 3 : U32), (U32.div(((ww + 8 : U32) - 1 : U32),
-    8) * U32.div(((hh + 8 : U32) - 1 :
-    U32), 8) : U32), mm, Equal.trans(U32, (U32.div(((ww + 8 : U32) - 1 : U32),
-      8) * U32.div(((hh + 8 : U32) - 1 : U32), 8)
-    : U32), (mw * U32.div(((hh + 8 : U32) - 1 : U32), 8) : U32), mm, Equal.cong(U32, U32, uu => (U32.div(uu, 8) *
-    U32.div(((hh + 8 : U32) - 1 : U32), 8) : U32), ((ww + 8 : U32) - 1 : U32), (ww + 7 : U32), cw), Equal.cong(U32, U32,
-    uu => (mw * U32.div(uu, 8) : U32), ((hh + 8 : U32) - 1 : U32), (hh + 7 : U32), ch))) :
-    {Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1) == (mm * 3 : U32) : U32}}
+  +nb = {nb_eq(ww, hh, 3, cw, ch) : {Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1) == (mm * 3 : U32) : U32}}
   (Equal.trans(Nat, U32.to_nat(Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1)), U32.to_nat((mm * 3 : U32)),
     M2.tri(mn), Equal.cong(U32, Nat, uu => U32.to_nat(uu), Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1),
-        (mm *
-    3 : U32), nb), Equal.trans(Nat, U32.to_nat((mm * 3 : U32)), Nat.mul(pn, 3n), M2.tri(mn), e3, Equal.trans(Nat,
-    Nat.mul(pn, 3n), Nat.mul(mn, 3n), M2.tri(mn), Equal.cong(Nat, Nat, xx => Nat.mul(xx, 3n), pn, mn, Equal.sym(Nat, mn,
-    pn, em)), Equal.sym(Nat, M2.tri(mn), Nat.mul(mn, 3n), tri_mul(mn))))), hp, Equal.trans(Nat, 1n+U32.to_nat((mm - 1 :
-    U32)), Nat.add(1n, Nat.sub(mn, 1n)), mn, Equal.cong(Nat, Nat, xx => 1n+xx, U32.to_nat((mm - 1 : U32)), Nat.sub(mn,
-      1n),
-    M6.ras.u32_sub_nat(mm, 1, h1)), M6.add_sub(1n, mn, h1)))
+    (mm * 3 : U32), nb), Equal.trans(Nat, U32.to_nat((mm * 3 : U32)), Nat.mul(pn, 3n), M2.tri(mn), e3,
+    Equal.trans(Nat, Nat.mul(pn, 3n), Nat.mul(mn, 3n), M2.tri(mn), Equal.cong(Nat, Nat, xx => Nat.mul(xx, 3n), pn, mn,
+    Equal.sym(Nat, mn, pn, em)), Equal.sym(Nat, M2.tri(mn), Nat.mul(mn, 3n), tri_mul(mn))))), hp)
 
-# the counts, each side's MCU count named
-def count_mw(
+# the gray counts, the products named: one block per MCU
+def count_fin.g(
+  +ww: U32,
+  +hh: U32,
+  +cw: {((ww + 8 : U32) - 1 : U32) == (ww + 7 : U32) : U32},
+  +ch: {((hh + 8 : U32) - 1 : U32) == (hh + 7 : U32) : U32},
+  +pw: {Nat.is_lt(0n, U32.to_nat(U32.div((ww + 7 : U32), 8))) == True{} : Bool},
+  +ph: {Nat.is_lt(0n, U32.to_nat(U32.div((hh + 7 : U32), 8))) == True{} : Bool},
+  pr: count_fin.pr.ty(ww, hh, 1)
+) -> CountOut(Jenc.KGray{}, ww, hh):
+  (em0, e10) = pr
+  +mw = U32.div((ww + 7 : U32), 8)
+  +mh = U32.div((hh + 7 : U32), 8)
+  +mm = M2.mcun(ww, hh)
+  +mn = U32.to_nat(mm)
+  +pn = Nat.mul(U32.to_nat(mw), U32.to_nat(mh))
+  +em = {em0 : {mn == pn : Nat}}
+  +e1 = {e10 : {U32.to_nat((mm * 1 : U32)) == Nat.mul(pn, 1n) : Nat}}
+  +hp = {M1.lt_rw_r(0n, pn, mn, Equal.sym(Nat, mn, pn, em), pos_mul(U32.to_nat(mw), U32.to_nat(mh), pw, ph)) :
+    {Nat.is_lt(0n, mn) == True{} : Bool}}
+  +nb = {nb_eq(ww, hh, 1, cw, ch) : {Jpeg.decode.nblocks(ww, hh, [1], [1], 1, 1) == (mm * 1 : U32) : U32}}
+  (Equal.trans(Nat, U32.to_nat(Jpeg.decode.nblocks(ww, hh, [1], [1], 1, 1)), U32.to_nat((mm * 1 : U32)), mn,
+    Equal.cong(U32, Nat, uu => U32.to_nat(uu), Jpeg.decode.nblocks(ww, hh, [1], [1], 1, 1), (mm * 1 : U32), nb),
+    Equal.trans(Nat, U32.to_nat((mm * 1 : U32)), Nat.mul(pn, 1n), mn, e1, Equal.trans(Nat, Nat.mul(pn, 1n), pn, mn,
+    M1.mul_one(pn), Equal.sym(Nat, mn, pn, em)))), hp)
+
+# the 4:4:4 counts, each side's MCU count named
+def count_mw3(
   +ww: U32,
   +hh: U32,
   +hwl: {U32.is_le(ww, 65535) == True{} : Bool},
   +hhl: {U32.is_le(hh, 65535) == True{} : Bool},
   ow: MwOut(ww),
   oh: MwOut(hh)
-) -> CountOut(ww, hh):
+) -> CountOut(Jenc.K444{}, ww, hh):
   (e7w, fw, pw) = ow
   (e7h, fh, ph) = oh
-  count_fin(ww, hh, ceil_eq(ww, hwl, e7w), ceil_eq(hh, hhl, e7h), pw, ph, u32_triple(U32.div((ww + 7 : U32), 8),
-    U32.div((hh + 7 : U32), 8), 3, fw, fh, (wof(2n, 3n), {==})))
+  +mw = U32.div((ww + 7 : U32), 8)
+  +mh = U32.div((hh + 7 : U32), 8)
+  count_fin(ww, hh, ceil_eq(ww, hwl, e7w), ceil_eq(hh, hhl, e7h), pw, ph, u32_triple(mw, mh, 3, fw, fh, (wof(2n, 3n),
+    {==})))
+
+# the gray counts, each side's MCU count named
+def count_mwg(
+  +ww: U32,
+  +hh: U32,
+  +hwl: {U32.is_le(ww, 65535) == True{} : Bool},
+  +hhl: {U32.is_le(hh, 65535) == True{} : Bool},
+  ow: MwOut(ww),
+  oh: MwOut(hh)
+) -> CountOut(Jenc.KGray{}, ww, hh):
+  (e7w, fw, pw) = ow
+  (e7h, fh, ph) = oh
+  +mw = U32.div((ww + 7 : U32), 8)
+  +mh = U32.div((hh + 7 : U32), 8)
+  count_fin.g(ww, hh, ceil_eq(ww, hwl, e7w), ceil_eq(hh, hhl, e7h), pw, ph, u32_triple(mw, mh, 1, fw, fh, (wof(2n,
+    1n), {==})))
+
+# two to 4 + k is sixteen times two to k
+def pow4(+kk: Nat) -> {Nat.pow(2n, 4n+kk) == M1.sixteen(Nat.pow(2n, kk)) : Nat}:
+  +p0 = Nat.pow(2n, kk)
+  Equal.trans(Nat, Nat.pow(2n, 4n+kk), Nat.double(Nat.pow(2n, 3n+kk)), M1.sixteen(p0), M1.pow2_succ(3n+kk),
+    Equal.cong(Nat, Nat, xx => Nat.double(xx), Nat.pow(2n, 3n+kk), M1.eight(p0), pow3(kk)))
+
+# sixteen times numbers keep their order
+def sixteen_iff(+aa: Nat, +bb: Nat) -> {Nat.is_lt(M1.sixteen(aa), M1.sixteen(bb)) == Nat.is_lt(aa, bb) : Bool}:
+  Equal.trans(Bool, Nat.is_lt(M1.sixteen(aa), M1.sixteen(bb)), Nat.is_lt(M1.eight(aa), M1.eight(bb)), Nat.is_lt(aa,
+    bb), dbl_iff(M1.eight(aa), M1.eight(bb)), eight_iff(aa, bb))
+
+# a quotient by 16 of a number of k + 4 bits fits k bits
+def qfits16(
+  +kk: Nat,
+  +xx: Nat,
+  +rr: Nat,
+  +qq: Nat,
+  ee: {xx == Nat.add(rr, M1.sixteen(qq)) : Nat},
+  ff: Fits(4n+kk, xx)
+) -> Fits(kk, qq):
+  +pk = Nat.pow(2n, kk)
+  +hx = {fits_lt(4n+kk, xx, ff) : {Nat.is_lt(xx, Nat.pow(2n, 4n+kk)) == True{} : Bool}}
+  +h16 = {M1.le_lt_trans(M1.sixteen(qq), xx, M1.sixteen(pk), M1.le_rw_r(M1.sixteen(qq), Nat.add(rr, M1.sixteen(qq)),
+    xx, Equal.sym(Nat, xx, Nat.add(rr, M1.sixteen(qq)), ee), M3.le_add_left(rr, M1.sixteen(qq))), M1.lt_rw_r(xx,
+    Nat.pow(2n, 4n+kk), M1.sixteen(pk), pow4(kk), hx)) : {Nat.is_lt(M1.sixteen(qq), M1.sixteen(pk)) == True{} : Bool}}
+  mkfits(kk, qq, Equal.trans(Bool, Nat.is_lt(qq, pk), Nat.is_lt(M1.sixteen(qq), M1.sixteen(pk)), True{},
+    Equal.sym(Bool, Nat.is_lt(M1.sixteen(qq), M1.sixteen(pk)), Nat.is_lt(qq, pk), sixteen_iff(qq, pk)), h16))
+
+# a quotient by 16 of a number at least 16 is above 0
+def q_pos16(
+  qq: Nat,
+  +xx: Nat,
+  +rr: Nat,
+  ee: {xx == Nat.add(rr, M1.sixteen(qq)) : Nat},
+  hr: {Nat.is_lt(rr, 16n) == True{} : Bool},
+  hx: {Nat.is_le(16n, xx) == True{} : Bool}
+) -> {Nat.is_lt(0n, qq) == True{} : Bool}:
+  match qq:
+    case 0n:
+      Empty.absurd({Nat.is_lt(0n, 0n) == True{} : Bool}, M3.jenc.true_false(Equal.trans(Bool, True{}, Nat.is_le(16n,
+        rr), False{}, Equal.sym(Bool, Nat.is_le(16n, rr), True{}, Equal.trans(Bool, Nat.is_le(16n, rr), Nat.is_le(16n,
+        xx), True{}, Equal.cong(Nat, Bool, nn => Nat.is_le(16n, nn), rr, xx, Equal.sym(Nat, xx, rr, Equal.trans(Nat, xx,
+        Nat.add(rr, 0n), rr, ee, M1.ras.add_zero(rr)))), hx)), M3.lt_nle(rr, 16n, hr))))
+    case 1n+_p:
+      {==}
+
+# a side at most 65535, plus 16, less 1, as the decoder rounds it up by 16, is the side plus 15
+def e15(
+  +ww: U32,
+  +hl: {U32.is_le(ww, 65535) == True{} : Bool}
+) -> {U32.to_nat(((ww + 16 : U32) - 1 : U32)) == Nat.add(U32.to_nat(ww), 15n) : Nat}:
+  +wn = U32.to_nat(ww)
+  +e16 = {uadd_fits(ww, 16, fits_up(17n, 15n, Nat.add(wn, 16n), fits_add(16n, wn, 16n, fits16(ww, hl), (wof(16n,
+    16n), {==})))) : {U32.to_nat((ww + 16 : U32)) == Nat.add(wn, 16n) : Nat}}
+  +h1 = {M1.le_rw_r(1n, Nat.add(wn, 16n), U32.to_nat((ww + 16 : U32)), Equal.sym(Nat, U32.to_nat((ww + 16 : U32)),
+    Nat.add(wn, 16n), e16), M1.le_trans(1n, 16n, Nat.add(wn, 16n), {==}, M3.le_add_left(wn, 16n))) : {Nat.is_le(1n,
+    U32.to_nat((ww + 16 : U32))) == True{} : Bool}}
+  Equal.trans(Nat, U32.to_nat(((ww + 16 : U32) - 1 : U32)), Nat.sub(U32.to_nat((ww + 16 : U32)), 1n), Nat.add(wn,
+    15n), M6.ras.u32_sub_nat((ww + 16 : U32), 1, h1), Equal.trans(Nat, Nat.sub(U32.to_nat((ww + 16 : U32)), 1n),
+    Nat.sub(1n+Nat.add(wn, 15n), 1n), Nat.add(wn, 15n), Equal.cong(Nat, Nat, nn => Nat.sub(nn, 1n), U32.to_nat((ww +
+    16 : U32)), 1n+Nat.add(wn, 15n), Equal.trans(Nat, U32.to_nat((ww + 16 : U32)), Nat.add(wn, 16n), 1n+Nat.add(wn,
+    15n), e16, M1.ras.add_succ(wn, 15n))), M6.sub_zero(Nat.add(wn, 15n))))
+
+# a side's 4:2:0 MCU count, its side rounded up by 16: fits 13 bits and is at least 1
+def Mw16Out(+ww: U32) -> Type:
+  &_f: Fits(13n, U32.to_nat(Jpeg.decode.ceil(ww, 16))) -> {Nat.is_lt(0n, U32.to_nat(Jpeg.decode.ceil(ww, 16))) ==
+    True{} : Bool}
+
+# the type of mw16_fin's parameter dv
+def mw16_fin.dv.ty(+_ww: U32) -> Type:
+  &rr: U32 -> &_e: {U32.to_nat(((_ww + 16 : U32) - 1 : U32)) == Nat.add(U32.to_nat(rr),
+    M1.sixteen(U32.to_nat(Jpeg.decode.ceil(_ww, 16)))) : Nat} -> {U32.is_lt(rr, 16) == True{} : Bool}
+
+# a side's 4:2:0 MCU count, its division named
+def mw16_fin(
+  +ww: U32,
+  +hl: {U32.is_le(ww, 65535) == True{} : Bool},
+  +h16: {Nat.is_le(16n, Nat.add(U32.to_nat(ww), 15n)) == True{} : Bool},
+  dv: mw16_fin.dv.ty(ww)
+) -> Mw16Out(ww):
+  (+rr, +ed, hr) = dv
+  +wn = U32.to_nat(ww)
+  +xx = U32.to_nat(((ww + 16 : U32) - 1 : U32))
+  +qn = U32.to_nat(Jpeg.decode.ceil(ww, 16))
+  +ex = {e15(ww, hl) : {xx == Nat.add(wn, 15n) : Nat}}
+  (qfits16(13n, xx, U32.to_nat(rr), qn, ed, fits_tr(17n, Nat.add(wn, 15n), xx, Equal.sym(Nat, xx, Nat.add(wn, 15n),
+    ex), fits_add(16n, wn, 15n, fits16(ww, hl), (wof(16n, 15n), {==})))), q_pos16(qn, xx, U32.to_nat(rr), ed,
+    M3.ult_n(rr, 16, hr), M1.le_rw_r(16n, Nat.add(wn, 15n), xx, Equal.sym(Nat, xx, Nat.add(wn, 15n), ex), h16)))
+
+# a nonzero side at most 65535: its 4:2:0 MCU count fits 13 bits and is at least 1
+def mw16_ok(
+  +ww: U32,
+  h0: {U32.is_eq(ww, 0) == False{} : Bool},
+  +hl: {U32.is_le(ww, 65535) == True{} : Bool}
+) -> Mw16Out(ww):
+  +wn = U32.to_nat(ww)
+  +hw = {M3.nle_lt(wn, 0n, Equal.trans(Bool, Nat.is_le(wn, 0n), Nat.is_eq(wn, 0n), False{}, ngt_le0(wn),
+    Equal.trans(Bool, Nat.is_eq(wn, 0n), U32.is_eq(ww, 0), False{}, Equal.sym(Bool, U32.is_eq(ww, 0), Nat.is_eq(wn,
+    0n), M1.u32_eq(ww, 0)), h0))) : {Nat.is_lt(0n, wn) == True{} : Bool}}
+  mw16_fin(ww, hl, M3.le_addr(1n, wn, 15n, Equal.trans(Bool, Nat.is_le(1n, wn), Nat.is_lt(0n, wn), True{},
+    Equal.sym(Bool, Nat.is_lt(0n, wn), Nat.is_le(1n, wn), M1.lt_le_succ(0n, wn)), hw)), udiv16(((ww + 16 : U32) - 1 :
+    U32)))
+
+# the 4:2:0 MCU counts' product, and it times 6, never wrap
+def u32_six(
+  +au: U32,
+  +bu: U32,
+  fa: Fits(13n, U32.to_nat(au)),
+  fb: Fits(13n, U32.to_nat(bu))
+) -> &_p: {U32.to_nat((au * bu : U32)) == Nat.mul(U32.to_nat(au), U32.to_nat(bu)) : Nat} -> {U32.to_nat(((au * bu :
+  U32) * 6 : U32)) == Nat.mul(Nat.mul(U32.to_nat(au), U32.to_nat(bu)), 6n) : Nat}:
+  match au bu:
+    case U32{+aw} U32{+bw}:
+      word_triple(32n, 13n, 13n, 3n, aw, bw, M3.uw(6), fa, fb, (wof(3n, 6n), {==}), {==})
+
+# six for each is six times
+def six_mul(nn: Nat) -> {M2.six(nn) == Nat.mul(nn, 6n) : Nat}:
+  match nn:
+    case 0n:
+      {==}
+    case 1n+ +pp:
+      Equal.cong(Nat, Nat, xx => 6n+xx, M2.six(pp), Nat.mul(pp, 6n), six_mul(pp))
+
+# the type of count_h2's parameter pr: the 4:2:0 MCU count and 6 times it, without U32 wrap
+def count_h2.pr.ty(+_ww: U32, +_hh: U32) -> Type:
+  &_p: {U32.to_nat(M2.mcun2(_ww, _hh)) == Nat.mul(U32.to_nat(Jpeg.decode.ceil(_ww, 16)),
+    U32.to_nat(Jpeg.decode.ceil(_hh, 16))) : Nat} -> {U32.to_nat((M2.mcun2(_ww, _hh) * 6 : U32)) ==
+    Nat.mul(Nat.mul(U32.to_nat(Jpeg.decode.ceil(_ww, 16)), U32.to_nat(Jpeg.decode.ceil(_hh, 16))), 6n) : Nat}
+
+# the 4:2:0 counts, the products named: six blocks per MCU
+def count_h2.fin(
+  +ww: U32,
+  +hh: U32,
+  +pw: {Nat.is_lt(0n, U32.to_nat(Jpeg.decode.ceil(ww, 16))) == True{} : Bool},
+  +ph: {Nat.is_lt(0n, U32.to_nat(Jpeg.decode.ceil(hh, 16))) == True{} : Bool},
+  pr: count_h2.pr.ty(ww, hh)
+) -> CountOut(Jenc.K420{}, ww, hh):
+  (em0, e60) = pr
+  +mm = M2.mcun2(ww, hh)
+  +mn = U32.to_nat(mm)
+  +pn = Nat.mul(U32.to_nat(Jpeg.decode.ceil(ww, 16)), U32.to_nat(Jpeg.decode.ceil(hh, 16)))
+  +em = {em0 : {mn == pn : Nat}}
+  +e6 = {e60 : {U32.to_nat((mm * 6 : U32)) == Nat.mul(pn, 6n) : Nat}}
+  +hp = {M1.lt_rw_r(0n, pn, mn, Equal.sym(Nat, mn, pn, em), pos_mul(U32.to_nat(Jpeg.decode.ceil(ww, 16)),
+    U32.to_nat(Jpeg.decode.ceil(hh, 16)), pw, ph)) : {Nat.is_lt(0n, mn) == True{} : Bool}}
+  (Equal.trans(Nat, U32.to_nat((mm * 6 : U32)), Nat.mul(pn, 6n), M2.six(mn), e6, Equal.trans(Nat, Nat.mul(pn, 6n),
+    Nat.mul(mn, 6n), M2.six(mn), Equal.cong(Nat, Nat, xx => Nat.mul(xx, 6n), pn, mn, Equal.sym(Nat, mn, pn, em)),
+    Equal.sym(Nat, M2.six(mn), Nat.mul(mn, 6n), six_mul(mn)))), hp)
+
+# the 4:2:0 counts, each side's MCU count named
+def count_h2(+ww: U32, +hh: U32, ow: Mw16Out(ww), oh: Mw16Out(hh)) -> CountOut(Jenc.K420{}, ww, hh):
+  (fw, pw) = ow
+  (fh, ph) = oh
+  count_h2.fin(ww, hh, pw, ph, u32_six(Jpeg.decode.ceil(ww, 16), Jpeg.decode.ceil(hh, 16), fw, fh))
 
 # the counts, for sides of 1 to 65535
 def count_ok(
+  +kd: Jenc.Layout,
   +ww: U32,
   +hh: U32,
   +hw0: {U32.is_eq(ww, 0) == False{} : Bool},
   +hh0: {U32.is_eq(hh, 0) == False{} : Bool},
   +hwl: {U32.is_le(ww, 65535) == True{} : Bool},
   +hhl: {U32.is_le(hh, 65535) == True{} : Bool}
-) -> CountOut(ww, hh):
-  count_mw(ww, hh, hwl, hhl, mw_ok(ww, hw0, hwl), mw_ok(hh, hh0, hhl))
+) -> CountOut(kd, ww, hh):
+  match kd:
+    case Jenc.K444{}:
+      count_mw3(ww, hh, hwl, hhl, mw_ok(ww, hw0, hwl), mw_ok(hh, hh0, hhl))
+    case Jenc.KGray{}:
+      count_mwg(ww, hh, hwl, hhl, mw_ok(ww, hw0, hwl), mw_ok(hh, hh0, hhl))
+    case Jenc.K420{}:
+      count_h2(ww, hh, mw16_ok(ww, hw0, hwl), mw16_ok(hh, hh0, hhl))
 
 # a number above 0 is not 0
 def ne0(nn: Nat, hh: {Nat.is_lt(0n, nn) == True{} : Bool}) -> {Nat.is_eq(nn, 0n) == False{} : Bool}:
@@ -5310,8 +6230,7 @@ def ne0(nn: Nat, hh: {Nat.is_lt(0n, nn) == True{} : Bool}) -> {Nat.is_eq(nn, 0n)
 def gt0_ne(+ww: U32, hh: {U32.is_gt(ww, 0) == True{} : Bool}) -> {U32.is_eq(ww, 0) == False{} : Bool}:
   +wn = U32.to_nat(ww)
   Equal.trans(Bool, U32.is_eq(ww, 0), Nat.is_eq(wn, 0n), False{}, M1.u32_eq(ww, 0), ne0(wn, M3.gt0(wn, M3.ugt0(ww,
-      True{},
-    hh))))
+    True{}, hh))))
 
 # a decode that returned a picture gives a raster
 def psome_some(
@@ -5334,15 +6253,61 @@ def tri_pos(nn: Nat, hp: {Nat.is_lt(0n, nn) == True{} : Bool}, ee: {0n == M2.tri
     case 1n+pp:
       M3.zero_ne(1n+(1n+M2.tri(pp)), ee)
 
+# one per MCU, at least one MCU, is not no blocks
+def one_pos(nn: Nat, hp: {Nat.is_lt(0n, nn) == True{} : Bool}, ee: {0n == nn : Nat}) -> Empty:
+  match nn:
+    case 0n:
+      M1.huf.false_true(hp)
+    case 1n+pp:
+      M3.zero_ne(pp, ee)
+
+# six per MCU, at least one MCU, is not no blocks
+def six_pos(nn: Nat, hp: {Nat.is_lt(0n, nn) == True{} : Bool}, ee: {0n == M2.six(nn) : Nat}) -> Empty:
+  match nn:
+    case 0n:
+      M1.huf.false_true(hp)
+    case 1n+pp:
+      M3.zero_ne(1n+(1n+(1n+(1n+(1n+M2.six(pp))))), ee)
+
+# a layout's blocks per MCU, at least one MCU, is not no blocks
+def kcnt_pos(
+  +kd: Jenc.Layout,
+  nn: Nat,
+  hp: {Nat.is_lt(0n, nn) == True{} : Bool},
+  ee: {0n == M2.kcnt(kd, nn) : Nat}
+) -> Empty:
+  match kd:
+    case Jenc.K444{}:
+      tri_pos(nn, hp, ee)
+    case Jenc.KGray{}:
+      one_pos(nn, hp, ee)
+    case Jenc.K420{}:
+      six_pos(nn, hp, ee)
+
 # the type of some_ts's parameter ea
-def some_ts.ea.ty(+_ts: List<&2, Laws.JBlkTok>, +_ww: U32, +_hh: U32, +_px: List<&2, U32>) -> Type:
-  {Jenc.encode.arm(_ww, _hh, _px) == Jenc.encode.pad(Laws.jpg.feed(M2.tbits(_ts), Jenc.encode.put0())) : List<&2, U32>}
+def some_ts.ea.ty(
+  +_ts: List<&2, Laws.JBlkTok>,
+  +_ww: U32,
+  +_hh: U32,
+  +_qq: U32,
+  +_kd: Jenc.Layout,
+  +_px: List<&2, U32>
+) -> Type:
+  {Jenc.encode.arm(_ww, _hh, _qq, _kd, _px) == Jenc.encode.pad(Laws.jpg.feed(Laws.jpg.tbits(_ts), Jenc.encode.put0()))
+    : List<&2, U32>}
+
+# the scan decode of the encoder's frame and bytes, as the some_* lemmas state it
+def SomeRun(+kd: Jenc.Layout, +ww: U32, +hh: U32, +qq: U32, +px: List<&2, U32>) -> Type:
+  {Laws.jpg.psome(Jpeg.decode.run(Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq),
+    Jenc.encode.arm(ww, hh, qq, kd, px), 0, False{})) == True{} : Bool}
 
 # the entropy-coded bytes' blocks, at least one, decode to a picture
 def some_ts(
   ts: List<&2, Laws.JBlkTok>,
   +ww: U32,
   +hh: U32,
+  +qq: U32,
+  +kd: Jenc.Layout,
   +px: List<&2, U32>,
   +hw0: {U32.is_eq(ww, 0) == False{} : Bool},
   +hh0: {U32.is_eq(hh, 0) == False{} : Bool},
@@ -5350,100 +6315,102 @@ def some_ts(
   +hhl: {U32.is_le(hh, 65535) == True{} : Bool},
   +har: {U32.is_le((ww * hh : U32), 2147483648) == True{} : Bool},
   +mn: Nat,
-  ea: some_ts.ea.ty(ts, ww, hh, px),
-  el: {List.length(&2, Laws.JBlkTok, ts) == M2.tri(mn) : Nat},
+  ea: some_ts.ea.ty(ts, ww, hh, qq, kd, px),
+  el: {List.length(&2, Laws.JBlkTok, ts) == M2.kcnt(kd, mn) : Nat},
   ew: {Laws.jpg.allwf(ts) == True{} : Bool},
-  en: {U32.to_nat(Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1)) == M2.tri(mn) : Nat},
+  eg: {Laws.jpg.inorder(ts, Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd)) == True{} : Bool},
+  en: {U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh))) == M2.kcnt(kd, mn) : Nat},
   hp: {Nat.is_lt(0n, mn) == True{} : Bool}
-) -> {Laws.jpg.psome(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(),
-  Jenc.encode.arm(ww, hh, px), 0, False{})) == True{} : Bool}:
+) -> SomeRun(kd, ww, hh, qq, px):
   match ts:
     case Nil{}:
-      Empty.absurd({Laws.jpg.psome(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(),
-        Jenc.encode.arm(ww, hh, px), 0, False{})) == True{} : Bool}, tri_pos(mn, hp, el))
+      Empty.absurd(SomeRun(kd, ww, hh, qq, px), kcnt_pos(kd, mn, hp, el))
     case +tt <> +rest:
-      +fr = Laws.jpg.enc.frame(ww, hh)
-      +sc = Laws.jpg.enc.scan()
-      +tb = Laws.jpg.enc.tabs()
-      +p0 = Jenc.encode.put0()
-      eb = Equal.trans(List<&2, U32>, Jenc.encode.arm(ww, hh, px),
-        Jenc.encode.pad(Laws.jpg.feed(M2.tbits(tt <> rest), p0)),
-        Jenc.encode.pad(Laws.jpg.feed(Laws.jpg.tbits(tt <> rest), p0)), ea, Equal.cong(List<&2, Bool>, List<&2, U32>,
-          bs =>
-        Jenc.encode.pad(Laws.jpg.feed(bs, p0)), M2.tbits(tt <> rest), Laws.jpg.tbits(tt <> rest), Equal.sym(List<&2,
-        Bool>, Laws.jpg.tbits(tt <> rest), M2.tbits(tt <> rest), tbits.eq(tt <> rest))))
-      es = Equal.sym(List<&2, U32>, Jenc.encode.arm(ww, hh, px),
-        Jenc.encode.pad(Laws.jpg.feed(Laws.jpg.tbits(tt <> rest),
-        p0)), eb)
+      +fr = Laws.jpg.enc.frame(kd, ww, hh)
+      +sc = Laws.jpg.enc.scan(kd)
+      +tb = Laws.jpg.enc.tabs(kd, qq)
+      es = Equal.sym(List<&2, U32>, Jenc.encode.arm(ww, hh, qq, kd, px), Jenc.encode.pad(Laws.jpg.feed(
+        Laws.jpg.tbits(tt <> rest), Jenc.encode.put0())), ea)
       %es : {Laws.jpg.psome(Jpeg.decode.run(fr, sc, tb, _, 0, False{})) == True{} : Bool}
-      scan_some(tt, rest, ww, hh, hw0, hh0, hwl, hhl, har, ew, Equal.trans(Nat, U32.to_nat(Jpeg.decode.nblocks(ww, hh,
-        [1, 1, 1],
-        [1, 1,
-        1], 1, 1)), M2.tri(mn), 1n+List.length(&2, Laws.JBlkTok, rest), en, Equal.sym(Nat, 1n+List.length(&2,
-            Laws.JBlkTok,
-        rest), M2.tri(mn), el)))
+      scan_some(tt, rest, ww, hh, qq, kd, hw0, hh0, hwl, hhl, har, ew, eg, Equal.trans(Nat,
+        U32.to_nat(Laws.jpg.blocks(fr)), M2.kcnt(kd, mn), 1n+List.length(&2, Laws.JBlkTok, rest), en, Equal.sym(Nat,
+        1n+List.length(&2, Laws.JBlkTok, rest), M2.kcnt(kd, mn), el)))
+
+# the decoder's block count of the encoder's frame: as many per MCU as the layout has
+def SomeEn(+kd: Jenc.Layout, +ww: U32, +hh: U32) -> Type:
+  {U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh))) == M2.kcnt(kd, U32.to_nat(M2.mcunk(kd, ww, hh))) :
+    Nat}
 
 # the entropy-coded bytes' blocks named
 def some_path(
   +ww: U32,
   +hh: U32,
+  +qq: U32,
+  +kd: Jenc.Layout,
   +px: List<&2, U32>,
   +hw0: {U32.is_eq(ww, 0) == False{} : Bool},
   +hh0: {U32.is_eq(hh, 0) == False{} : Bool},
   +hwl: {U32.is_le(ww, 65535) == True{} : Bool},
   +hhl: {U32.is_le(hh, 65535) == True{} : Bool},
   +har: {U32.is_le((ww * hh : U32), 2147483648) == True{} : Bool},
-  en: {U32.to_nat(Jpeg.decode.nblocks(ww, hh, [1, 1, 1], [1, 1, 1], 1, 1)) == M2.tri(U32.to_nat(M2.mcun(ww, hh))) : Nat},  # noqa: S002
-  hp: {Nat.is_lt(0n, U32.to_nat(M2.mcun(ww, hh))) == True{} : Bool},
-  po: M2.PathOut(Jenc.encode.arm(ww, hh, px), U32.to_nat(M2.mcun(ww, hh)))
-) -> {Laws.jpg.psome(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(),
-  Jenc.encode.arm(ww, hh, px), 0, False{})) == True{} : Bool}:
-  (ts, ea, el, ew) = po
-  some_ts(ts, ww, hh, px, hw0, hh0, hwl, hhl, har, U32.to_nat(M2.mcun(ww, hh)), ea, el, ew, en, hp)
+  en: SomeEn(kd, ww, hh),
+  hp: {Nat.is_lt(0n, U32.to_nat(M2.mcunk(kd, ww, hh))) == True{} : Bool},
+  po: M2.PathOut(Jenc.encode.arm(ww, hh, qq, kd, px), U32.to_nat(M2.mcunk(kd, ww, hh)), kd, ww, hh)
+) -> SomeRun(kd, ww, hh, qq, px):
+  (ts, ea, el, ew, eg) = po
+  some_ts(ts, ww, hh, qq, kd, px, hw0, hh0, hwl, hhl, har, U32.to_nat(M2.mcunk(kd, ww, hh)), ea, el, ew, eg, en, hp)
 
 # the block counts named
 def some_cnt(
   +ww: U32,
   +hh: U32,
+  +qq: U32,
+  +kd: Jenc.Layout,
   +px: List<&2, U32>,
   +hw0: {U32.is_eq(ww, 0) == False{} : Bool},
   +hh0: {U32.is_eq(hh, 0) == False{} : Bool},
   +hwl: {U32.is_le(ww, 65535) == True{} : Bool},
   +hhl: {U32.is_le(hh, 65535) == True{} : Bool},
   +har: {U32.is_le((ww * hh : U32), 2147483648) == True{} : Bool},
-  co: CountOut(ww, hh)
-) -> {Laws.jpg.psome(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(),
-  Jenc.encode.arm(ww, hh, px), 0, False{})) == True{} : Bool}:
-  (en, hp, hn) = co
-  some_path(ww, hh, px, hw0, hh0, hwl, hhl, har, en, hp, arm_ok(ww, hh, px, hn))
+  co: CountOut(kd, ww, hh)
+) -> SomeRun(kd, ww, hh, qq, px):
+  (en, hp) = co
+  some_path(ww, hh, qq, kd, px, hw0, hh0, hwl, hhl, har, en, hp, M2.arm_ok(ww, hh, qq, kd, px))
+
+# the scan decode of encode_jpeg_with's entropy-coded bytes, in the frame of the layout it picks
+def RunOf(+ww: U32, +hh: U32, +qq: U32, +sub: Bool, +px: List<&2, U32>) -> Maybe<&2, Jpeg.Pic>:
+  +cp = Img.colours(px)
+  +kd = Jenc.encode.kindof(sub, cp)
+  Jpeg.decode.run(Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq),
+    Jenc.encode.arm(ww, hh, qq, kd, cp), 0, False{})
 
 # the type of some_ok's parameter ers
-def some_ok.ers.ty(+_ww: U32, +_hh: U32, +_px: List<&2, U32>) -> Type:
-  {Laws.jpg.back(Img.encode_jpeg(Img.Raster{_ww, _hh,
-    _px})) == Img.decode_jpeg.out(Jpeg.decode.run(Laws.jpg.enc.frame(_ww, _hh), Laws.jpg.enc.scan(),
-    Laws.jpg.enc.tabs(), Jenc.encode.arm(_ww, _hh, Img.colours(_px)), 0, False{})) : Maybe<&2, Img.Raster>}
+def some_ok.ers.ty(+_ww: U32, +_hh: U32, +_qq: U32, +_sub: Bool, +_px: List<&2, U32>) -> Type:
+  {Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{_ww, _hh, _px}, _qq, _sub)) == Img.decode_jpeg.out(RunOf(_ww, _hh,
+    _qq, _sub, _px)) : Maybe<&2, Img.Raster>}
 
-# decode_jpeg of encode_jpeg's bytes, for a well-formed raster with both sides from 1 to 65535, is some raster
+# decode_jpeg of encode_jpeg_with's bytes, for a well-formed raster with both sides from 1 to 65535, is some raster
 def some_ok(
   +ww: U32,
   +hh: U32,
+  +qq: U32,
+  +sub: Bool,
   +px: List<&2, U32>,
   +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool},
-  ers: some_ok.ers.ty(ww, hh, px)
-) -> {Maybe.is_some(&2, Img.Raster, Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px}))) == True{} : Bool}:
+  ers: some_ok.ers.ty(ww, hh, qq, sub, px)
+) -> {Maybe.is_some(&2, Img.Raster, Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub))) == True{} :
+  Bool}:
   +hw0 = {gt0_ne(ww, M8.w_pos(ww, hh, px, h_good)) : {U32.is_eq(ww, 0) == False{} : Bool}}
   +hh0 = {gt0_ne(hh, M8.h_pos(ww, hh, px, h_good)) : {U32.is_eq(hh, 0) == False{} : Bool}}
   +h_w = M8.w_le(ww, hh, px, h_good)
   +h_h = M8.h_le(ww, hh, px, h_good)
   +cp = Img.colours(px)
-  es = Equal.sym(Maybe<&2, Img.Raster>, Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), Img.decode_jpeg.out(
-    Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(), Jenc.encode.arm(ww, hh, cp),
-      0, False{})),
-    ers)
+  +kd = Jenc.encode.kindof(sub, cp)
+  es = Equal.sym(Maybe<&2, Img.Raster>, Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)),
+    Img.decode_jpeg.out(RunOf(ww, hh, qq, sub, px)), ers)
   %es : {Maybe.is_some(&2, Img.Raster, _) == True{} : Bool}
-  psome_some(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(), Jenc.encode.arm(ww,
-    hh, cp), 0, False{}), some_cnt(ww, hh, cp, hw0, hh0, h_w, h_h, M8.area(ww, hh, px, h_good), count_ok(ww, hh, hw0,
-      hh0, h_w, h_h)))
+  psome_some(RunOf(ww, hh, qq, sub, px), some_cnt(ww, hh, qq, kd, cp, hw0, hh0, h_w, h_h, M8.area(ww, hh, px, h_good),
+    count_ok(kd, ww, hh, hw0, hh0, h_w, h_h)))
 
 # the opacity of decode_jpeg's samples, for any bytes
 def OpqFact() -> Type:
@@ -5483,79 +6450,142 @@ def round_ok(
   M3.and_tt(Bool.and(Maybe.is_some(&2, Img.Raster, mm), Laws.jpg.sized(mm, ww, hh)), Laws.jpg.opq(mm),
     M3.and_tt(Maybe.is_some(&2, Img.Raster, mm), Laws.jpg.sized(mm, ww, hh), hs, hz), ho)
 
-def Laws.jpeg_enc_stuffed(ww, hh, px):
-  st.use(Jenc.encode.watch(U32.to_nat((ww * hh : U32)), px), ww, hh)
+def Laws.jpeg_enc_stuffed(ww, hh, qq, kd, px):
+  match kd:
+    case Jenc.K444{}:
+      st.pad(Jenc.encode.mcus(U32.to_nat((U32.div((ww + 7 : U32), 8) * U32.div((hh + 7 : U32), 8) : U32)),
+        (Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px, Jpeg.decode.plane((ww * hh : U32)), 0),
+        Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), 1024, 1024, 1024, Jenc.encode.put0()), 0, 0,
+        U32.div((ww + 7 : U32), 8), ww, hh, Jenc.encode.ctx(qq)))
+    case Jenc.KGray{}:
+      st.pad(Jenc.encode.gmcus(U32.to_nat((U32.div((ww + 7 : U32), 8) * U32.div((hh + 7 : U32), 8) : U32)),
+        (Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px, Jpeg.decode.plane((ww * hh : U32)), 0),
+        Jenc.encode.bookof(False{}), 1024, Jenc.encode.put0()), 0, 0, U32.div((ww + 7 : U32), 8), ww, hh,
+        Jenc.encode.ctx(qq)))
+    case Jenc.K420{}:
+      st.pad(Jenc.encode.h2.mcus(U32.to_nat(M2.mcun2(ww, hh)), (Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px,
+        Jpeg.decode.plane((ww * hh : U32)), 0), Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), 1024, 1024,
+        1024, Jenc.encode.put0()), 0, 0, Jpeg.decode.ceil(ww, 16), ww, hh, Jenc.encode.ctx(qq)))
 
 # the decoder's state after the encoder's header, with the sizes as it reads them back
-def w10.hdr.st(+ww: U32, +hh: U32) -> Jpeg.St:
-  Jpeg.St{Jpeg.Ent{}, Jpeg.Frame{ww, hh, 3, [1, 2, 3], [1, 1, 1], [1, 1, 1], [0, 0, 0], 1, 1}, Laws.jpg.enc.scan(),
-    Laws.jpg.enc.tabs(), [], 0, 1, 0}
+def w10.hdr.st(+kd: Jenc.Layout, +ww: U32, +hh: U32, +qq: U32) -> Jpeg.St:
+  Jpeg.St{Jpeg.Ent{}, Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq), [], 0, 1, 0}
 
-def Laws.jpeg_enc_header_walk(ww, hh):
+# the header walk reads the sizes back as their two bytes
+def w10.hdr(
+  +kd: Jenc.Layout,
+  +ww: U32,
+  +hh: U32,
+  +qq: U32
+) -> {Jpeg.decode.walk(Jenc.encode.header(ww, hh, qq, kd), Jpeg.decode.st0()) == w10.hdr.st(kd,
+  Jpeg.decode.u16(U32.shrn(ww, 8n), U32.and(ww, 255)), Jpeg.decode.u16(U32.shrn(hh, 8n), U32.and(hh, 255)), qq) :
+  Jpeg.St}:
+  match kd:
+    case Jenc.K444{}:
+      {==}
+    case Jenc.KGray{}:
+      {==}
+    case Jenc.K420{}:
+      {==}
+
+def Laws.jpeg_enc_header_walk(ww, hh, qq, kd):
   +wr = Jpeg.decode.u16(U32.shrn(ww, 8n), U32.and(ww, 255))
   +hr = Jpeg.decode.u16(U32.shrn(hh, 8n), U32.and(hh, 255))
-  Equal.trans(Jpeg.St, Jpeg.decode.walk(Jenc.encode.header(ww, hh, Jenc.encode.dccounts(), Jenc.encode.dcsyms(),
-    Jenc.encode.accounts(), Jenc.encode.acsyms()), Jpeg.decode.st0()), w10.hdr.st(wr, hr), w10.hdr.st(ww, hh), {==},
-    Equal.trans(Jpeg.St, w10.hdr.st(wr, hr), w10.hdr.st(ww, hr), w10.hdr.st(ww, hh), Equal.cong(U32, Jpeg.St,
-    xx => w10.hdr.st(xx, hr), wr, ww, u16.eq(ww)), Equal.cong(U32, Jpeg.St, xx => w10.hdr.st(ww, xx), hr, hh,
-    u16.eq(hh))))
+  Equal.trans(Jpeg.St, Jpeg.decode.walk(Jenc.encode.header(ww, hh, qq, kd), Jpeg.decode.st0()), w10.hdr.st(kd, wr,
+    hr, qq), w10.hdr.st(kd, ww, hh, qq), w10.hdr(kd, ww, hh, qq), Equal.trans(Jpeg.St, w10.hdr.st(kd, wr, hr, qq),
+    w10.hdr.st(kd, ww, hr, qq), w10.hdr.st(kd, ww, hh, qq), Equal.cong(U32, Jpeg.St, xx => w10.hdr.st(kd, xx, hr, qq),
+    wr, ww, u16.eq(ww)), Equal.cong(U32, Jpeg.St, xx => w10.hdr.st(kd, ww, xx, qq), hr, hh, u16.eq(hh))))
 
 def Laws.jpeg_ent_walk(xs, h_stuffed, frame, scan, tabs, ent, ri, kind, bad):
   ent.go(xs, False{}, frame, scan, tabs, ent, ri, kind, bad, h_stuffed)
 
-def Laws.jpeg_round_trip_scan(ww, hh, px, h_good):
+# decode_jpeg's last step after the walk stops at EOI past the encoder's header of either layout: its JFIF APP0
+# says YCbCr, and the scan decode runs on the bytes the walk kept
+def w8.k(
+  +kd: Jenc.Layout,
+  +ww: U32,
+  +hh: U32,
+  +qq: U32,
+  +ee: List<&2, U32>
+) -> {M3.w8.out(Jpeg.St{Jpeg.Stop{}, Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd,
+  qq), List.reverse.go(&2, U32, ee, []), 0, 1, 0}, Jpeg.decode.facts(List.append(&2, U32, Jenc.encode.header(ww, hh,
+  qq, kd), List.append(&2, U32, ee, [255, 217])))) == Img.decode_jpeg.out(Jpeg.decode.run(Laws.jpg.enc.frame(kd, ww,
+  hh), Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq), List.reverse(&2, U32, List.reverse.go(&2, U32, ee, [])), 0,
+  False{})) : Maybe<&2, Img.Raster>}:
+  match kd:
+    case Jenc.K444{}:
+      {==}
+    case Jenc.KGray{}:
+      {==}
+    case Jenc.K420{}:
+      {==}
+
+def Laws.jpeg_round_trip_scan(ww, hh, qq, sub, px, h_good):
   +cp = Img.colours(px)
-  +ee = Jenc.encode.arm(ww, hh, cp)
-  +hd = Jenc.encode.header(ww, hh, Jenc.encode.dccounts(), Jenc.encode.dcsyms(), Jenc.encode.accounts(),
-    Jenc.encode.acsyms())
+  +kd = Jenc.encode.kindof(sub, cp)
+  +ee = Jenc.encode.arm(ww, hh, qq, kd, cp)
+  +hd = Jenc.encode.header(ww, hh, qq, kd)
   +rr = List.append(&2, U32, ee, [255, 217])
-  +fr = Laws.jpg.enc.frame(ww, hh)
-  +sc = Laws.jpg.enc.scan()
-  +tb = Laws.jpg.enc.tabs()
+  +fr = Laws.jpg.enc.frame(kd, ww, hh)
+  +sc = Laws.jpg.enc.scan(kd)
+  +tb = Laws.jpg.enc.tabs(kd, qq)
   +ent = {Jpeg.St{Jpeg.Ent{}, fr, sc, tb, [], 0, 1, 0} : Jpeg.St}
   +fx = Jpeg.decode.facts(List.append(&2, U32, hd, rr))
   +stop = {Jpeg.St{Jpeg.Stop{}, fr, sc, tb, List.reverse.go(&2, U32, ee, []), 0, 1, 0} : Jpeg.St}
-  Equal.trans(Maybe<&2, Img.Raster>, Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})),
-    Laws.jpg.back(Img.encode_jpeg.pick(True{}, ww, hh, cp)), Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, ee, 0,
-      False{})),
-    Equal.cong(Bool, Maybe<&2, Img.Raster>, bb => Laws.jpg.back(Img.encode_jpeg.pick(bb, ww, hh, cp)),
-    Img.encode_jpeg.good(ww, hh, px), True{}, h_good),
-    Equal.trans(Maybe<&2, Img.Raster>, Img.decode_jpeg(Jenc.encode.pick(Jenc.encode.bad(ww, hh), ww, hh, cp)),
-    Img.decode_jpeg(Jenc.encode.pick(False{}, ww, hh, cp)), Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, ee, 0,
-      False{})),
-    Equal.cong(Bool, Maybe<&2, Img.Raster>, bb => Img.decode_jpeg(Jenc.encode.pick(bb, ww, hh, cp)),
-    Jenc.encode.bad(ww, hh), False{}, M8.bad(ww, hh, px, h_good)),
-    Equal.trans(Maybe<&2, Img.Raster>, M3.w8.out(Jpeg.decode.walk(List.append(&2, U32, hd, rr), Jpeg.decode.st0()), fx),
-    M3.w8.out(Jpeg.decode.walk(rr, Jpeg.decode.walk(hd, Jpeg.decode.st0())), fx),
-    Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, ee, 0, False{})), Equal.cong(Jpeg.St, Maybe<&2, Img.Raster>,
-    st => M3.w8.out(st, fx), Jpeg.decode.walk(List.append(&2, U32, hd, rr), Jpeg.decode.st0()), Jpeg.decode.walk(rr,
-    Jpeg.decode.walk(hd, Jpeg.decode.st0())), M3.walk_app(hd, rr, Jpeg.decode.st0())),
-    Equal.trans(Maybe<&2, Img.Raster>, M3.w8.out(Jpeg.decode.walk(rr, Jpeg.decode.walk(hd, Jpeg.decode.st0())), fx),
-    M3.w8.out(Jpeg.decode.walk(rr, ent), fx), Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, ee, 0, False{})),
-    Equal.cong(Jpeg.St, Maybe<&2, Img.Raster>, st => M3.w8.out(Jpeg.decode.walk(rr, st), fx), Jpeg.decode.walk(hd,
-    Jpeg.decode.st0()), ent, Laws.jpeg_enc_header_walk(ww, hh)),
-    Equal.trans(Maybe<&2, Img.Raster>, M3.w8.out(Jpeg.decode.walk(rr, ent), fx), M3.w8.out(stop, fx),
-    Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, ee, 0, False{})), Equal.cong(Jpeg.St, Maybe<&2, Img.Raster>,
-    st => M3.w8.out(st, fx), Jpeg.decode.walk(rr, ent), stop, Laws.jpeg_ent_walk(ee, Laws.jpeg_enc_stuffed(ww, hh, cp),
-      fr,
-    sc, tb, [], 0, 1, 0)), Equal.cong(List<&2, U32>, Maybe<&2, Img.Raster>, xs => Img.decode_jpeg.out(
-    Jpeg.decode.run(fr, sc, tb, xs, 0, False{})), List.reverse(&2, U32, List.reverse.go(&2, U32, ee, [])), ee,
-    M1.flt.rev_rev(ee)))))))
+  +out = Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, ee, 0, False{}))
+  Equal.trans(Maybe<&2, Img.Raster>, Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)),
+    Laws.jpg.back(Img.encode_jpeg.pick(True{}, ww, hh, qq, sub, cp)), out, Equal.cong(Bool, Maybe<&2, Img.Raster>, bb
+    => Laws.jpg.back(Img.encode_jpeg.pick(bb, ww, hh, qq, sub, cp)), Img.encode_jpeg.good(ww, hh, px), True{},
+    h_good),
+    Equal.trans(Maybe<&2, Img.Raster>, Img.decode_jpeg(Jenc.encode.pick(Jenc.encode.bad(ww, hh), ww, hh, qq, kd,
+    cp)), Img.decode_jpeg(Jenc.encode.pick(False{}, ww, hh, qq, kd, cp)), out, Equal.cong(Bool, Maybe<&2,
+    Img.Raster>, bb => Img.decode_jpeg(Jenc.encode.pick(bb, ww, hh, qq, kd, cp)), Jenc.encode.bad(ww, hh), False{},
+    M8.bad(ww, hh, px, h_good)), Equal.trans(Maybe<&2, Img.Raster>, M3.w8.out(Jpeg.decode.walk(List.append(&2, U32,
+    hd, rr), Jpeg.decode.st0()), fx), M3.w8.out(Jpeg.decode.walk(rr, Jpeg.decode.walk(hd, Jpeg.decode.st0())), fx),
+    out, Equal.cong(Jpeg.St, Maybe<&2, Img.Raster>, st => M3.w8.out(st, fx), Jpeg.decode.walk(List.append(&2, U32,
+    hd, rr), Jpeg.decode.st0()), Jpeg.decode.walk(rr, Jpeg.decode.walk(hd, Jpeg.decode.st0())), M3.walk_app(hd, rr,
+    Jpeg.decode.st0())), Equal.trans(Maybe<&2, Img.Raster>, M3.w8.out(Jpeg.decode.walk(rr, Jpeg.decode.walk(hd,
+    Jpeg.decode.st0())), fx), M3.w8.out(Jpeg.decode.walk(rr, ent), fx), out, Equal.cong(Jpeg.St, Maybe<&2,
+    Img.Raster>, st => M3.w8.out(Jpeg.decode.walk(rr, st), fx), Jpeg.decode.walk(hd, Jpeg.decode.st0()), ent,
+    Laws.jpeg_enc_header_walk(ww, hh, qq, kd)), Equal.trans(Maybe<&2, Img.Raster>, M3.w8.out(Jpeg.decode.walk(rr,
+    ent), fx), M3.w8.out(stop, fx), out, Equal.cong(Jpeg.St, Maybe<&2, Img.Raster>, st => M3.w8.out(st, fx),
+    Jpeg.decode.walk(rr, ent), stop, Laws.jpeg_ent_walk(ee, Laws.jpeg_enc_stuffed(ww, hh, qq, kd, cp), fr, sc, tb,
+    [], 0, 1, 0)), Equal.trans(Maybe<&2, Img.Raster>, M3.w8.out(stop, fx), Img.decode_jpeg.out(Jpeg.decode.run(fr,
+    sc, tb, List.reverse(&2, U32, List.reverse.go(&2, U32, ee, [])), 0, False{})), out, w8.k(kd, ww, hh, qq, ee),
+    Equal.cong(List<&2, U32>, Maybe<&2, Img.Raster>, xs => Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, xs, 0,
+    False{})), List.reverse(&2, U32, List.reverse.go(&2, U32, ee, [])), ee, M1.flt.rev_rev(ee))))))))
 
 def Laws.jpeg_run_sized(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, ent, ri, rgb):
   run.sized(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, ent, ri, rgb)
 
-def Laws.jpeg_round_trip_sized(ww, hh, px, h_good):
-  +ee = Jenc.encode.arm(ww, hh, Img.colours(px))
-  Equal.trans(Bool, Laws.jpg.sized(Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), ww, hh),
-    Laws.jpg.sized(Img.decode_jpeg.out(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(),
-    Laws.jpg.enc.tabs(), ee, 0, False{})), ww, hh), True{}, Equal.cong(Maybe<&2, Img.Raster>, Bool, mm =>
-      Laws.jpg.sized(mm, ww,
-    hh), Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), Img.decode_jpeg.out(Jpeg.decode.run(
-    Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(), ee, 0, False{})),
-      Laws.jpeg_round_trip_scan(ww, hh,
-    px, h_good)), Laws.jpeg_run_sized(ww, hh, 3, [1, 2, 3], [1, 1, 1], [1, 1, 1], [0, 0, 0], 1, 1,
-    Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(), ee, 0, False{}))
+# the scan decode in the encoder's frame of either layout is none or a picture of its size
+def sized_k(
+  +kd: Jenc.Layout,
+  +ww: U32,
+  +hh: U32,
+  +sc: Jpeg.Scan,
+  +tb: Jpeg.Tabs,
+  +ee: List<&2, U32>
+) -> {Laws.jpg.sized(Img.decode_jpeg.out(Jpeg.decode.run(Laws.jpg.enc.frame(kd, ww, hh), sc, tb, ee, 0, False{})), ww,
+  hh) == True{} : Bool}:
+  match kd:
+    case Jenc.K444{}:
+      Laws.jpeg_run_sized(ww, hh, 3, [1, 2, 3], [1, 1, 1], [1, 1, 1], [0, 1, 1], 1, 1, sc, tb, ee, 0, False{})
+    case Jenc.KGray{}:
+      Laws.jpeg_run_sized(ww, hh, 1, [1], [1], [1], [0], 1, 1, sc, tb, ee, 0, False{})
+    case Jenc.K420{}:
+      Laws.jpeg_run_sized(ww, hh, 3, [1, 2, 3], [2, 1, 1], [2, 1, 1], [0, 1, 1], 2, 2, sc, tb, ee, 0, False{})
+
+def Laws.jpeg_round_trip_sized(ww, hh, qq, sub, px, h_good):
+  +out = Img.decode_jpeg.out(RunOf(ww, hh, qq, sub, px))
+  +cp = Img.colours(px)
+  +kd = Jenc.encode.kindof(sub, cp)
+  Equal.trans(Bool, Laws.jpg.sized(Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)), ww, hh),
+    Laws.jpg.sized(out, ww, hh), True{}, Equal.cong(Maybe<&2, Img.Raster>, Bool, mm => Laws.jpg.sized(mm, ww, hh),
+    Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)), out, Laws.jpeg_round_trip_scan(ww, hh, qq,
+    sub, px, h_good)), sized_k(kd, ww, hh, Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq), Jenc.encode.arm(ww, hh,
+      qq, kd,
+    cp)))
 
 def Laws.jpeg_unstuff(bs, ok):
   +xs = Laws.jpg.bytes(bs)
@@ -5569,19 +6599,26 @@ def Laws.jpeg_unstuff(bs, ok):
 def Laws.jpeg_bits_round_trip(cs, h_len):
   round_trip(cs, h_len)
 
-def Laws.jpeg_huff_dc(pre, h_pre, sy, h_sy, post, h_post):
-  huff_law.dc(pre, h_pre, sy, h_sy, post, h_post)
+def Laws.jpeg_huff_dc(cls, pre, h_pre, sy, h_sy, post, h_post):
+  huff_law.dc(cls, pre, h_pre, sy, h_sy, post, h_post)
 
-def Laws.jpeg_huff_ac(pre, h_pre, sy, h_sy, post, h_post):
-  huff_law.ac(pre, h_pre, sy, h_sy, post, h_post)
+def Laws.jpeg_huff_ac(cls, pre, h_pre, sy, h_sy, post, h_post):
+  huff_law.ac(cls, pre, h_pre, sy, h_sy, post, h_post)
 
-def Laws.jpeg_scan_some(tt, rest, ww, hh, h_w, h_h, h_wl, h_hl, h_area, h_wf, h_n):
-  scan_some(tt, rest, ww, hh, h_w, h_h, h_wl, h_hl, h_area, h_wf, h_n)
+def Laws.jpeg_scan_some(tt, rest, ww, hh, qq, kd, h_w, h_h, h_wl, h_hl, h_area, h_wf, h_tag, h_n):
+  scan_some(tt, rest, ww, hh, qq, kd, h_w, h_h, h_wl, h_hl, h_area, h_wf, h_tag, h_n)
+
+def Laws.jpeg_round_trip_some_q(ww, hh, qq, sub, px, h_good):
+  some_ok(ww, hh, qq, sub, px, h_good, Laws.jpeg_round_trip_scan(ww, hh, qq, sub, px, h_good))
 
 def Laws.jpeg_round_trip_some(ww, hh, px, h_good):
-  some_ok(ww, hh, px, h_good, Laws.jpeg_round_trip_scan(ww, hh, px, h_good))
+  Laws.jpeg_round_trip_some_q(ww, hh, Img.encode_jpeg.quality(), True{}, px, h_good)
+
+def Laws.jpeg_round_trip_q(ww, hh, qq, sub, px, h_good):
+  round_ok(Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)), ww, hh,
+    Laws.jpeg_round_trip_some_q(ww, hh, qq, sub, px, h_good), Laws.jpeg_round_trip_sized(ww, hh, qq, sub, px, h_good),
+    opq_back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub), bb => ii => ee => L1.jpeg_decode_opaque(bb, ii,
+    ee)))
 
 def Laws.jpeg_round_trip(ww, hh, px, h_good):
-  round_ok(Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), ww, hh, Laws.jpeg_round_trip_some(ww, hh, px,
-    h_good), Laws.jpeg_round_trip_sized(ww, hh, px, h_good), opq_back(Img.encode_jpeg(
-    Img.Raster{ww, hh, px}), bb => ii => ee => L1.jpeg_decode_opaque(bb, ii, ee)))
+  Laws.jpeg_round_trip_q(ww, hh, Img.encode_jpeg.quality(), True{}, px, h_good)

@@ -37,7 +37,9 @@ Three components are YCbCr unless the file says RGB the way libjpeg reads it (an
 no JFIF APP0, or component ids 'R', 'G', 'B').
 Subsampled chroma is upsampled as libjpeg-turbo upsamples it (jdsample.c's triangle filter for 4:2:2, 4:2:0
 and 4:4:0).
-`encode_jpeg` writes a baseline sequential 4:4:4 JPEG of the samples' colour,
+`encode_jpeg` writes a baseline sequential JPEG of the samples' colour at quality 75 with 4:2:0 chroma, as
+libjpeg and Pillow do by default (`encode_jpeg_q(r, q)` at another quality, `encode_jpeg_with(r, q, False)` for
+4:4:4 chroma, and one gray component when every sample is gray),
 flattening each sample onto white (a JPEG holds no alpha), and returns none exactly when a side is 0 or past 65535 (a JPEG frame's 16 bits), the
 raster has more than 2^31 points, or its sample count is not the area. Every sample is one `U32` packed `0xAARRGGBB`, whichever
 decoder returned it: a JPEG sample has alpha 255, and a gray JPEG sample
@@ -72,7 +74,7 @@ Scope today: PNG decode reads 8-bit colour types 0, 2, 3, 4 and 6 without
 interlace, and refuses anything else; PNG encode writes colour type 2 or 6,
 for rasters of fewer than 2^28 samples. JPEG decode reads one-scan sequential
 8-bit Huffman frames (baseline or extended) and refuses progressive, lossless,
-arithmetic and multi-scan ones; JPEG encode writes baseline 4:4:4. Full codec
+arithmetic and multi-scan ones; JPEG encode writes baseline 4:2:0, 4:4:4 or gray. Full codec
 conformance is not claimed.
 
 PNG encode does not compress. Every row has filter type None and the zlib

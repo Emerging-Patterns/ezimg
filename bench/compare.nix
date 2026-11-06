@@ -301,29 +301,37 @@ def correct_jpeg():
                      f"PSNR={m['psnr']:.2f} max_abs={m['max_abs']}")
 
         ezr = os.path.join(WORK, f"ez_16x16_{label}.ezr"); write_ezr(ezr, 16, 16, pix)
-        jpg = ezr + ".jpg"
-        er = ez(["jpeg-enc", ezr, jpg], 60)
-        if er["timeout"] or er["rc"] != 0:
-            add_case("C2 ezimg jpeg lossy", f"16x16 {label}", "FAIL", f"encode rc={er['rc']}")
+        # encode_jpeg is quality 75 with 4:2:0 chroma, as Pillow's quality=75, subsampling=2; encode_jpeg_with at
+        # 4:4:4 (the bench's jpeg-enc-444) is Pillow's subsampling=0. The same Annex K tables at the same scale
+        # and the same 2 by 2 chroma averaging, so ezimg's file should be about as close to the original and
+        # about as small as Pillow's (libjpeg-turbo's)
+        for mode, args, ss in (("4:2:0", ["jpeg-enc"], 2), ("4:4:4", ["jpeg-enc-444"], 0)):
+          jpg = ezr + "." + mode.replace(":", "") + ".jpg"
+          er = ez(args + [ezr, jpg] + (["75"] if ss == 0 else []), 60)
+          if er["timeout"] or er["rc"] != 0:
+            add_case("C2 ezimg jpeg lossy", f"16x16 {label} {mode}", "FAIL", f"encode rc={er['rc']}")
             continue
-        enc = open(jpg, "rb").read()
-        pil2 = Image.open(io.BytesIO(enc)); pil2.load()
-        pref2 = as_rgb_words(pil2)
-        mp = channel_metrics(pref2, pix, "rgb")
-        # After FDCT fix: expect ~45+ dB vs original for qstep-1 style encode
-        ok_enc = mp["psnr"] >= 40.0 and mp["max_abs"] <= 8
-        add_case("C2 ezimg jpeg → Pillow vs original", f"16x16 {label}",
-                 "PASS" if ok_enc else "FAIL",
-                 f"file {len(enc)}B PSNR={mp['psnr']:.2f} max_abs={mp['max_abs']}")
-        r2, got2 = run_decode("jpeg-dec", jpg, 60)
-        if got2 is None:
-            add_case("C2 ezimg decode vs Pillow decode", f"16x16 {label}", "FAIL", "decode failed")
-        else:
-            both = channel_metrics(got2[2], pref2, "rgb")
-            ok_both = both["max_abs"] <= 3 and both["psnr"] >= 45.0
-            add_case("C2 ezimg decode vs Pillow decode", f"16x16 {label}",
-                     "PASS" if ok_both else "FAIL",
-                     f"PSNR={both['psnr']:.2f} max_abs={both['max_abs']}")
+          enc = open(jpg, "rb").read()
+          pil2 = Image.open(io.BytesIO(enc)); pil2.load()
+          pref2 = as_rgb_words(pil2)
+          mp = channel_metrics(pref2, pix, "rgb")
+          ref = pillow_jpeg(im, quality=75, subsampling=ss)
+          rim = Image.open(io.BytesIO(ref)); rim.load()
+          mr = channel_metrics(as_rgb_words(rim), pix, "rgb")
+          ok_enc = mp["psnr"] >= mr["psnr"] - 1.0 and len(enc) <= len(ref) * 1.15
+          add_case("C2 ezimg jpeg → Pillow vs original", f"16x16 {label} {mode}",
+                   "PASS" if ok_enc else "FAIL",
+                   f"file {len(enc)}B PSNR={mp['psnr']:.2f} max_abs={mp['max_abs']}"
+                   f" (Pillow q75 {mode}: {len(ref)}B PSNR={mr['psnr']:.2f})")
+          r2, got2 = run_decode("jpeg-dec", jpg, 60)
+          if got2 is None:
+              add_case("C2 ezimg decode vs Pillow decode", f"16x16 {label} {mode}", "FAIL", "decode failed")
+          else:
+              both = channel_metrics(got2[2], pref2, "rgb")
+              ok_both = both["max_abs"] <= 3 and both["psnr"] >= 45.0
+              add_case("C2 ezimg decode vs Pillow decode", f"16x16 {label} {mode}",
+                       "PASS" if ok_both else "FAIL",
+                       f"PSNR={both['psnr']:.2f} max_abs={both['max_abs']}")
 
     # Subsampled chroma: every luma block of an MCU lands in its own place (BC-2).
     # Pillow smooths chroma when it upsamples and ezimg replicates it, as T.81
@@ -367,7 +375,7 @@ def correct_jpeg():
 def speed():
     log("\n== Speed (printable; does not fail the check) ==")
     log("ezimg: IO.now around codec only (native ELF). Pillow: time.perf_counter in-process.")
-    log("PNG Pillow optimize=False. JPEG Pillow quality=95 subsampling=0.")
+    log("PNG Pillow optimize=False. JPEG Pillow quality=75 subsampling=2 (4:2:0), as encode_jpeg.")
     log("ezimg PNG solid: opaque gray128. ezimg JPEG solid: packed gray128.")
     jobs = [
         ("png-enc", 8, 8, 50, 30),
@@ -390,7 +398,7 @@ def speed():
         else:
             r = ez(["bench-jpeg-enc", str(w), str(h), str(n)], timeout)
             im = Image.new("RGB", (w, h), (128, 128, 128))
-            kw = dict(quality=95, subsampling=0)
+            kw = dict(quality=75, subsampling=2)
             t0 = time.perf_counter()
             for _ in range(n):
                 buf = io.BytesIO(); im.save(buf, format="JPEG", **kw)
