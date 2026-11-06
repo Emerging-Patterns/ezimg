@@ -2215,14 +2215,28 @@ def enc.rows(
       +h2 = (hh - 1 : U32)
       enc.rows(rest, U32.is_zero(h2), U32.is_lt(c2, ww), ww, h2, c2)
 
-# a positive area whose sample list covers it: both sides above 0, and the
-# sample count, taken in a word, is w * h. A count that is w * h is below
-# 2^32, so the area is too.
+# fewer than 2^28 samples: the count's top four bits are clear
+def enc.small(+nn: U32) -> Bool:
+  U32.is_zero((nn >> 28n : U32))
+
+# a positive area whose sample list covers it, below 2^28 samples: both
+# sides above 0, the sample count, taken in a word, is w * h, and that count
+# is below 2^28.
+#
+# The bound keeps every count the encoder takes in a word exact and the one
+# IDAT chunk inside PNG's chunk-length limit (ISO/IEC 15948 5.3, 2^31 - 1
+# bytes): below 2^28 samples the filtered bytes h (k w + 1), k at most 4,
+# are at most 5 * 2^28 - 5, and with a 5-byte header per 65535-byte stored
+# block and 6 bytes of zlib framing the IDAT data stays below 1.35e9 bytes.
+# That margin is computed here, not proved; the round trip
+# (laws/PngRoundTrips.bend) is proved for every raster this accepts.
 def enc.good(+ww: U32, +hh: U32, +px: List<&2, U32>) -> Bool:
   +n = enc.len(px, 0)
-  Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), enc.rows(px, U32.is_zero(hh), U32.is_lt(n, ww), ww, hh, n))
+  Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)),
+    Bool.and(enc.rows(px, U32.is_zero(hh), U32.is_lt(n, ww), ww, hh, n), enc.small(n)))
 
-# filtered bytes: one per row, plus the channels of every sample
+# filtered bytes: one per row, plus the channels of every sample. enc.good's
+# bound keeps the product below 2^31, so the word does not wrap.
 def enc.nbytes(op: Bool, +ww: U32, +hh: U32) -> U32:
   (hh * ((ww * enc.nch(op) : U32) + 1 : U32) : U32)
 

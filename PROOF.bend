@@ -3,12 +3,15 @@
 import Base
 import ./LAWS.bend as Laws
 import ./proofs/BlitCopiesCoveredPoints.bend as PBlitCopiesCoveredPoints
+import ./proofs/CheckedRasterIsWellFormed.bend as PCheckedRasterIsWellFormed
+import ./proofs/CountIsArea.bend as PCountIsArea
 import ./proofs/CrcIsIso3309.bend as PCrcIsIso3309
 import ./proofs/CropTakesIntersection.bend as PCropTakesIntersection
 import ./proofs/DecodedSamplesPackArgb.bend as PDecodedSamplesPackArgb
 import ./proofs/FillIsUniform.bend as PFillIsUniform
 import ./proofs/GetSetTouchOnePoint.bend as PGetSetTouchOnePoint
 import ./proofs/InflateReadsStoredBlocks.bend as PInflateReadsStoredBlocks
+import ./proofs/InflateUptoKeepsBudget.bend as PInflateUptoKeepsBudget
 import ./proofs/JpegEncodeIgnoresAlpha.bend as PJpegEncodeIgnoresAlpha
 import ./proofs/JpegPlacesComponentSamples.bend as PJpegPlacesComponentSamples
 import ./proofs/JpegRefusesNonBaselineFrames.bend as PJpegRefusesNonBaselineFrames

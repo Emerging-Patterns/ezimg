@@ -870,13 +870,17 @@ def sol(aa: Array<U32>, +bit: Jenc.Put) -> SolOut(aa, bit):
 def mcun(+ww: U32, +hh: U32) -> U32:
   (U32.div((ww + 7 : U32), 8) * U32.div((hh + 7 : U32), 8) : U32)
 
-# the statement of bookeq
-def bookeq.ty() -> Type:
-  {Jenc.encode.book(Jenc.encode.dccounts(), Jenc.encode.dcsyms(), Jenc.encode.accounts(),
-    Jenc.encode.acsyms()) == M2.book() : Jenc.Book}
-
-# the encoder's books are the books written out
-def bookeq() -> bookeq.ty():
+# the encoder's books are the books written out, bk being them. The statement
+# is written out, not named (a named one would have the checker normalize both
+# sides where go_fin and solid_fin hand this proof on, building both Huffman
+# books again at each use); bk only lets the header span lines
+def bookeq(
+  -bk: Jenc.Book,
+  hb: {M2.book() == bk : Jenc.Book}
+) -> {Jenc.encode.book(Jenc.encode.dccounts(), Jenc.encode.dcsyms(), Jenc.encode.accounts(),
+  Jenc.encode.acsyms()) == bk : Jenc.Book}:
+  %hb : {Jenc.encode.book(Jenc.encode.dccounts(), Jenc.encode.dcsyms(), Jenc.encode.accounts(),
+    Jenc.encode.acsyms()) == _ : Jenc.Book}
   Equal.trans(Jenc.Book, Jenc.Book{Jenc.encode.huff(Jenc.encode.dccounts(), Jenc.encode.dcsyms()), Jenc.encode.huff(
     Jenc.encode.accounts(), Jenc.encode.acsyms())}, Jenc.Book{M2.dcbook.lit(), Jenc.encode.huff(Jenc.encode.accounts(),
     Jenc.encode.acsyms())}, M2.book(), Equal.cong(Array<U32>, Jenc.Book, xx => Jenc.Book{xx, Jenc.encode.huff(
@@ -968,7 +972,7 @@ def go_fin(
     1024, p0), 0, 0, mw, ww, hh, cx), L1.jpg.feed(tbits(ts), p0), Equal.cong(Jenc.Book, Jenc.Put, bk =>
     Jenc.encode.mcus(nn, (Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px, Jpeg.decode.plane((ww * hh : U32)), 0),
     bk, 1024, 1024, 1024, p0), 0, 0, mw, ww, hh, cx), Jenc.encode.book(Jenc.encode.dccounts(), Jenc.encode.dcsyms(),
-    Jenc.encode.accounts(), Jenc.encode.acsyms()), M2.book(), bookeq()), er)), el, ew)
+    Jenc.encode.accounts(), Jenc.encode.acsyms()), M2.book(), bookeq(M2.book(), {==})), er)), el, ew)
 
 # the go path
 def go_ok(+ww: U32, +hh: U32, +px: List<&2, U32>) -> PathOut(Jenc.encode.go(ww, hh, px), U32.to_nat(mcun(ww, hh))):
@@ -1025,7 +1029,7 @@ def solid_fin(
       cx), wput(w1s), Equal.cong(Jenc.Book,
     Jenc.Put, bk => Jenc.encode.solid.y(Array.set(U32, Jpeg.decode.plane(1), 0, color), bk, p0, cx),
       Jenc.encode.book(Jenc.encode.dccounts(), Jenc.encode.dcsyms(),
-    Jenc.encode.accounts(), Jenc.encode.acsyms()), M2.book(), bookeq()), Equal.trans(Jenc.Put,
+    Jenc.encode.accounts(), Jenc.encode.acsyms()), M2.book(), bookeq(M2.book(), {==})), Equal.trans(Jenc.Put,
       Jenc.encode.solid.y(Array.set(U32, Jpeg.decode.plane(1), 0, color),
     M2.book(), p0, cx), M2.feed3b(t1, t2, t3, p0), wput(w1s), es, sol_ws(t1, t2, t3)))), Equal.trans(Jenc.Put,
     Jenc.encode.neutral.mcus(kk, wput(w1s)), wput(wm(zt, w1s)), L1.jpg.feed(tbits(ts), p0), nm(kk,

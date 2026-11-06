@@ -1618,7 +1618,8 @@ def bad_of_good(
   h_h: {U32.is_le(hh, 65535) == True{} : Bool}
 ) -> {Jenc.encode.bad(ww, hh) == False{} : Bool}:
   +e_gt = {and_left(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)),
-    Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(Png.enc.len(px, 0), ww), ww, hh, Png.enc.len(px, 0)), e_good)
+    Bool.and(Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(Png.enc.len(px, 0), ww), ww, hh, Png.enc.len(px, 0)),
+      Png.enc.small(Png.enc.len(px, 0))), e_good)
     : {Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)) == True{} : Bool}}
   bad_no(U32.is_eq(ww, 0), U32.is_eq(hh, 0), U32.is_gt(ww, 65535), U32.is_gt(hh, 65535),
     gt_ne(U32.cmp(ww, 0), and_left(U32.is_gt(ww, 0), U32.is_gt(hh, 0), e_gt)),

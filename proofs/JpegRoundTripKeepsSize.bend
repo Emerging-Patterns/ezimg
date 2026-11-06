@@ -5152,7 +5152,8 @@ def some_ok(
 ) -> {Maybe.is_some(&2, Img.Raster, Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px}))) == True{} : Bool}:
   +gw = U32.is_gt(ww, 0)
   +gh = U32.is_gt(hh, 0)
-  +rw = Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(Png.enc.len(px, 0), ww), ww, hh, Png.enc.len(px, 0))
+  +rw = Bool.and(Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(Png.enc.len(px, 0), ww), ww, hh, Png.enc.len(px, 0)),
+    Png.enc.small(Png.enc.len(px, 0)))
   +hg = {M3.and_l(Bool.and(gw, gh), rw, h_good) : {Bool.and(gw, gh) == True{} : Bool}}
   +hw0 = {gt0_ne(ww, M3.and_l(gw, gh, hg)) : {U32.is_eq(ww, 0) == False{} : Bool}}
   +hh0 = {gt0_ne(hh, M3.and_r(gw, gh, hg)) : {U32.is_eq(hh, 0) == False{} : Bool}}
