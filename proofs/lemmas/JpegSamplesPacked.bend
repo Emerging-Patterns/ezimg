@@ -357,7 +357,7 @@ def runn.pk(
       match frame:
         case Jpeg.Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
           +nb = Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)
-          runf.pk(Jpeg.decode.fits(ww, hh, nb, ent, nf, scan), nb, ww, hh, Jpeg.Frame{w, h, nf, ids, hs, vs, tq,
+          runf.pk(Jpeg.decode.fits(ww, hh, nb, ent, nf, ids, scan), nb, ww, hh, Jpeg.Frame{w, h, nf, ids, hs, vs, tq,
             hmax, vmax}, scan, tabs, ent, ri, rgb)
 
 # a run's samples are packed

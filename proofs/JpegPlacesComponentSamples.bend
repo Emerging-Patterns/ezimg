@@ -5398,7 +5398,8 @@ def w13.fin(
         Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(Laws.jpg.decoded(ww, hh,
         nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, en, ri), 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
         scan, xx, yy, 0)))
-      w13.fit(Jpeg.decode.fits(ww, hh, Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax), en, nf, scan), en, tabs, ri,
+      w13.fit(Jpeg.decode.fits(ww, hh, Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax), en, nf, ids, scan), en, tabs,
+        ri,
         rgb, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
     case True{} False{}:
       {==}

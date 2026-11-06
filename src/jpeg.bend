@@ -1664,13 +1664,47 @@ def decode.ent.bits(ent: List<&2, U32>) -> Nat:
     case _b <> rest:
       Nat.add(8n, decode.ent.bits(rest))
 
+# the scan's component ids are the frame's, in the frame's order, ok saying the ids before matched
+def decode.ids.same(xs: List<&2, U32>, ys: List<&2, U32>, +ok: Bool) -> Bool:
+  match xs:
+    case Nil{}:
+      match ys:
+        case Nil{}:
+          ok
+        case +yy <> yt:
+          +_d = decode.drop(yt)
+          +_y = (yy - yy : U32)
+          False{}
+    case +xx <> xt:
+      match ys:
+        case Nil{}:
+          +_d = decode.drop(xt)
+          +_x = (xx - xx : U32)
+          False{}
+        case +yy <> yt:
+          decode.ids.same(xt, yt, Bool.and(ok, U32.is_eq(xx, yy)))
+
+# a scan holding every frame component, in the frame's order (T.81 B.2.3), so a block's scan position is its
+# frame component: its plane and its quantisation table
+def decode.scan.match(+ns: U32, +nf: U32, sids: List<&2, U32>, ids: List<&2, U32>) -> Bool:
+  Bool.and(U32.is_eq(ns, nf), decode.ids.same(sids, ids, True{}))
+
 # a scan the decoder runs: the frame's at most 2^31 points, entropy-coded bytes enough for its blocks (two bits a
-# block, so a short file cannot ask for planes far larger than itself), and every frame component in the scan
-def decode.fits(+ww: U32, +hh: U32, +nb: U32, ent: List<&2, U32>, +nf: U32, scan: Scan) -> Bool:
+# block, so a short file cannot ask for planes far larger than itself), and every frame component in the scan, in
+# the frame's order
+def decode.fits(
+  +ww: U32,
+  +hh: U32,
+  +nb: U32,
+  ent: List<&2, U32>,
+  +nf: U32,
+  ids: List<&2, U32>,
+  scan: Scan
+) -> Bool:
   match scan:
-    case Scan{+ns, _sids, _td, _ta, _ss, _se, _ah}:
+    case Scan{+ns, sids, _td, _ta, _ss, _se, _ah}:
       Bool.and(decode.area.ok(ww, hh), Bool.and(Nat.is_le(decode.need.bits(U32.to_nat(nb)), decode.ent.bits(ent)),
-        U32.is_eq(ns, nf)))
+        decode.scan.match(ns, nf, sids, ids)))
 
 def decode.run.fit(
   fit: Bool,
@@ -1709,7 +1743,8 @@ def decode.run.n(
       match frame:
         case Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
           +nb = decode.nblocks(ww, hh, hs, vs, hmax, vmax)
-          decode.run.fit(decode.fits(ww, hh, nb, ent, nf, scan), nb, ww, hh, {Frame{w, h, nf, ids, hs, vs, tq, hmax,
+          decode.run.fit(decode.fits(ww, hh, nb, ent, nf, ids, scan), nb, ww, hh, {Frame{w, h, nf, ids, hs, vs, tq,
+            hmax,
             vmax} : Frame}, scan, tabs, ent, ri, rgb)
 
 # the scan decode of a frame. rgb says three components are R, G and B as coded, not YCbCr.

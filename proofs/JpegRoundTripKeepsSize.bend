@@ -547,7 +547,8 @@ def runn.sized(
       {==}
     case False{}:
       +nb = Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)
-      runf.sized(Jpeg.decode.fits(ww, hh, nb, ent, nf, scan), nb, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs,
+      runf.sized(Jpeg.decode.fits(ww, hh, nb, ent, nf, ids, scan), nb, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan,
+        tabs,
         ent, ri, rgb)
 
 # jpeg_run_sized: the scan decode is none or a picture of the frame's size
@@ -4110,12 +4111,13 @@ def dec(
   +hz = {M3.and_tt(Bool.and(U32.is_le(ww, 65535), U32.is_le(hh, 65535)), U32.is_le((ww * hh : U32), 2147483648),
     M3.and_tt(U32.is_le(ww, 65535), U32.is_le(hh, 65535), hwl, hhl), har) : {Jpeg.decode.area.ok(ww, hh) == True{} :
     Bool}}
-  +hf = {M3.and_tt(Jpeg.decode.area.ok(ww, hh), Bool.and(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb),
-    U32.is_eq(3, 3)), hz, M3.and_tt(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb), U32.is_eq(3, 3), hl,
-    M1.u32_eq_refl(3))) : {Jpeg.decode.fits(ww, hh, nbu, rxs(os), 3, sc) == True{} : Bool}}
+  +sm = Jpeg.decode.scan.match(3, 3, [1, 2, 3], [1, 2, 3])
+  +hf = {M3.and_tt(Jpeg.decode.area.ok(ww, hh), Bool.and(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb), sm),
+    hz, M3.and_tt(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb), sm, hl, {==})) :
+    {Jpeg.decode.fits(ww, hh, nbu, rxs(os), 3, [1, 2, 3], sc) == True{} : Bool}}
   s1 = Equal.sym(Bool, U32.is_eq(ww, 0), False{}, hw0)
   s2 = Equal.sym(Bool, U32.is_eq(hh, 0), False{}, hh0)
-  sf = Equal.sym(Bool, Jpeg.decode.fits(ww, hh, nbu, rxs(os), 3, sc), True{}, hf)
+  sf = Equal.sym(Bool, Jpeg.decode.fits(ww, hh, nbu, rxs(os), 3, [1, 2, 3], sc), True{}, hf)
   s3 = Equal.sym(Nat, U32.to_nat(nbu), 1n+List.length(&2, Laws.JBlkTok, rest), hn)
   %s1 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(_, U32.is_eq(hh, 0)), ww, hh, fr, sc, tabsg(), rxs(os), 0, False{}))
     == True{} : Bool}
