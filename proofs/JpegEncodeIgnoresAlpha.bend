@@ -51,8 +51,8 @@ def rows.drop(
 
 # the guard with a count n and the samples as fuel
 def good.at(+ww: U32, +hh: U32, +px: List<&2, U32>, +nn: U32) -> Bool:
-  Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(nn, ww), ww, hh,
-    nn))
+  Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), Bool.and(Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(nn, ww),
+    ww, hh, nn), Png.enc.small(nn)))
 
 # so the guard answers the same for a list and its colours
 def good.drop(
@@ -63,7 +63,8 @@ def good.drop(
   +na = Png.enc.len(Laws.alpha.drop(px), 0)
   +nb = Png.enc.len(px, 0)
   Equal.trans(Bool, good.at(ww, hh, Laws.alpha.drop(px), na), good.at(ww, hh, px, na), good.at(ww, hh, px, nb),
-    Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), bb),
+    Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), Bool.and(bb,
+      Png.enc.small(na))),
       Png.enc.rows(Laws.alpha.drop(px), U32.is_zero(hh), U32.is_lt(na, ww), ww, hh, na),
       Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(na, ww), ww, hh, na),
       rows.drop(px, U32.is_zero(hh), U32.is_lt(na, ww), ww, hh, na)),

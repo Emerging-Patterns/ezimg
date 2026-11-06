@@ -7,6 +7,7 @@ import ../laws/defs/WellFormed.bend as D2
 import ./lemmas/BasicFacts.bend as M1
 import ./lemmas/ListTakeDrop.bend as M2
 import ./lemmas/RowMajorIndex.bend as M3
+import ./lemmas/RowWalk.bend as M6
 import ./lemmas/SubtractionAndHuffmanWalk.bend as M4
 import ./lemmas/WordAddition.bend as M5
 
@@ -724,13 +725,13 @@ def bl.Tc(+sw: U32, +ox: U32, +dw: U32) -> Nat:
 def bl.Rw(+sh: U32, +dh: U32, +oy: U32) -> Nat:
   U32.to_nat(Img.u.min(sh, (dh - oy : U32)))
 
-# where the pasted rows start
+# where the pasted rows start: y * dw, which the code reaches a row at a time
 def bl.top(+oy: U32, +dw: U32) -> Nat:
-  U32.to_nat((oy * dw : U32))
+  Nat.mul(U32.to_nat(oy), U32.to_nat(dw))
 
-# where the pasted rows end
+# where the pasted rows end: (y + rows) * dw
 def bl.span(+sh: U32, +dh: U32, +oy: U32, +dw: U32) -> Nat:
-  U32.to_nat(((oy + Img.u.min(sh, (dh - oy : U32))) * dw : U32))
+  Nat.mul(Nat.add(U32.to_nat(oy), U32.to_nat(Img.u.min(sh, (dh - oy : U32)))), U32.to_nat(dw))
 
 # the left columns are min(x, dw)
 def bl.eL(+ox: U32, +dw: U32) -> {bl.Lc(ox, dw) == Nat.min(U32.to_nat(ox), U32.to_nat(dw)) : Nat}:
@@ -825,68 +826,44 @@ def bl.below_area(
   +an: Nat,
   +dw: U32,
   +dh: U32,
-  +area: U32,
-  h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
   hh: {Nat.is_le(an, U32.to_nat(dh)) == True{} : Bool}
-) -> {Nat.is_le(Nat.mul(an, U32.to_nat(dw)), U32.to_nat(area)) == True{} : Bool}:
-  M1.le_rw_r(Nat.mul(an, U32.to_nat(dw)), Nat.mul(U32.to_nat(dw), U32.to_nat(dh)), U32.to_nat(area),
-    Equal.sym(Nat, U32.to_nat(area), Nat.mul(U32.to_nat(dw), U32.to_nat(dh)), h_area),
-    M1.le_rw_r(Nat.mul(an, U32.to_nat(dw)), Nat.mul(U32.to_nat(dh), U32.to_nat(dw)), Nat.mul(U32.to_nat(dw),
-      U32.to_nat(dh)),
-      M1.mul_comm(U32.to_nat(dh), U32.to_nat(dw)), M5.le_mul_mono(an, U32.to_nat(dh), U32.to_nat(dw), hh)))
+) -> {Nat.is_le(Nat.mul(an, U32.to_nat(dw)), Nat.mul(U32.to_nat(dw), U32.to_nat(dh))) == True{} : Bool}:
+  M1.le_rw_r(Nat.mul(an, U32.to_nat(dw)), Nat.mul(U32.to_nat(dh), U32.to_nat(dw)), Nat.mul(U32.to_nat(dw),
+    U32.to_nat(dh)),
+    M1.mul_comm(U32.to_nat(dh), U32.to_nat(dw)), M5.le_mul_mono(an, U32.to_nat(dh), U32.to_nat(dw), hh))
 
 # the pasted rows start at y * dw
 def bl.e_top(
   +oy: U32,
-  +dw: U32,
-  +dh: U32,
-  +area: U32,
-  h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
-  hy: {Nat.is_lt(U32.to_nat(oy), U32.to_nat(dh)) == True{} : Bool}
+  +dw: U32
 ) -> {bl.top(oy, dw) == Nat.mul(U32.to_nat(oy), U32.to_nat(dw)) : Nat}:
-  M3.u32_mul_below(oy, dw, area, bl.below_area(U32.to_nat(oy), dw, dh, area, h_area,
-    M1.lt_le(U32.to_nat(oy), U32.to_nat(dh), hy)))
+  {==}
 
 # the pasted rows end at (y + rows) * dw
 def bl.e_spanv(
   +sh: U32,
   +oy: U32,
   +dw: U32,
-  +dh: U32,
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
-  +hy: {Nat.is_lt(U32.to_nat(oy), U32.to_nat(dh)) == True{} : Bool}
+  +dh: U32
 ) -> {bl.span(sh, dh, oy, dw) == Nat.mul(Nat.add(U32.to_nat(oy), bl.Rw(sh, dh, oy)), U32.to_nat(dw)) : Nat}:
-  +rows = Img.u.min(sh, (dh - oy : U32))
-  +yr = Nat.add(U32.to_nat(oy), bl.Rw(sh, dh, oy))
-  +e_or = {M5.u32_add_below(oy, rows, dh, bl.hyr(sh, dh, oy, hy)) : {U32.to_nat((oy + rows : U32)) == yr : Nat}}
-  Equal.trans(Nat, bl.span(sh, dh, oy, dw), Nat.mul(U32.to_nat((oy + rows : U32)), U32.to_nat(dw)),
-    Nat.mul(yr, U32.to_nat(dw)),
-    M3.u32_mul_below((oy + rows : U32), dw, area, bl.below_area(U32.to_nat((oy + rows : U32)), dw, dh, area, h_area,
-      M1.le_rw_l(yr, U32.to_nat((oy + rows : U32)), U32.to_nat(dh), Equal.sym(Nat, U32.to_nat((oy + rows : U32)), yr,
-        e_or),
-        bl.hyr(sh, dh, oy, hy)))),
-    Equal.cong(Nat, Nat, nn => Nat.mul(nn, U32.to_nat(dw)), U32.to_nat((oy + rows : U32)), yr, e_or))
+  {==}
 
 # the pasted rows end rows * dw after they start
 def bl.e_span(
   +sh: U32,
   +oy: U32,
   +dw: U32,
-  +dh: U32,
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
-  +hy: {Nat.is_lt(U32.to_nat(oy), U32.to_nat(dh)) == True{} : Bool}
+  +dh: U32
 ) -> {bl.span(sh, dh, oy, dw) == Nat.add(bl.top(oy, dw), Nat.mul(bl.Rw(sh, dh, oy), U32.to_nat(dw))) : Nat}:
   +yn = U32.to_nat(oy)
   +wn = U32.to_nat(dw)
   +rn = bl.Rw(sh, dh, oy)
   Equal.trans(Nat, bl.span(sh, dh, oy, dw), Nat.mul(Nat.add(yn, rn), wn), Nat.add(bl.top(oy, dw), Nat.mul(rn, wn)),
-    bl.e_spanv(sh, oy, dw, dh, area, h_area, hy),
+    bl.e_spanv(sh, oy, dw, dh),
     Equal.trans(Nat, Nat.mul(Nat.add(yn, rn), wn), Nat.add(Nat.mul(yn, wn), Nat.mul(rn, wn)),
       Nat.add(bl.top(oy, dw), Nat.mul(rn, wn)), M1.mul_add(yn, rn, wn),
       Equal.cong(Nat, Nat, nn => Nat.add(nn, Nat.mul(rn, wn)), Nat.mul(yn, wn), bl.top(oy, dw),
-        Equal.sym(Nat, bl.top(oy, dw), Nat.mul(yn, wn), bl.e_top(oy, dw, dh, area, h_area, hy)))))
+        Equal.sym(Nat, bl.top(oy, dw), Nat.mul(yn, wn), bl.e_top(oy, dw)))))
 
 # the pasted rows end inside dst's samples
 def bl.h_len(
@@ -895,19 +872,64 @@ def bl.h_len(
   +oy: U32,
   +dw: U32,
   +dh: U32,
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
   h_dst: {D2.wf(Img.Raster{dw, dh, dp}) == True{} : Bool},
   +hy: {Nat.is_lt(U32.to_nat(oy), U32.to_nat(dh)) == True{} : Bool}
 ) -> {Nat.is_le(bl.span(sh, dh, oy, dw), List.length(&2, U32, dp)) == True{} : Bool}:
   +wh = Nat.mul(U32.to_nat(dw), U32.to_nat(dh))
-  +sv = Nat.mul(Nat.add(U32.to_nat(oy), bl.Rw(sh, dh, oy)), U32.to_nat(dw))
-  M1.le_rw_l(sv, bl.span(sh, dh, oy, dw), List.length(&2, U32, dp),
-    Equal.sym(Nat, bl.span(sh, dh, oy, dw), sv, bl.e_spanv(sh, oy, dw, dh, area, h_area, hy)),
-    M1.le_rw_r(sv, wh, List.length(&2, U32, dp),
-      Equal.sym(Nat, List.length(&2, U32, dp), wh, M1.ras.nat_eq_true(List.length(&2, U32, dp), wh, h_dst)),
-      M1.le_rw_r(sv, U32.to_nat(area), wh, h_area,
-        bl.below_area(Nat.add(U32.to_nat(oy), bl.Rw(sh, dh, oy)), dw, dh, area, h_area, bl.hyr(sh, dh, oy, hy)))))
+  M1.le_rw_r(bl.span(sh, dh, oy, dw), wh, List.length(&2, U32, dp),
+    Equal.sym(Nat, List.length(&2, U32, dp), wh, M1.ras.nat_eq_true(List.length(&2, U32, dp), wh, h_dst)),
+    bl.below_area(Nat.add(U32.to_nat(oy), bl.Rw(sh, dh, oy)), dw, dh, bl.hyr(sh, dh, oy, hy)))
+
+# blit.join walks dst a row at a time: it is bj.J at the row-major offsets
+def bl.join(
+  +dp: List<&2, U32>,
+  +sp: List<&2, U32>,
+  +dw: U32,
+  +dh: U32,
+  +sw: U32,
+  +sh: U32,
+  +ox: U32,
+  +oy: U32
+) -> {Img.blit.join(dp, sp, dw, dh, sw, sh, ox, oy) == bj.J(dp, sp, bl.top(oy, dw), bl.span(sh, dh, oy, dw),
+  bl.Rw(sh, dh, oy), bl.Lc(ox, dw), bl.Cc(sw, ox, dw), bl.Tc(sw, ox, dw), U32.to_nat(dw), U32.to_nat(sw)) :
+  List<&2, U32>}:
+  +yn = U32.to_nat(oy)
+  +wn = U32.to_nat(dw)
+  +sn = U32.to_nat(sw)
+  +rn = bl.Rw(sh, dh, oy)
+  +lc = bl.Lc(ox, dw)
+  +cc = bl.Cc(sw, ox, dw)
+  +tc = bl.Tc(sw, ox, dw)
+  +top = bl.top(oy, dw)
+  +span = bl.span(sh, dh, oy, dw)
+  +ta = Img.take.rows(yn, dp, wn)
+  +tb = List.take(&2, U32, dp, top)
+  +ra = Img.skip.rows(yn, dp, wn)
+  +rb = List.drop(&2, U32, dp, top)
+  +ba = Img.skip.rows(rn, ra, wn)
+  +bb = List.drop(&2, U32, dp, span)
+  +e_r = {M6.skip_drop(yn, dp, wn) : {ra == rb : List<&2, U32>}}
+  +e_b = {Equal.trans(List<&2, U32>, ba, List.drop(&2, U32, ra, Nat.mul(rn, wn)), bb, M6.skip_drop(rn, ra, wn),
+    Equal.trans(List<&2, U32>, List.drop(&2, U32, ra, Nat.mul(rn, wn)), List.drop(&2, U32, rb, Nat.mul(rn, wn)), bb,
+      Equal.cong(List<&2, U32>, List<&2, U32>, xs => List.drop(&2, U32, xs, Nat.mul(rn, wn)), ra, rb, e_r),
+      Equal.trans(List<&2, U32>, List.drop(&2, U32, rb, Nat.mul(rn, wn)),
+        List.drop(&2, U32, dp, Nat.add(top, Nat.mul(rn, wn))), bb, M6.drop_drop(dp, top, Nat.mul(rn, wn)),
+        Equal.cong(Nat, List<&2, U32>, kk => List.drop(&2, U32, dp, kk), Nat.add(top, Nat.mul(rn, wn)), span,
+          Equal.sym(Nat, span, Nat.add(top, Nat.mul(rn, wn)), M1.mul_add(yn, rn, wn)))))) : {ba == bb : List<&2, U32>}}
+  Equal.trans(List<&2, U32>,
+    List.append(&2, U32, ta, List.append(&2, U32, Img.blit.rows(rn, ra, sp, lc, cc, tc, wn, sn), ba)),
+    List.append(&2, U32, tb, List.append(&2, U32, Img.blit.rows(rn, ra, sp, lc, cc, tc, wn, sn), ba)),
+    bj.J(dp, sp, top, span, rn, lc, cc, tc, wn, sn),
+    Equal.cong(List<&2, U32>, List<&2, U32>, xs => List.append(&2, U32, xs, List.append(&2, U32, Img.blit.rows(rn, ra,
+      sp, lc, cc, tc, wn, sn), ba)), ta, tb, M6.take_rows(yn, dp, wn)),
+    Equal.trans(List<&2, U32>,
+      List.append(&2, U32, tb, List.append(&2, U32, Img.blit.rows(rn, ra, sp, lc, cc, tc, wn, sn), ba)),
+      List.append(&2, U32, tb, List.append(&2, U32, Img.blit.rows(rn, rb, sp, lc, cc, tc, wn, sn), ba)),
+      bj.J(dp, sp, top, span, rn, lc, cc, tc, wn, sn),
+      Equal.cong(List<&2, U32>, List<&2, U32>, xs => List.append(&2, U32, tb, List.append(&2, U32, Img.blit.rows(rn,
+        xs, sp, lc, cc, tc, wn, sn), ba)), ra, rb, e_r),
+      Equal.cong(List<&2, U32>, List<&2, U32>, xs => List.append(&2, U32, tb, List.append(&2, U32, Img.blit.rows(rn,
+        rb, sp, lc, cc, tc, wn, sn), xs)), ba, bb, e_b)))
 
 # the source holds the pasted rows
 def bl.hs(
@@ -1048,8 +1070,6 @@ def bl.wf_y(
   +sh: U32,
   +ox: U32,
   +oy: U32,
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
   +h_dst: {D2.wf(Img.Raster{dw, dh, dp}) == True{} : Bool},
   h_src: {D2.wf(Img.Raster{sw, sh, sp}) == True{} : Bool},
   +ey: {Nat.is_lt(U32.to_nat(oy), U32.to_nat(dh)) == yin : Bool}
@@ -1062,15 +1082,19 @@ def bl.wf_y(
       +wh = Nat.mul(U32.to_nat(dw), U32.to_nat(dh))
       +jn = bj.J(dp, sp, bl.top(oy, dw), bl.span(sh, dh, oy, dw), bl.Rw(sh, dh, oy), bl.Lc(ox, dw), bl.Cc(sw, ox, dw),
         bl.Tc(sw, ox, dw), U32.to_nat(dw), U32.to_nat(sw))
+      +jc = Img.blit.join(dp, sp, dw, dh, sw, sh, ox, oy)
+      Equal.trans(Bool, Nat.is_eq(List.length(&2, U32, jc), wh), Nat.is_eq(List.length(&2, U32, jn), wh), True{},
+        Equal.cong(List<&2, U32>, Bool, xs => Nat.is_eq(List.length(&2, U32, xs), wh), jc, jn, bl.join(dp, sp, dw, dh,
+          sw, sh, ox, oy)),
       Equal.trans(Bool, Nat.is_eq(List.length(&2, U32, jn), wh), Nat.is_eq(List.length(&2, U32, dp), wh), True{},
         Equal.cong(Nat, Bool, nn => Nat.is_eq(nn, wh), List.length(&2, U32, jn), List.length(&2, U32, dp),
           bj.len(dp, sp, bl.top(oy, dw), bl.span(sh, dh, oy, dw), bl.Rw(sh, dh, oy), bl.Lc(ox, dw), bl.Cc(sw, ox, dw),
             bl.Tc(sw, ox, dw), U32.to_nat(dw), U32.to_nat(sw), bl.e_row(sw, ox, dw),
-            bl.e_span(sh, oy, dw, dh, area, h_area, ey), bl.h_len(dp, sh, oy, dw, dh, area, h_area, h_dst, ey),
+            bl.e_span(sh, oy, dw, dh), bl.h_len(dp, sh, oy, dw, dh, h_dst, ey),
             bl.hs(sp, sw, sh, ox, oy, dw, dh, h_src))),
-        h_dst)
+        h_dst))
 
-def Laws.blit_wf(dst, src, xx, yy, area, h_area, h_dst, h_src):
+def Laws.blit_wf(dst, src, xx, yy, h_dst, h_src):
   match dst src:
     case Img.Raster{+dw, +dh, +dp} Img.Raster{+sw, +sh, +sp}:
       +wh = Nat.mul(U32.to_nat(dw), U32.to_nat(dh))
@@ -1081,7 +1105,7 @@ def Laws.blit_wf(dst, src, xx, yy, area, h_area, h_dst, h_src):
         Equal.cong(Bool, Bool, bb => Nat.is_eq(List.length(&2, U32, Img.blit.y(bb, dp, sp, dw, dh, sw, sh, xx, yy)),
           wh),
           U32.is_lt(yy, dh), Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), M5.u32_lt(yy, dh)),
-        bl.wf_y(Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), dp, sp, dw, dh, sw, sh, xx, yy, area, h_area, h_dst,
+        bl.wf_y(Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), dp, sp, dw, dh, sw, sh, xx, yy, h_dst,
           h_src, {==}))
 
 # at a point src covers, blit reads src, once y < dh
@@ -1094,8 +1118,6 @@ def bl.in_go(
   +sh: U32,
   +ox: U32,
   +oy: U32,
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
   +h_dst: {D2.wf(Img.Raster{dw, dh, dp}) == True{} : Bool},
   +h_src: {D2.wf(Img.Raster{sw, sh, sp}) == True{} : Bool},
   +ii: Nat,
@@ -1126,13 +1148,13 @@ def bl.in_go(
   +drow = List.drop(&2, U32, dp, Nat.add(top, Nat.mul(jp, wn)))
   +srow = List.drop(&2, U32, sp, Nat.mul(jp, sn))
   +row = Img.blit.row(drow, srow, lc, cc, tc)
-  +e_span = {bl.e_span(sh, oy, dw, dh, area, h_area, hy) : {span == Nat.add(top, Nat.mul(rw, wn)) : Nat}}
-  +h_len = {bl.h_len(dp, sh, oy, dw, dh, area, h_area, h_dst, hy) :
+  +e_span = {bl.e_span(sh, oy, dw, dh) : {span == Nat.add(top, Nat.mul(rw, wn)) : Nat}}
+  +h_len = {bl.h_len(dp, sh, oy, dw, dh, h_dst, hy) :
     {Nat.is_le(span, List.length(&2, U32, dp)) == True{} : Bool}}
   +hs = {bl.hs(sp, sw, sh, ox, oy, dw, dh, h_src) :
     {Nat.is_le(Nat.add(Nat.mul(rw, sn), cc), Nat.add(List.length(&2, U32, sp), sn)) == True{} : Bool}}
   +hjp = {bl.hjp(sh, dh, oy, jj, hy, b1, b2, hj) : {Nat.is_lt(jp, rw) == True{} : Bool}}
-  +e1 = {bl.e_band(yn, jj, wn, ii, top, bl.e_top(oy, dw, dh, area, h_area, hy), b1) :
+  +e1 = {bl.e_band(yn, jj, wn, ii, top, bl.e_top(oy, dw), b1) :
     {Nat.add(Nat.mul(jj, wn), ii) == Nat.add(top, Nat.add(Nat.mul(jp, wn), ii)) : Nat}}
   +hxw = {M1.lt_le(xn, wn, M1.le_lt_trans(xn, ii, wn, a1, hi)) : {Nat.is_le(xn, wn) == True{} : Bool}}
   +elx = {Equal.trans(Nat, lc, Nat.min(xn, wn), xn, bl.eL(ox, dw), M2.min_of_le(xn, wn, hxw)) : {lc == xn : Nat}}
@@ -1150,6 +1172,11 @@ def bl.in_go(
     bl.row_room(dp, top, span, rw, wn, jp, hjp, e_span, h_len)) : {Nat.is_le(lc, List.length(&2, U32, drow)) == True{} :
     Bool}}
   +hc = {bl.src_room(sp, rw, sn, cc, jp, hjp, hs) : {Nat.is_le(cc, List.length(&2, U32, srow)) == True{} : Bool}}
+  +jc = Img.blit.join(dp, sp, dw, dh, sw, sh, ox, oy)
+  Equal.trans(Maybe<&2, U32>, List.get(&2, U32, jc, Nat.add(Nat.mul(jj, wn), ii)),
+    List.get(&2, U32, jn, Nat.add(Nat.mul(jj, wn), ii)), List.get(&2, U32, sp, Nat.add(Nat.mul(jp, sn), ip)),
+    Equal.cong(List<&2, U32>, Maybe<&2, U32>, xs => List.get(&2, U32, xs, Nat.add(Nat.mul(jj, wn), ii)), jc, jn,
+      bl.join(dp, sp, dw, dh, sw, sh, ox, oy)),
   Equal.trans(Maybe<&2, U32>, List.get(&2, U32, jn, Nat.add(Nat.mul(jj, wn), ii)),
     List.get(&2, U32, jn, Nat.add(top, Nat.add(Nat.mul(jp, wn), ii))),
     List.get(&2, U32, sp, Nat.add(Nat.mul(jp, sn), ip)),
@@ -1163,9 +1190,9 @@ def bl.in_go(
         Equal.cong(Nat, Maybe<&2, U32>, kk => List.get(&2, U32, row, kk), ii, Nat.add(lc, ip), eii),
         Equal.trans(Maybe<&2, U32>, List.get(&2, U32, row, Nat.add(lc, ip)), List.get(&2, U32, srow, ip),
           List.get(&2, U32, sp, Nat.add(Nat.mul(jp, sn), ip)),
-          blit.row_mid(drow, srow, lc, cc, tc, ip, hk, hl, hc), M2.get_drop(sp, Nat.mul(jp, sn), ip)))))
+          blit.row_mid(drow, srow, lc, cc, tc, ip, hk, hl, hc), M2.get_drop(sp, Nat.mul(jp, sn), ip))))))
 
-def Laws.blit_in(dst, src, xx, yy, area, h_area, h_dst, h_src, ii, jj, hi, hj, h_cov):
+def Laws.blit_in(dst, src, xx, yy, h_dst, h_src, ii, jj, hi, hj, h_cov):
   match dst src:
     case Img.Raster{+dw, +dh, +dp} Img.Raster{+sw, +sh, +sp}:
       +xn = U32.to_nat(xx)
@@ -1184,7 +1211,7 @@ def Laws.blit_in(dst, src, xx, yy, area, h_area, h_dst, h_src, ii, jj, hi, hj, h
         List.get(&2, U32, sp, Nat.add(Nat.mul(Nat.sub(jj, yn), U32.to_nat(sw)), Nat.sub(ii, xn))),
         Equal.cong(Bool, Maybe<&2, U32>, bb => List.get(&2, U32, Img.blit.y(bb, dp, sp, dw, dh, sw, sh, xx, yy), kk),
           U32.is_lt(yy, dh), True{}, M3.ras.lt(yy, dh, hy)),
-        bl.in_go(dp, sp, dw, dh, sw, sh, xx, yy, area, h_area, h_dst, h_src, ii, jj, hi, hj,
+        bl.in_go(dp, sp, dw, dh, sw, sh, xx, yy, h_dst, h_src, ii, jj, hi, hj,
           M1.and_left(a1b, a2b, cx), M1.and_right(a1b, a2b, cx), b1, M1.and_right(b1b, b2b, cy), hy))
 
 # a pasted row away from its source span reads dst: after the split on the
@@ -1270,8 +1297,6 @@ def bl.out_band(
   +sh: U32,
   +ox: U32,
   +oy: U32,
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
   +h_dst: {D2.wf(Img.Raster{dw, dh, dp}) == True{} : Bool},
   +h_src: {D2.wf(Img.Raster{sw, sh, sp}) == True{} : Bool},
   +ii: Nat,
@@ -1301,12 +1326,12 @@ def bl.out_band(
   +drow = List.drop(&2, U32, dp, doff)
   +srow = List.drop(&2, U32, sp, Nat.mul(jp, sn))
   +row = Img.blit.row(drow, srow, lc, cc, tc)
-  +e_span = {bl.e_span(sh, oy, dw, dh, area, h_area, hy) : {span == Nat.add(top, Nat.mul(rw, wn)) : Nat}}
-  +h_len = {bl.h_len(dp, sh, oy, dw, dh, area, h_area, h_dst, hy) :
+  +e_span = {bl.e_span(sh, oy, dw, dh) : {span == Nat.add(top, Nat.mul(rw, wn)) : Nat}}
+  +h_len = {bl.h_len(dp, sh, oy, dw, dh, h_dst, hy) :
     {Nat.is_le(span, List.length(&2, U32, dp)) == True{} : Bool}}
   +hs = {bl.hs(sp, sw, sh, ox, oy, dw, dh, h_src) :
     {Nat.is_le(Nat.add(Nat.mul(rw, sn), cc), Nat.add(List.length(&2, U32, sp), sn)) == True{} : Bool}}
-  +e1 = {bl.e_band(yn, jj, wn, ii, top, bl.e_top(oy, dw, dh, area, h_area, hy), hle) :
+  +e1 = {bl.e_band(yn, jj, wn, ii, top, bl.e_top(oy, dw), hle) :
     {kk == Nat.add(top, Nat.add(Nat.mul(jp, wn), ii)) : Nat}}
   +hl = {M1.le_trans(lc, wn, List.length(&2, U32, drow), bl.hL(ox, dw),
     bl.row_room(dp, top, span, rw, wn, jp, hjp, e_span, h_len)) : {Nat.is_le(lc, List.length(&2, U32, drow)) == True{} :
@@ -1360,8 +1385,6 @@ def bl.out_below(
   +sh: U32,
   +ox: U32,
   +oy: U32,
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
   +h_dst: {D2.wf(Img.Raster{dw, dh, dp}) == True{} : Bool},
   +h_src: {D2.wf(Img.Raster{sw, sh, sp}) == True{} : Bool},
   +ii: Nat,
@@ -1398,7 +1421,7 @@ def bl.out_below(
         Nat.add(Nat.mul(Nat.add(yn, rw), wn), mm), Nat.add(span, mm),
         M1.ras.add_assoc(Nat.mul(Nat.add(yn, rw), wn), Nat.mul(dd, wn), ii),
         Equal.cong(Nat, Nat, nn => Nat.add(nn, mm), Nat.mul(Nat.add(yn, rw), wn), span,
-          Equal.sym(Nat, span, Nat.mul(Nat.add(yn, rw), wn), bl.e_spanv(sh, oy, dw, dh, area, h_area, hy)))))) :
+          Equal.sym(Nat, span, Nat.mul(Nat.add(yn, rw), wn), bl.e_spanv(sh, oy, dw, dh)))))) :
     {kk == Nat.add(span, mm) : Nat}}
   Equal.trans(Maybe<&2, U32>, List.get(&2, U32, jn, kk), List.get(&2, U32, jn, Nat.add(span, mm)), List.get(&2, U32,
     dp, kk),
@@ -1407,8 +1430,8 @@ def bl.out_below(
       List.get(&2, U32, dp, kk),
       bj.bottom(dp, sp, bl.top(oy, dw), span, rw, bl.Lc(ox, dw), bl.Cc(sw, ox, dw), bl.Tc(sw, ox, dw), wn,
         U32.to_nat(sw),
-        mm, bl.e_row(sw, ox, dw), bl.e_span(sh, oy, dw, dh, area, h_area, hy),
-        bl.h_len(dp, sh, oy, dw, dh, area, h_area, h_dst, hy), bl.hs(sp, sw, sh, ox, oy, dw, dh, h_src)),
+        mm, bl.e_row(sw, ox, dw), bl.e_span(sh, oy, dw, dh),
+        bl.h_len(dp, sh, oy, dw, dh, h_dst, hy), bl.hs(sp, sw, sh, ox, oy, dw, dh, h_src)),
       Equal.cong(Nat, Maybe<&2, U32>, nn => List.get(&2, U32, dp, nn), Nat.add(span, mm), kk,
         Equal.sym(Nat, kk, Nat.add(span, mm), ek))))
 
@@ -1423,8 +1446,6 @@ def bl.out_r(
   +sh: U32,
   +ox: U32,
   +oy: U32,
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
   +h_dst: {D2.wf(Img.Raster{dw, dh, dp}) == True{} : Bool},
   +h_src: {D2.wf(Img.Raster{sw, sh, sp}) == True{} : Bool},
   +ii: Nat,
@@ -1439,9 +1460,9 @@ def bl.out_r(
   List.get(&2, U32, dp, Nat.add(Nat.mul(jj, U32.to_nat(dw)), ii)) : Maybe<&2, U32>}:
   match br:
     case True{}:
-      bl.out_band(dp, sp, dw, dh, sw, sh, ox, oy, area, h_area, h_dst, h_src, ii, jj, hi, h_cov, hy, hle, eb)
+      bl.out_band(dp, sp, dw, dh, sw, sh, ox, oy, h_dst, h_src, ii, jj, hi, h_cov, hy, hle, eb)
     case False{}:
-      bl.out_below(dp, sp, dw, dh, sw, sh, ox, oy, area, h_area, h_dst, h_src, ii, jj, hy, hle,
+      bl.out_below(dp, sp, dw, dh, sw, sh, ox, oy, h_dst, h_src, ii, jj, hy, hle,
         M3.not_lt_le(Nat.sub(jj, U32.to_nat(oy)), bl.Rw(sh, dh, oy), eb))
 
 # once y < dh, split on the rows above the paste
@@ -1455,8 +1476,6 @@ def bl.out_j(
   +sh: U32,
   +ox: U32,
   +oy: U32,
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
   +h_dst: {D2.wf(Img.Raster{dw, dh, dp}) == True{} : Bool},
   +h_src: {D2.wf(Img.Raster{sw, sh, sp}) == True{} : Bool},
   +ii: Nat,
@@ -1476,10 +1495,10 @@ def bl.out_j(
         bl.Tc(sw, ox, dw), wn, U32.to_nat(sw), Nat.add(Nat.mul(jj, wn), ii),
         M1.lt_rw_r(Nat.add(Nat.mul(jj, wn), ii), Nat.mul(wn, yn), bl.top(oy, dw), Equal.trans(Nat, Nat.mul(wn, yn),
           Nat.mul(yn, wn), bl.top(oy, dw), M1.mul_comm(wn, yn), Equal.sym(Nat, bl.top(oy, dw), Nat.mul(yn, wn),
-            bl.e_top(oy, dw, dh, area, h_area, hy))), M3.index_lt(ii, jj, wn, yn, hi, eb)),
-        bl.e_span(sh, oy, dw, dh, area, h_area, hy), bl.h_len(dp, sh, oy, dw, dh, area, h_area, h_dst, hy))
+            bl.e_top(oy, dw))), M3.index_lt(ii, jj, wn, yn, hi, eb)),
+        bl.e_span(sh, oy, dw, dh), bl.h_len(dp, sh, oy, dw, dh, h_dst, hy))
     case False{}:
-      bl.out_r(Nat.is_lt(Nat.sub(jj, U32.to_nat(oy)), bl.Rw(sh, dh, oy)), dp, sp, dw, dh, sw, sh, ox, oy, area, h_area,
+      bl.out_r(Nat.is_lt(Nat.sub(jj, U32.to_nat(oy)), bl.Rw(sh, dh, oy)), dp, sp, dw, dh, sw, sh, ox, oy,
         h_dst, h_src, ii, jj, hi, h_cov, hy, M3.not_lt_le(jj, U32.to_nat(oy), eb), {==})
 
 # split on y < dh
@@ -1493,8 +1512,6 @@ def bl.out_y(
   +sh: U32,
   +ox: U32,
   +oy: U32,
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(dw), U32.to_nat(dh)) : Nat},
   +h_dst: {D2.wf(Img.Raster{dw, dh, dp}) == True{} : Bool},
   +h_src: {D2.wf(Img.Raster{sw, sh, sp}) == True{} : Bool},
   +ii: Nat,
@@ -1508,11 +1525,17 @@ def bl.out_y(
     case False{}:
       {==}
     case True{}:
-      bl.out_j(Nat.is_lt(jj, U32.to_nat(oy)), dp, sp, dw, dh, sw, sh, ox, oy, area, h_area, h_dst, h_src, ii, jj,
-        hi, h_cov,
-        ey, {==})
+      +kk = Nat.add(Nat.mul(jj, U32.to_nat(dw)), ii)
+      +jc = Img.blit.join(dp, sp, dw, dh, sw, sh, ox, oy)
+      +jn = bj.J(dp, sp, bl.top(oy, dw), bl.span(sh, dh, oy, dw), bl.Rw(sh, dh, oy), bl.Lc(ox, dw), bl.Cc(sw, ox, dw),
+        bl.Tc(sw, ox, dw), U32.to_nat(dw), U32.to_nat(sw))
+      Equal.trans(Maybe<&2, U32>, List.get(&2, U32, jc, kk), List.get(&2, U32, jn, kk), List.get(&2, U32, dp, kk),
+        Equal.cong(List<&2, U32>, Maybe<&2, U32>, xs => List.get(&2, U32, xs, kk), jc, jn, bl.join(dp, sp, dw, dh, sw,
+          sh, ox, oy)),
+        bl.out_j(Nat.is_lt(jj, U32.to_nat(oy)), dp, sp, dw, dh, sw, sh, ox, oy, h_dst, h_src, ii, jj, hi, h_cov, ey,
+          {==}))
 
-def Laws.blit_out(dst, src, xx, yy, area, h_area, h_dst, h_src, ii, jj, hi, _hj, h_cov):
+def Laws.blit_out(dst, src, xx, yy, h_dst, h_src, ii, jj, hi, _hj, h_cov):
   match dst src:
     case Img.Raster{+dw, +dh, +dp} Img.Raster{+sw, +sh, +sp}:
       +kk = Nat.add(Nat.mul(jj, U32.to_nat(dw)), ii)
@@ -1521,6 +1544,6 @@ def Laws.blit_out(dst, src, xx, yy, area, h_area, h_dst, h_src, ii, jj, hi, _hj,
         List.get(&2, U32, dp, kk),
         Equal.cong(Bool, Maybe<&2, U32>, bb => List.get(&2, U32, Img.blit.y(bb, dp, sp, dw, dh, sw, sh, xx, yy), kk),
           U32.is_lt(yy, dh), Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), M5.u32_lt(yy, dh)),
-        bl.out_y(Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), dp, sp, dw, dh, sw, sh, xx, yy, area, h_area, h_dst,
+        bl.out_y(Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), dp, sp, dw, dh, sw, sh, xx, yy, h_dst,
           h_src, ii,
           jj, hi, h_cov, {==}))

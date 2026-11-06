@@ -1,5 +1,6 @@
-# For every well-formed raster `r` with both sides nonzero and fewer than 2^29
-# samples, `decode_png(encode_png(r))` is `Some(r)`.
+# For every raster `r` that `encode_png` accepts (well formed, both sides
+# nonzero, fewer than 2^28 samples: laws/PngRefusesBadRasters.bend),
+# `decode_png(encode_png(r))` is `Some(r)`.
 import Base
 import ../main.bend as Img
 import ./defs/PngSpecification.bend as D1
@@ -40,14 +41,11 @@ law png_roundtrip_one:
   for h_one: {U32.is_le(nb, 65535) == True{} : Bool}
   {spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} : Maybe<&2, Img.Raster>}
 
-# LAW: a well-formed raster with both sides nonzero and fewer than 2^29 samples decodes from its PNG to itself. The
-# bound is taken as a8, a U32 whose value is 8 w h: 8 w h is some U32's value exactly when w h is below 2^29 (a closed
-# 2^29 in a law would be expanded in unary)
+# LAW: every raster encode_png accepts, a well-formed raster with both sides nonzero and fewer than 2^28 samples,
+# decodes from its PNG to itself
 law png_roundtrip:
   for +ww: U32
   for +hh: U32
   for +px: List<&2, U32>
-  for +a8: U32
   for h_ok: {D2.png_ok(ww, hh, px) == True{} : Bool}
-  for h_a8: {U32.to_nat(a8) == Nat.mul(8n, Nat.mul(U32.to_nat(hh), U32.to_nat(ww))) : Nat}
   {spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} : Maybe<&2, Img.Raster>}

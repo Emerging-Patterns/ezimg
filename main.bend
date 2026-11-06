@@ -24,9 +24,44 @@ def jpeg_soi() -> List<&2, U32>:
 def nbytes(bytes: List<&2, U32>) -> U32:
   U32.from_nat(List.length(&2, U32, bytes))
 
-# a picture from its width, height, and samples
+# a picture from its width, height, and samples. The samples are taken as
+# they are: when there are not w * h of them the raster is not well formed,
+# and encode_png and encode_jpeg refuse it. checked_raster checks the count.
 def raster(ww: U32, hh: U32, pixels: List<&2, U32>) -> Raster:
   Raster{ww, hh, pixels}
+
+# is ll the start acc plus w steps of h: ll == acc + w * h. `over` says acc
+# has already passed ll, and the walk stops there, so no number past ll + h
+# is built.
+def area.is(wn: Nat, over: Bool, +hn: Nat, +ll: Nat, +acc: Nat) -> Bool:
+  match wn over:
+    case _wn True{}:
+      False{}
+    case 0n False{}:
+      Nat.is_eq(ll, acc)
+    case 1n+p False{}:
+      area.is(p, Nat.is_lt(ll, Nat.add(acc, hn)), hn, ll, Nat.add(acc, hn))
+
+# is ll the area w * h. A zero height answers at once; otherwise the area is
+# walked a row of h at a time.
+def area.of(+wn: Nat, hn: Nat, +ll: Nat) -> Bool:
+  match hn:
+    case 0n:
+      Nat.is_eq(ll, Nat.mul(wn, 0n))
+    case 1n+p:
+      area.is(wn, False{}, 1n+p, ll, 0n)
+
+def checked.keep(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&2, Raster>:
+  match ok:
+    case True{}:
+      Some{Raster{ww, hh, px}}
+    case False{}:
+      None{}
+
+# a picture from its width, height, and samples, or none unless there are
+# exactly w * h samples (w * h a natural number, never wrapped)
+def checked_raster(+ww: U32, +hh: U32, +px: List<&2, U32>) -> Maybe<&2, Raster>:
+  checked.keep(area.of(U32.to_nat(ww), U32.to_nat(hh), List.length(&2, U32, px)), ww, hh, px)
 
 # the width
 def width(img: Raster) -> U32:
@@ -52,15 +87,36 @@ def size(img: Raster) -> U32 & U32:
     case Raster{+w, +h, _px}:
       (w, h)
 
-# width times height
-def count(img: Raster) -> U32:
+# how many samples the picture has, as a natural number: w * h for a
+# well-formed raster. It counts the samples rather than multiply the sides,
+# so it never wraps and never builds a number larger than the samples.
+def count(img: Raster) -> Nat:
   match img:
-    case Raster{+w, +h, _px}:
-      (w * h : U32)
+    case Raster{_w, _h, px}:
+      List.length(&2, U32, px)
 
-# a solid picture of one sample
+# w rows of h samples of one colour: no count past a side is built
+def fill.go(wn: Nat, +hn: Nat, +color: U32) -> List<&2, U32>:
+  match wn:
+    case 0n:
+      Nil{}
+    case 1n+p:
+      List.append(&2, U32, List.replicate(U32, hn, color), fill.go(p, hn, color))
+
+# the samples of a solid picture; a zero height has none
+def fill.px(+wn: Nat, hn: Nat, +color: U32) -> List<&2, U32>:
+  match hn:
+    case 0n:
+      Nil{}
+    case 1n+p:
+      fill.go(wn, 1n+p, color)
+
+# a solid picture of one sample, w * h of them, for every w and h. The
+# samples are built a row at a time and their count is never computed, so a
+# side past 2^16 cannot wrap it; a picture too large for memory fails the
+# way any allocation does.
 def fill(+ww: U32, +hh: U32, +color: U32) -> Raster:
-  Raster{ww, hh, List.replicate(U32, U32.to_nat((ww * hh : U32)), color)}
+  Raster{ww, hh, fill.px(U32.to_nat(ww), U32.to_nat(hh), color)}
 
 def u.min.pick(le: Bool, +aa: U32, +bb: U32) -> U32:
   match le:
@@ -72,12 +128,45 @@ def u.min.pick(le: Bool, +aa: U32, +bb: U32) -> U32:
 def u.min(+aa: U32, +bb: U32) -> U32:
   u.min.pick(U32.is_le(aa, bb), aa, bb)
 
+# the first n rows of w samples dropped, a row at a time: the row-major
+# index n * w is never built, so it cannot wrap or pass a Nat's range, and
+# the walk stops when the samples run out
+def skip.rows(nn: Nat, +px: List<&2, U32>, +ww: Nat) -> List<&2, U32>:
+  match nn px:
+    case 0n _px:
+      px
+    case 1n+_p Nil{}:
+      Nil{}
+    case 1n+p _hd <> _tl:
+      skip.rows(p, List.drop(&2, U32, px, ww), ww)
+
+# the first n rows of w samples, a row at a time
+def take.rows(nn: Nat, +px: List<&2, U32>, +ww: Nat) -> List<&2, U32>:
+  match nn px:
+    case 0n _px:
+      Nil{}
+    case 1n+_p Nil{}:
+      Nil{}
+    case 1n+p _hd <> _tl:
+      List.append(&2, U32, List.take(&2, U32, px, ww), take.rows(p, List.drop(&2, U32, px, ww), ww))
+
+# sample x of row n replaced by color, the rows before it walked one at a
+# time
+def set.rows(nn: Nat, +px: List<&2, U32>, +ww: Nat, +xx: Nat, +color: U32) -> List<&2, U32>:
+  match nn px:
+    case 0n _px:
+      List.set(&2, U32, px, xx, color)
+    case 1n+_p Nil{}:
+      Nil{}
+    case 1n+p _hd <> _tl:
+      List.append(&2, U32, List.take(&2, U32, px, ww), set.rows(p, List.drop(&2, U32, px, ww), ww, xx, color))
+
 def get.y(yin: Bool, px: List<&2, U32>, +ww: U32, +xx: U32, +yy: U32) -> Maybe<&2, U32>:
   match yin:
     case False{}:
       None{}
     case True{}:
-      List.get(&2, U32, px, U32.to_nat((yy * ww + xx : U32)))
+      List.get(&2, U32, skip.rows(U32.to_nat(yy), px, U32.to_nat(ww)), U32.to_nat(xx))
 
 def get.x(xin: Bool, px: List<&2, U32>, +ww: U32, +hh: U32, +xx: U32, +yy: U32) -> Maybe<&2, U32>:
   match xin:
@@ -86,7 +175,8 @@ def get.x(xin: Bool, px: List<&2, U32>, +ww: U32, +hh: U32, +xx: U32, +yy: U32) 
     case True{}:
       get.y(U32.is_lt(yy, hh), px, ww, xx, yy)
 
-# the sample at (x, y), or none when that point is outside the picture
+# the sample at (x, y), or none when that point is outside the picture.
+# Sample y * w + x is reached a row at a time, so the index never wraps.
 def get(img: Raster, +xx: U32, +yy: U32) -> Maybe<&2, U32>:
   match img:
     case Raster{+w, +h, +px}:
@@ -105,7 +195,7 @@ def set.y(
     case False{}:
       Raster{ww, hh, px}
     case True{}:
-      Raster{ww, hh, List.set(&2, U32, px, U32.to_nat((yy * ww + xx : U32)), color)}
+      Raster{ww, hh, set.rows(U32.to_nat(yy), px, U32.to_nat(ww), U32.to_nat(xx), color)}
 
 def set.x(
   xin: Bool,
@@ -122,7 +212,8 @@ def set.x(
     case True{}:
       set.y(U32.is_lt(yy, hh), ww, hh, px, xx, yy, color)
 
-# the picture with (x, y) replaced by color; outside, the picture is unchanged
+# the picture with (x, y) replaced by color; outside, the picture is
+# unchanged. Sample y * w + x is reached a row at a time.
 def set(img: Raster, +xx: U32, +yy: U32, +color: U32) -> Raster:
   match img:
     case Raster{+w, +h, +px}:
@@ -150,7 +241,7 @@ def crop.use(
       Raster{0, 0, []}
     case False{}:
       Raster{rw, rh,
-        crop.rows(U32.to_nat(rh), List.drop(&2, U32, px, U32.to_nat((yy * ww + xx : U32))),
+        crop.rows(U32.to_nat(rh), List.drop(&2, U32, skip.rows(U32.to_nat(yy), px, U32.to_nat(ww)), U32.to_nat(xx)),
           U32.to_nat(rw), U32.to_nat((ww - rw : U32)))}
 
 def crop.open(
@@ -264,12 +355,13 @@ def blit.join(
   +cover = u.min(sw, room)
   +tail = (room - cover : U32)
   +rows = u.min(sh, (dh - oy : U32))
-  +top = U32.to_nat((oy * dw : U32))
-  +span = U32.to_nat(((oy + rows) * dw : U32))
-  List.append(&2, U32, List.take(&2, U32, dp, top), List.append(&2, U32,
-    blit.rows(U32.to_nat(rows), List.drop(&2, U32, dp, top), sp, U32.to_nat(left),
-      U32.to_nat(cover), U32.to_nat(tail), U32.to_nat(dw), U32.to_nat(sw)),
-    List.drop(&2, U32, dp, span)))
+  +yn = U32.to_nat(oy)
+  +wn = U32.to_nat(dw)
+  +rest = skip.rows(yn, dp, wn)
+  List.append(&2, U32, take.rows(yn, dp, wn), List.append(&2, U32,
+    blit.rows(U32.to_nat(rows), rest, sp, U32.to_nat(left), U32.to_nat(cover), U32.to_nat(tail), wn,
+      U32.to_nat(sw)),
+    skip.rows(U32.to_nat(rows), rest, wn)))
 
 def blit.y(
   inside: Bool,
@@ -373,7 +465,17 @@ def decode_png(+bytes: List<&2, U32>) -> Maybe<&2, Raster>:
 
 # ISO/IEC 15948 / W3C PNG — bytes of an 8-bit picture, interlace method 0.
 # Colour type 2 when every sample is opaque, otherwise colour type 6.
-# None when a side is zero or the sample count is not the area.
+# None when a side is zero, the sample count is not the area, or the area
+# is 2^28 samples or more: below that bound every count the encoder keeps is
+# exact and its one IDAT chunk is shorter than PNG's 2^31 - 1 byte limit, and
+# decode_png reads every encoding back (laws/PngRoundTrips.bend).
+#
+# Not compressed: every row has filter type None and the zlib stream is
+# stored (uncompressed) DEFLATE blocks, so a file is the h (k w + 1)
+# filtered bytes (k = 3 or 4 channels), 5 more bytes per 65535 of them, and
+# about 60 bytes of chunks. A 320x260 RGB picture is about 250 KB, where
+# zlib at level 6 makes about 33 KB of it. The round-trip proof rests on
+# the stored blocks; re-compress the file elsewhere when size matters.
 def encode_png(img: Raster) -> Maybe<&2, List<&2, U32>>:
   match img:
     case Raster{+w, +h, +px}:
@@ -412,8 +514,8 @@ def encode_jpeg.pick(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&
 
 # a baseline sequential 4:4:4 JPEG of the samples' colour: alpha is cleared
 # before the encoder sees a sample. None exactly when encode_png is none: a
-# side is zero, the area passes 2^32, or the sample count is not the area.
-# Both ask the same guard, Png.enc.good.
+# side is zero, the area is 2^28 samples or more, or the sample count is not
+# the area. Both ask the same guard, Png.enc.good.
 #
 # Trusted, not proved: for every well-formed raster with both sides nonzero
 # and at most 65535 and at most 2^31 samples, every colour channel of

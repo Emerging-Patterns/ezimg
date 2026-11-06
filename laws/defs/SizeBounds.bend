@@ -33,9 +33,9 @@ def below(nn: Nat, xx: Nat) -> Bool:
       below(pp, half(xx))
 
 # the rasters laws/PngRefusesBadRasters.bend calls encodable: neither side
-# 0, the area w * h (h rows of w, as natural numbers) below 2^32, and w * h
+# 0, the area w * h (h rows of w, as natural numbers) below 2^28, and w * h
 # samples
 def png_ok(+ww: U32, +hh: U32, +px: List<&2, U32>) -> Bool:
   +area = Nat.mul(U32.to_nat(hh), U32.to_nat(ww))
   Bool.and(Bool.and(Bool.not(Nat.is_eq(U32.to_nat(ww), 0n)), Bool.not(Nat.is_eq(U32.to_nat(hh), 0n))),
-    Bool.and(below(32n, area), Nat.is_eq(List.length(&2, U32, px), area)))
+    Bool.and(below(28n, area), Nat.is_eq(List.length(&2, U32, px), area)))
