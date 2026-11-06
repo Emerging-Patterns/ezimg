@@ -5219,11 +5219,11 @@ def Laws.png_roundtrip_one(ww, hh, px, nb, h_ok, h_nb, h_one):
   +nw = Bool.not(Nat.is_eq(U32.to_nat(ww), 0n))
   +nh = Bool.not(Nat.is_eq(U32.to_nat(hh), 0n))
   +ok = {h_ok : {D2.png_ok(ww, hh, px) == True{} : Bool}}
-  +e_sides = {M1.and_left(Bool.and(nw, nh), Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)), ok) :
+  +e_sides = {M1.and_left(Bool.and(nw, nh), Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)), ok) :
     {Bool.and(nw, nh) == True{} : Bool}}
-  +e_r = {M1.and_right(Bool.and(nw, nh), Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)), ok) :
-    {Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)) == True{} : Bool}}
-  +e_la = {M5.nat_eq_true(ll, aa, M1.and_right(D2.below(32n, aa), Nat.is_eq(ll, aa), e_r)) : {ll == aa : Nat}}
+  +e_r = {M1.and_right(Bool.and(nw, nh), Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)), ok) :
+    {Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)) == True{} : Bool}}
+  +e_la = {M5.nat_eq_true(ll, aa, M1.and_right(D2.below(28n, aa), Nat.is_eq(ll, aa), e_r)) : {ll == aa : Nat}}
   +z_w = M5.not.true(Nat.is_eq(U32.to_nat(ww), 0n), M1.and_left(nw, nh, e_sides))
   +z_h = M5.not.true(Nat.is_eq(U32.to_nat(hh), 0n), M1.and_right(nw, nh, e_sides))
   +e_good = rt.good.at(Png.enc.good(ww, hh, px), ww, hh, px, L2.png_encodes(ww, hh, px, ok))
@@ -5394,19 +5394,65 @@ def rt2.pos(
   rt2.at(U32.cmp(Png.enc.nbytes(op, ww, hh), 65535), ww, hh, px, a8, wp, hp, h_ok, e_good, hao, e_w, e_h, e_l2, t_nb,
     e_t, h5, h_n, {==})
 
-# laws/PngRoundTrips.bend: one stored block when the scanlines fit, the stored blocks of 65535 bytes otherwise
-def Laws.png_roundtrip(ww, hh, px, a8, h_ok, h_a8):
+# a natural number below 2^32, taken in a word, keeps its value
+def nat.word(xx: Nat, +hb: {D2.below(32n, xx) == True{} : Bool}) -> {U32.to_nat(U32.from_nat(xx)) == xx : Nat}:
+  match xx:
+    case 0n:
+      {==}
+    case 1n+(+pp):
+      +up = U32.from_nat(pp)
+      +hp = {M5.below_mono(32n, pp, 1n, Equal.trans(Bool, D2.below(32n, Nat.add(pp, 1n)), D2.below(32n, 1n+pp), True{},
+        Equal.cong(Nat, Bool, kk => D2.below(32n, kk), Nat.add(pp, 1n), 1n+pp, add.one.nat(pp)), hb)) :
+        {D2.below(32n, pp) == True{} : Bool}}
+      +ih = {nat.word(pp, hp) : {U32.to_nat(up) == pp : Nat}}
+      +hb1 = {Equal.trans(Bool, D2.below(32n, 1n+U32.to_nat(up)), D2.below(32n, 1n+pp), True{},
+        Equal.cong(Nat, Bool, kk => D2.below(32n, 1n+kk), U32.to_nat(up), pp, ih), hb) :
+        {D2.below(32n, 1n+U32.to_nat(up)) == True{} : Bool}}
+      Equal.trans(Nat, U32.to_nat(U32.inc(up)), U32.to_nat(U32.add(up, 1)), 1n+pp,
+        Equal.cong(U32, Nat, uu => U32.to_nat(uu), U32.inc(up), U32.add(up, 1), Equal.sym(U32, U32.add(up, 1),
+          U32.inc(up), add.one(up))),
+        Equal.trans(Nat, U32.to_nat(U32.add(up, 1)), 1n+U32.to_nat(up), 1n+pp, M5.u32_inc_nat(up, hb1),
+          Equal.cong(Nat, Nat, kk => 1n+kk, U32.to_nat(up), pp, ih)))
+
+# eight times a is a doubled three times
+def eight(+aa: Nat) -> {Nat.mul(8n, aa) == Nat.double(Nat.double(Nat.double(aa))) : Nat}:
+  Equal.trans(Nat, Nat.mul(8n, aa), Nat.double(Nat.mul(4n, aa)), Nat.double(Nat.double(Nat.double(aa))),
+    M7.mul_double(4n, aa),
+    Equal.cong(Nat, Nat, kk => Nat.double(kk), Nat.mul(4n, aa), Nat.double(Nat.double(aa)),
+      Equal.trans(Nat, Nat.mul(4n, aa), Nat.double(Nat.mul(2n, aa)), Nat.double(Nat.double(aa)), M7.mul_double(2n, aa),
+        Equal.cong(Nat, Nat, kk => Nat.double(kk), Nat.mul(2n, aa), Nat.double(aa),
+          Equal.trans(Nat, Nat.mul(2n, aa), Nat.double(Nat.mul(1n, aa)), Nat.double(aa), M7.mul_double(1n, aa),
+            Equal.cong(Nat, Nat, kk => Nat.double(kk), Nat.mul(1n, aa), aa, M1.nat_add_zero(aa)))))))
+
+# fewer than 2^28 samples: 8 w h is below 2^32
+def eight.fits(
+  +aa: Nat,
+  hb: {D2.below(28n, aa) == True{} : Bool}
+) -> {D2.below(32n, Nat.mul(8n, aa)) == True{} : Bool}:
+  +d1 = Nat.double(aa)
+  +d2 = Nat.double(d1)
+  +d3 = Nat.double(d2)
+  Equal.trans(Bool, D2.below(32n, Nat.mul(8n, aa)), D2.below(32n, d3), True{},
+    Equal.cong(Nat, Bool, kk => D2.below(32n, kk), Nat.mul(8n, aa), d3, eight(aa)),
+    M5.below_up(31n, d3, M5.below.dbl(30n, d2, M5.below.dbl(29n, d1, M5.below.dbl(28n, aa, hb)))))
+
+# laws/PngRoundTrips.bend: one stored block when the scanlines fit, the stored blocks of 65535 bytes otherwise. The
+# bound below 2^28 samples gives a8, a word whose value is 8 w h, which the stored-block arithmetic takes
+def Laws.png_roundtrip(ww, hh, px, h_ok):
   +aa = Nat.mul(U32.to_nat(hh), U32.to_nat(ww))
   +ll = List.length(&2, U32, px)
   +nw = Bool.not(Nat.is_eq(U32.to_nat(ww), 0n))
   +nh = Bool.not(Nat.is_eq(U32.to_nat(hh), 0n))
   +ok = {h_ok : {D2.png_ok(ww, hh, px) == True{} : Bool}}
-  +e_sides = {M1.and_left(Bool.and(nw, nh), Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)), ok) :
+  +e_sides = {M1.and_left(Bool.and(nw, nh), Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)), ok) :
     {Bool.and(nw, nh) == True{} : Bool}}
-  +e_r = {M1.and_right(Bool.and(nw, nh), Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)), ok) :
-    {Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)) == True{} : Bool}}
-  +e_la = {M5.nat_eq_true(ll, aa, M1.and_right(D2.below(32n, aa), Nat.is_eq(ll, aa), e_r)) : {ll == aa : Nat}}
+  +e_r = {M1.and_right(Bool.and(nw, nh), Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)), ok) :
+    {Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)) == True{} : Bool}}
+  +e_la = {M5.nat_eq_true(ll, aa, M1.and_right(D2.below(28n, aa), Nat.is_eq(ll, aa), e_r)) : {ll == aa : Nat}}
   +z_w = M5.not.true(Nat.is_eq(U32.to_nat(ww), 0n), M1.and_left(nw, nh, e_sides))
   +z_h = M5.not.true(Nat.is_eq(U32.to_nat(hh), 0n), M1.and_right(nw, nh, e_sides))
   +e_good = rt.good.at(Png.enc.good(ww, hh, px), ww, hh, px, L2.png_encodes(ww, hh, px, ok))
+  +a8 = U32.from_nat(Nat.mul(8n, aa))
+  +h_a8 = {nat.word(Nat.mul(8n, aa), eight.fits(aa, M1.and_left(D2.below(28n, aa), Nat.is_eq(ll, aa), e_r))) :
+    {U32.to_nat(a8) == Nat.mul(8n, aa) : Nat}}
   rt2.pos(ww, hh, px, a8, ok, e_good, e_la, h_a8, M5.nat_pos(U32.to_nat(ww), z_w), M5.nat_pos(U32.to_nat(hh), z_h))

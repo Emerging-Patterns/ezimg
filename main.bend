@@ -465,7 +465,10 @@ def decode_png(+bytes: List<&2, U32>) -> Maybe<&2, Raster>:
 
 # ISO/IEC 15948 / W3C PNG — bytes of an 8-bit picture, interlace method 0.
 # Colour type 2 when every sample is opaque, otherwise colour type 6.
-# None when a side is zero or the sample count is not the area.
+# None when a side is zero, the sample count is not the area, or the area
+# is 2^28 samples or more: below that bound every count the encoder keeps is
+# exact and its one IDAT chunk is shorter than PNG's 2^31 - 1 byte limit, and
+# decode_png reads every encoding back (laws/PngRoundTrips.bend).
 def encode_png(img: Raster) -> Maybe<&2, List<&2, U32>>:
   match img:
     case Raster{+w, +h, +px}:
@@ -504,8 +507,8 @@ def encode_jpeg.pick(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&
 
 # a baseline sequential 4:4:4 JPEG of the samples' colour: alpha is cleared
 # before the encoder sees a sample. None exactly when encode_png is none: a
-# side is zero, the area passes 2^32, or the sample count is not the area.
-# Both ask the same guard, Png.enc.good.
+# side is zero, the area is 2^28 samples or more, or the sample count is not
+# the area. Both ask the same guard, Png.enc.good.
 #
 # Trusted, not proved: for every well-formed raster with both sides nonzero
 # and at most 65535 and at most 2^31 samples, every colour channel of
