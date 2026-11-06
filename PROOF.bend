@@ -9,6 +9,7 @@ import ./proofs/DecodedSamplesPackArgb.bend as PDecodedSamplesPackArgb
 import ./proofs/FillIsUniform.bend as PFillIsUniform
 import ./proofs/GetSetTouchOnePoint.bend as PGetSetTouchOnePoint
 import ./proofs/InflateReadsStoredBlocks.bend as PInflateReadsStoredBlocks
+import ./proofs/InflateUptoKeepsBudget.bend as PInflateUptoKeepsBudget
 import ./proofs/JpegEncodeIgnoresAlpha.bend as PJpegEncodeIgnoresAlpha
 import ./proofs/JpegPlacesComponentSamples.bend as PJpegPlacesComponentSamples
 import ./proofs/JpegRefusesNonBaselineFrames.bend as PJpegRefusesNonBaselineFrames

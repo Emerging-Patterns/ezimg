@@ -5,7 +5,8 @@
 # DEFLATE streams other encoders (zlib, libpng) write. Only stored blocks are
 # proved (laws/InflateReadsStoredBlocks.bend); a proof for dynamic Huffman
 # needs a reference compressor. The Pillow check in bench/ exercises it,
-# which is a test.
+# which is a test. Of inflate.upto's budget, half is proved
+# (laws/InflateUptoKeepsBudget.bend): what it answers, inflate answers.
 #
 # The reader takes one bit at a time, eight per input byte. A Huffman code is
 # read the canonical way (RFC 1951 3.2.2, as zlib's puff.c does): per length
@@ -244,47 +245,6 @@ def lens.set(xs: List<&2, U32>, zz: Bool, +ii: U32, +vv: U32) -> List<&2, U32>:
 
 # code-length lists
 # -----------------
-
-# fixed literal/length code length at a symbol
-def lit.len2(cc: Bool) -> U32:
-  match cc:
-    case True{}:
-      7
-    case False{}:
-      8
-
-# fixed literal/length code length, past 143
-def lit.len1(bb: Bool, cc: Bool) -> U32:
-  match bb:
-    case True{}:
-      9
-    case False{}:
-      lit.len2(cc)
-
-# fixed literal/length code length
-def lit.len(+_s: U32, aa: Bool, bb: Bool, cc: Bool) -> U32:
-  match aa:
-    case True{}:
-      8
-    case False{}:
-      lit.len1(bb, cc)
-
-# lengths 0..i, oldest first once i runs down to zero
-def lit.lens(ii: Nat, acc: List<&2, U32>) -> List<&2, U32>:
-  match ii:
-    case 0n:
-      lit.len(0, True{}, True{}, True{}) <> acc
-    case 1n++p:
-      +s = U32.from_nat(1n+p)
-      lit.lens(p, lit.len(s, U32.is_le(s, 143), U32.is_le(s, 255), U32.is_le(s, 279)) <> acc)
-
-# thirty-two distance lengths of 5
-def dist.lens(nn: Nat) -> List<&2, U32>:
-  match nn:
-    case 0n:
-      Nil{}
-    case 1n+p:
-      5 <> dist.lens(p)
 
 # length bases for symbols 257..285
 def len.base() -> List<&2, U32>:
@@ -1260,3 +1220,56 @@ def inflate.go(xs: List<&2, U32>, st: St) -> Maybe<&2, List<&2, U32>>:
 # inflate a zlib wrapper around DEFLATE, as PNG compression method 0
 def inflate(xs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   inflate.go(xs, st.empty())
+
+# the output budget
+# -----------------
+
+# the bytes a reader has emitted or a stored header has promised, past `lim`
+def st.over(st: St, +lim: Nat) -> Bool:
+  match st:
+    case St{_ph, _md, _wh, _a, _g, _n, _c, _sk, Cx{_f, _l, _d, _o, _w, +wpos, +pend, _r, _h}}:
+      Nat.is_lt(lim, Nat.add(U32.to_nat(wpos), U32.to_nat(pend)))
+
+# a reader past the budget fails
+def st.cap.at(zz: Bool, st: St) -> St:
+  match zz:
+    case True{}:
+      st.fail()
+    case False{}:
+      st
+
+# the reader, failed once it is past the budget
+def st.cap(+st: St, +lim: Nat) -> St:
+  st.cap.at(st.over(st, lim), st)
+
+# the output, when it fits the budget
+def inflate.upto.fin(zz: Bool, out: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match zz:
+    case True{}:
+      Some{out}
+    case False{}:
+      None{}
+
+# inflate.go with a budget: after each byte the reader is capped, and the
+# output is measured once at the end
+def inflate.upto.go(xs: List<&2, U32>, st: St, +lim: Nat) -> Maybe<&2, List<&2, U32>>:
+  match xs st:
+    case _xs St{PDone{}, _md, _wh, _a, _g, _n, _c, _sk, Cx{_f, _l, _d, +out, _w, _wp, _p, _r, _h}}:
+      inflate.upto.fin(Nat.is_le(List.length(&2, U32, out), lim), out)
+    case _xs St{PFail{}, _md, _wh, _a, _g, _n, _c, _sk, _cx}:
+      None{}
+    case Nil{} _st:
+      None{}
+    case Con{+b, t} st2:
+      inflate.upto.go(t, st.cap(rd.step8(st2, b), lim), lim)
+
+# inflate with an output budget of `lim` bytes: the output of inflate when it
+# has at most `lim` bytes, and none otherwise (laws/InflateUptoKeepsBudget.bend
+# proves the first half). It stops at the first input byte after which the
+# bytes emitted, or promised by a stored block's LEN, pass `lim`: a stored
+# block is refused before its bytes are read, and a Huffman block's output
+# passes the budget by at most what one input byte decodes to (eight 258-byte
+# back-references), so a hostile stream cannot expand far beyond it. Nat is
+# native at runtime: the budget may exceed 2^32.
+def inflate.upto(+lim: Nat, xs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  inflate.upto.go(xs, st.empty(), lim)
