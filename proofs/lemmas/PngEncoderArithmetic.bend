@@ -1098,6 +1098,149 @@ def not.true(xx: Bool, ee: {Bool.not(xx) == True{} : Bool}) -> {xx == False{} : 
     case True{}:
       Empty.absurd({True{} == False{} : Bool}, M1.false_true(ee))
 
+# ---- the sample bound, 2^28 ----
+
+# half of a bit plus a double is the double's half
+def half.bit(bb: Bool, +xx: Nat) -> {D1.half(Nat.add(M1.bit(bb), Nat.double(xx))) == xx : Nat}:
+  match bb:
+    case False{}:
+      half_double(xx)
+    case True{}:
+      half_odd(xx)
+
+# a U32 shifted right once is its half
+def shr.half(+uu: U32) -> {U32.to_nat(U32.shr(uu)) == D1.half(U32.to_nat(uu)) : Nat}:
+  +sv = U32.to_nat(U32.shr(uu))
+  +xv = Nat.add(M1.bit(M1.lowb(uu)), Nat.double(sv))
+  Equal.sym(Nat, D1.half(U32.to_nat(uu)), sv, Equal.trans(Nat, D1.half(U32.to_nat(uu)), D1.half(xv), sv,
+    Equal.cong(Nat, Nat, nn => D1.half(nn), U32.to_nat(uu), xv, M1.shr_split(uu)), half.bit(M1.lowb(uu), sv)))
+
+# x halved k times
+def halves(kk: Nat, +xx: Nat) -> Nat:
+  match kk:
+    case 0n:
+      xx
+    case 1n+pp:
+      D1.half(halves(pp, xx))
+
+# a U32 shifted right k times is its value halved k times
+def shrn.halves(kk: Nat, +uu: U32) -> {U32.to_nat(U32.shrn(uu, kk)) == halves(kk, U32.to_nat(uu)) : Nat}:
+  match kk:
+    case 0n:
+      {==}
+    case 1n+(+pp):
+      Equal.trans(Nat, U32.to_nat(U32.shr(U32.shrn(uu, pp))), D1.half(U32.to_nat(U32.shrn(uu, pp))),
+        D1.half(halves(pp, U32.to_nat(uu))), shr.half(U32.shrn(uu, pp)),
+        Equal.cong(Nat, Nat, nn => D1.half(nn), U32.to_nat(U32.shrn(uu, pp)), halves(pp, U32.to_nat(uu)),
+          shrn.halves(pp, uu)))
+
+# halving once and then k times is halving k times and then once
+def halves.half(kk: Nat, +xx: Nat) -> {halves(kk, D1.half(xx)) == D1.half(halves(kk, xx)) : Nat}:
+  match kk:
+    case 0n:
+      {==}
+    case 1n+(+pp):
+      Equal.cong(Nat, Nat, nn => D1.half(nn), halves(pp, D1.half(xx)), D1.half(halves(pp, xx)), halves.half(pp, xx))
+
+# below 2^k: halving k times leaves 0
+def below.halves(kk: Nat, +xx: Nat) -> {D1.below(kk, xx) == Nat.is_eq(halves(kk, xx), 0n) : Bool}:
+  match kk:
+    case 0n:
+      {==}
+    case 1n+(+pp):
+      Equal.trans(Bool, D1.below(pp, D1.half(xx)), Nat.is_eq(halves(pp, D1.half(xx)), 0n),
+        Nat.is_eq(D1.half(halves(pp, xx)), 0n), below.halves(pp, D1.half(xx)),
+        Equal.cong(Nat, Bool, nn => Nat.is_eq(nn, 0n), halves(pp, D1.half(xx)), D1.half(halves(pp, xx)),
+          halves.half(pp, xx)))
+
+# the guard's bound is the count below 2^28
+def small.nat(+nn: U32) -> {Png.enc.small(nn) == D1.below(28n, U32.to_nat(nn)) : Bool}:
+  +sv = U32.shrn(nn, 28n)
+  +hv = halves(28n, U32.to_nat(nn))
+  Equal.trans(Bool, U32.is_zero(sv), Nat.is_eq(U32.to_nat(sv), 0n), D1.below(28n, U32.to_nat(nn)),
+    Equal.sym(Bool, Nat.is_eq(U32.to_nat(sv), 0n), U32.is_zero(sv), zero.nat(sv, U32.is_zero(sv), {==})),
+    Equal.trans(Bool, Nat.is_eq(U32.to_nat(sv), 0n), Nat.is_eq(hv, 0n), D1.below(28n, U32.to_nat(nn)),
+      Equal.cong(Nat, Bool, kk => Nat.is_eq(kk, 0n), U32.to_nat(sv), hv, shrn.halves(28n, nn)),
+      Equal.sym(Bool, D1.below(28n, U32.to_nat(nn)), Nat.is_eq(hv, 0n), below.halves(28n, U32.to_nat(nn)))))
+
+# below 2^n is below 2^(n + 1)
+law below_up:
+  for nn: Nat
+  for +xx: Nat
+  for hb: {D1.below(nn, xx) == True{} : Bool}
+  {D1.below(1n+nn, xx) == True{} : Bool}
+
+# the proof of below_up
+def below_up(nn, xx, hb):
+  match nn:
+    case 0n:
+      match xx:
+        case 0n:
+          {==}
+        case 1n+(+qx):
+          Empty.absurd({D1.below(1n, 1n+qx) == True{} : Bool}, M1.false_true(hb))
+    case 1n+(+pp):
+      below_up(pp, D1.half(xx), hb)
+
+# below 2^28 is below 2^32
+def below.word(+xx: Nat, hb: {D1.below(28n, xx) == True{} : Bool}) -> {D1.below(32n, xx) == True{} : Bool}:
+  below_up(31n, xx, below_up(30n, xx, below_up(29n, xx, below_up(28n, xx, hb))))
+
+# twice a number below 2^n is below 2^(n + 1)
+def below.dbl(
+  +nn: Nat,
+  +xx: Nat,
+  hb: {D1.below(nn, xx) == True{} : Bool}
+) -> {D1.below(1n+nn, Nat.double(xx)) == True{} : Bool}:
+  Equal.trans(Bool, D1.below(nn, D1.half(Nat.double(xx))), D1.below(nn, xx), True{},
+    Equal.cong(Nat, Bool, kk => D1.below(nn, kk), D1.half(Nat.double(xx)), xx, half_double(xx)), hb)
+
+# a, false, then c is false, as is b and false
+def and3.false(aa: Bool, +bb: Bool, cc: Bool) -> {Bool.and(Bool.and(aa, False{}), cc) == Bool.and(bb, False{}) : Bool}:
+  match aa bb:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# a true, true, then b is b and true
+def and3.true(
+  aa: Bool,
+  bb: Bool,
+  ea: {aa == True{} : Bool}
+) -> {Bool.and(Bool.and(aa, True{}), bb) == Bool.and(bb, True{}) : Bool}:
+  match aa bb:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} _bb:
+      Empty.absurd({Bool.and(Bool.and(False{}, True{}), _bb) == Bool.and(_bb, True{}) : Bool}, M1.false_true(ea))
+
+# the walk's answer and the bound on the count are the law's test: the area
+# below 2^28 and the count the area, when the count is below 2^32
+def fits.small(
+  zz: Bool,
+  +ll: Nat,
+  +aa: Nat,
+  ez: {Nat.is_eq(ll, aa) == zz : Bool},
+  hb: {D1.below(32n, ll) == True{} : Bool}
+) -> {Bool.and(Bool.and(D1.below(32n, aa), zz), D1.below(28n, ll)) == Bool.and(D1.below(28n, aa), zz) : Bool}:
+  match zz:
+    case False{}:
+      and3.false(D1.below(32n, aa), D1.below(28n, aa), D1.below(28n, ll))
+    case True{}:
+      +ela = {nat_eq_true(ll, aa, ez) : {ll == aa : Nat}}
+      Equal.trans(Bool, Bool.and(Bool.and(D1.below(32n, aa), True{}), D1.below(28n, ll)),
+        Bool.and(Bool.and(D1.below(32n, aa), True{}), D1.below(28n, aa)), Bool.and(D1.below(28n, aa), True{}),
+        Equal.cong(Nat, Bool, kk => Bool.and(Bool.and(D1.below(32n, aa), True{}), D1.below(28n, kk)), ll, aa, ela),
+        and3.true(D1.below(32n, aa), D1.below(28n, aa), Equal.trans(Bool, D1.below(32n, aa), D1.below(32n, ll), True{},
+          Equal.cong(Nat, Bool, kk => D1.below(32n, kk), aa, ll, Equal.sym(Nat, ll, aa, ela)), hb)))
+
 # the two side tests agree, and the rest agrees when the width is above 0
 def good.pick(
   nw: Bool,
@@ -1147,6 +1290,33 @@ def good.rows(
       Equal.cong(Nat, Bool, xx => Nat.is_eq(xx, aa), U32.to_nat(nn), ll, e_n)),
     fits.and(Nat.is_eq(ll, aa), ll, aa, {==}, hb))
 
+# with the width 1 and wp: the walk and the bound on the count are the law's test
+def good.rest(
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>,
+  +hb: {D1.below(32n, List.length(&2, U32, px)) == True{} : Bool},
+  pw: &wp: Nat -> {U32.to_nat(ww) == 1n+wp : Nat}
+) -> {Bool.and(Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(Png.enc.len(px, 0), ww), ww, hh, Png.enc.len(px, 0)),
+  Png.enc.small(Png.enc.len(px, 0))) == Bool.and(D1.below(28n, Nat.mul(U32.to_nat(hh), U32.to_nat(ww))),
+    Nat.is_eq(List.length(&2, U32, px), Nat.mul(U32.to_nat(hh), U32.to_nat(ww)))) : Bool}:
+  +nn = Png.enc.len(px, 0)
+  +ll = List.length(&2, U32, px)
+  +aa = Nat.mul(U32.to_nat(hh), U32.to_nat(ww))
+  +rw = Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(nn, ww), ww, hh, nn)
+  +b32 = Bool.and(D1.below(32n, aa), Nat.is_eq(ll, aa))
+  +e_n = {len.nat(px, 0, hb) : {U32.to_nat(nn) == ll : Nat}}
+  +e_s = {Equal.trans(Bool, Png.enc.small(nn), D1.below(28n, U32.to_nat(nn)), D1.below(28n, ll), small.nat(nn),
+    Equal.cong(Nat, Bool, kk => D1.below(28n, kk), U32.to_nat(nn), ll, e_n)) : {Png.enc.small(nn) == D1.below(28n, ll) :
+    Bool}}
+  Equal.trans(Bool, Bool.and(rw, Png.enc.small(nn)), Bool.and(b32, Png.enc.small(nn)),
+    Bool.and(D1.below(28n, aa), Nat.is_eq(ll, aa)),
+    Equal.cong(Bool, Bool, bb => Bool.and(bb, Png.enc.small(nn)), rw, b32, good.rows(ww, hh, px, hb, pw)),
+    Equal.trans(Bool, Bool.and(b32, Png.enc.small(nn)), Bool.and(b32, D1.below(28n, ll)),
+      Bool.and(D1.below(28n, aa), Nat.is_eq(ll, aa)),
+      Equal.cong(Bool, Bool, bb => Bool.and(b32, bb), Png.enc.small(nn), D1.below(28n, ll), e_s),
+      fits.small(Nat.is_eq(ll, aa), ll, aa, {==}, hb)))
+
 # for fewer than 2^32 samples, the guard is the law's test
 def good.nat(
   +ww: U32,
@@ -1155,18 +1325,18 @@ def good.nat(
   +hb: {D1.below(32n, List.length(&2, U32, px)) == True{} : Bool}
 ) -> {Png.enc.good(ww, hh, px) == D1.png_ok(ww, hh, px) : Bool}:
   +nn = Png.enc.len(px, 0)
-  +rr = Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(nn, ww), ww, hh, nn)
+  +rr = Bool.and(Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(nn, ww), ww, hh, nn), Png.enc.small(nn))
   +nw = Bool.not(Nat.is_eq(U32.to_nat(ww), 0n))
   +nh = Bool.not(Nat.is_eq(U32.to_nat(hh), 0n))
   +aa = Nat.mul(U32.to_nat(hh), U32.to_nat(ww))
-  +ss = Bool.and(D1.below(32n, aa), Nat.is_eq(List.length(&2, U32, px), aa))
+  +ss = Bool.and(D1.below(28n, aa), Nat.is_eq(List.length(&2, U32, px), aa))
   Equal.trans(Bool, Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), rr), Bool.and(Bool.and(nw, nh), rr),
     Bool.and(Bool.and(nw, nh), ss),
     Equal.trans(Bool, Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), rr),
       Bool.and(Bool.and(nw, U32.is_gt(hh, 0)), rr), Bool.and(Bool.and(nw, nh), rr),
       Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(bb, U32.is_gt(hh, 0)), rr), U32.is_gt(ww, 0), nw, gt.nat(ww)),
       Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(nw, bb), rr), U32.is_gt(hh, 0), nh, gt.nat(hh))),
-    good.pick(nw, nh, rr, ss, en => good.rows(ww, hh, px, hb, nat_pos(U32.to_nat(ww),
+    good.pick(nw, nh, rr, ss, en => good.rest(ww, hh, px, hb, nat_pos(U32.to_nat(ww),
       not.true(Nat.is_eq(U32.to_nat(ww), 0n), en)))))
 
 # enc.open with its guard true is some
@@ -1189,11 +1359,11 @@ def L1.png_encodes(ww, hh, px, h_ok):
   +nw = Bool.not(Nat.is_eq(U32.to_nat(ww), 0n))
   +nh = Bool.not(Nat.is_eq(U32.to_nat(hh), 0n))
   +ok = {h_ok : {D1.png_ok(ww, hh, px) == True{} : Bool}}
-  +e_r = {M1.and_right(Bool.and(nw, nh), Bool.and(D1.below(32n, aa), Nat.is_eq(ll, aa)), ok) :
-    {Bool.and(D1.below(32n, aa), Nat.is_eq(ll, aa)) == True{} : Bool}}
-  +e_la = {nat_eq_true(ll, aa, M1.and_right(D1.below(32n, aa), Nat.is_eq(ll, aa), e_r)) : {ll == aa : Nat}}
+  +e_r = {M1.and_right(Bool.and(nw, nh), Bool.and(D1.below(28n, aa), Nat.is_eq(ll, aa)), ok) :
+    {Bool.and(D1.below(28n, aa), Nat.is_eq(ll, aa)) == True{} : Bool}}
+  +e_la = {nat_eq_true(ll, aa, M1.and_right(D1.below(28n, aa), Nat.is_eq(ll, aa), e_r)) : {ll == aa : Nat}}
   +hb = {Equal.trans(Bool, D1.below(32n, ll), D1.below(32n, aa), True{},
     Equal.cong(Nat, Bool, xx => D1.below(32n, xx), ll, aa, e_la),
-    M1.and_left(D1.below(32n, aa), Nat.is_eq(ll, aa), e_r)) : {D1.below(32n, ll) == True{} : Bool}}
+    below.word(aa, M1.and_left(D1.below(28n, aa), Nat.is_eq(ll, aa), e_r))) : {D1.below(32n, ll) == True{} : Bool}}
   open.some(Png.enc.good(ww, hh, px), ww, hh, px,
     Equal.trans(Bool, Png.enc.good(ww, hh, px), D1.png_ok(ww, hh, px), True{}, good.nat(ww, hh, px, hb), ok))

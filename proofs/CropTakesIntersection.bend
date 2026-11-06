@@ -8,6 +8,7 @@ import ../laws/defs/WellFormed.bend as D3
 import ./lemmas/BasicFacts.bend as M1
 import ./lemmas/ListTakeDrop.bend as M2
 import ./lemmas/RowMajorIndex.bend as M3
+import ./lemmas/RowWalk.bend as M6
 import ./lemmas/SubtractionAndHuffmanWalk.bend as M4
 import ./lemmas/WordAddition.bend as M5
 
@@ -148,6 +149,10 @@ def crop.rows_get(
                 Nat.add(Nat.add(ss, ms), ii), Equal.sym(Nat, Nat.add(Nat.add(ss, ms), ii), Nat.add(ss, Nat.add(ms, ii)),
                   M1.ras.add_assoc(ss, ms, ii)))))))
 
+# where crop's rows start: x after y rows of w, reached a row at a time
+def crop.ll(+px: List<&2, U32>, +ww: U32, +xx: U32, +yy: U32) -> List<&2, U32>:
+  List.drop(&2, U32, Img.skip.rows(U32.to_nat(yy), px, U32.to_nat(ww)), U32.to_nat(xx))
+
 # is the rectangle's intersection with the raster nonempty
 def crop.ok(+ww: U32, +hh: U32, +xx: U32, +yy: U32, +cw: U32, +ch: U32) -> Bool:
   Bool.and(Nat.is_lt(0n, D1.cut(ww, xx, cw)), Nat.is_lt(0n, D1.cut(hh, yy, ch)))
@@ -167,7 +172,7 @@ def crop.nf(
       Img.Raster{0, 0, []}
     case True{}:
       Img.Raster{rw, rh,
-        Img.crop.rows(U32.to_nat(rh), List.drop(&2, U32, px, U32.to_nat((yy * ww + xx : U32))),
+        Img.crop.rows(U32.to_nat(rh), crop.ll(px, ww, xx, yy),
           U32.to_nat(rw), U32.to_nat((ww - rw : U32)))}
 
 # crop.open is crop.nf on "neither side is zero"
@@ -400,14 +405,12 @@ def crop.cond(
   +yy: U32,
   +cw: U32,
   +ch: U32,
-  +area: U32,
-  h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(ww), U32.to_nat(hh)) : Nat},
   h_wf: {D3.wf(Img.Raster{ww, hh, px}) == True{} : Bool},
   +hx: {Nat.is_lt(U32.to_nat(xx), U32.to_nat(ww)) == True{} : Bool},
   +hy: {Nat.is_lt(U32.to_nat(yy), U32.to_nat(hh)) == True{} : Bool}
 ) -> {Nat.is_le(Nat.mul(U32.to_nat(Img.u.min(ch, (hh - yy : U32))), Nat.add(U32.to_nat(Img.u.min(cw, (ww - xx : U32))),
-  U32.to_nat((ww - Img.u.min(cw, (ww - xx : U32)) : U32)))), Nat.add(List.length(&2, U32, List.drop(&2, U32, px,
-  U32.to_nat((yy * ww + xx : U32)))), U32.to_nat((ww - Img.u.min(cw, (ww - xx : U32)) : U32)))) == True{} : Bool}:
+  U32.to_nat((ww - Img.u.min(cw, (ww - xx : U32)) : U32)))), Nat.add(List.length(&2, U32,
+  crop.ll(px, ww, xx, yy)), U32.to_nat((ww - Img.u.min(cw, (ww - xx : U32)) : U32)))) == True{} : Bool}:
   +wn = U32.to_nat(ww)
   +hn = U32.to_nat(hh)
   +xn = U32.to_nat(xx)
@@ -415,11 +418,11 @@ def crop.cond(
   +rw = Img.u.min(cw, (ww - xx : U32))
   +rhn = U32.to_nat(Img.u.min(ch, (hh - yy : U32)))
   +gn = U32.to_nat((ww - rw : U32))
-  +s0 = U32.to_nat((yy * ww + xx : U32))
   +yw = Nat.mul(yn, wn)
+  +s0 = Nat.add(yw, xn)
   +ln = List.length(&2, U32, px)
   +el = {M1.ras.nat_eq_true(ln, Nat.mul(wn, hn), h_wf) : {ln == Nat.mul(wn, hn) : Nat}}
-  +es = {M3.u32_index(ww, xx, yy, hh, area, h_area, hx, hy) : {s0 == Nat.add(yw, xn) : Nat}}
+  +es = {{==} : {s0 == Nat.add(yw, xn) : Nat}}
   +hr = {M1.le_rw_r(Nat.mul(Nat.add(yn, rhn), wn), Nat.mul(hn, wn), Nat.mul(wn, hn), M1.mul_comm(hn, wn),
     M5.le_mul_mono(Nat.add(yn, rhn), hn, wn, crop.fit(hh, yy, ch, hy))) :
     {Nat.is_le(Nat.mul(Nat.add(yn, rhn), wn), Nat.mul(wn, hn)) == True{} : Bool}}
@@ -437,11 +440,17 @@ def crop.cond(
       Equal.sym(Nat, Nat.add(s0, Nat.mul(rhn, wn)), Nat.add(Nat.mul(Nat.add(yn, rhn), wn), xn), e_lhs),
       M1.le_add_both(Nat.mul(Nat.add(yn, rhn), wn), Nat.mul(wn, hn), xn, gn, hr, crop.gap(ww, xx, cw, hx)))) :
     {Nat.is_le(Nat.add(s0, Nat.mul(rhn, wn)), Nat.add(ln, gn)) == True{} : Bool}}
+  +ll = crop.ll(px, ww, xx, yy)
+  +e_ll = {M6.drop_rows(yn, px, wn, xn) : {ll == List.drop(&2, U32, px, s0) : List<&2, U32>}}
   M1.le_rw_l(Nat.mul(rhn, wn), Nat.mul(rhn, Nat.add(U32.to_nat(rw), gn)),
-    Nat.add(List.length(&2, U32, List.drop(&2, U32, px, s0)), gn),
+    Nat.add(List.length(&2, U32, ll), gn),
     Equal.cong(Nat, Nat, nn => Nat.mul(rhn, nn), wn, Nat.add(U32.to_nat(rw), gn),
       Equal.sym(Nat, Nat.add(U32.to_nat(rw), gn), wn, crop.row(ww, xx, cw, hx))),
-    M2.drop_le(px, s0, Nat.mul(rhn, wn), gn, h_main))
+    M1.le_rw_r(Nat.mul(rhn, wn), Nat.add(List.length(&2, U32, List.drop(&2, U32, px, s0)), gn),
+      Nat.add(List.length(&2, U32, ll), gn),
+      Equal.cong(List<&2, U32>, Nat, xs => Nat.add(List.length(&2, U32, xs), gn), List.drop(&2, U32, px, s0), ll,
+        Equal.sym(List<&2, U32>, ll, List.drop(&2, U32, px, s0), e_ll)),
+      M2.drop_le(px, s0, Nat.mul(rhn, wn), gn, h_main)))
 
 # both sides of an empty intersection's crop are 0
 def crop.side_zero(
@@ -563,8 +572,6 @@ def crop.wf_nf(
   +cw: U32,
   +ch: U32,
   +e_ok: {crop.ok(ww, hh, xx, yy, cw, ch) == ok : Bool},
-  +area: U32,
-  h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(ww), U32.to_nat(hh)) : Nat},
   h_wf: {D3.wf(Img.Raster{ww, hh, px}) == True{} : Bool}
 ) -> {D3.wf(crop.nf(ok, px, ww, xx, yy, Img.u.min(cw, (ww - xx : U32)), Img.u.min(ch, (hh - yy : U32)))) == True{} :
   Bool}:
@@ -574,12 +581,12 @@ def crop.wf_nf(
     case True{}:
       +rw = Img.u.min(cw, (ww - xx : U32))
       +rh = Img.u.min(ch, (hh - yy : U32))
-      +rows = Img.crop.rows(U32.to_nat(rh), List.drop(&2, U32, px, U32.to_nat((yy * ww + xx : U32))), U32.to_nat(rw),
+      +rows = Img.crop.rows(U32.to_nat(rh), crop.ll(px, ww, xx, yy), U32.to_nat(rw),
         U32.to_nat((ww - rw : U32)))
       +el = {Equal.trans(Nat, List.length(&2, U32, rows), Nat.mul(U32.to_nat(rh), U32.to_nat(rw)),
         Nat.mul(U32.to_nat(rw), U32.to_nat(rh)),
-        crop.rows_len(U32.to_nat(rh), List.drop(&2, U32, px, U32.to_nat((yy * ww + xx : U32))), U32.to_nat(rw),
-          U32.to_nat((ww - rw : U32)), crop.cond(px, ww, hh, xx, yy, cw, ch, area, h_area, h_wf,
+        crop.rows_len(U32.to_nat(rh), crop.ll(px, ww, xx, yy), U32.to_nat(rw),
+          U32.to_nat((ww - rw : U32)), crop.cond(px, ww, hh, xx, yy, cw, ch, h_wf,
             crop.in_x(ww, hh, xx, yy, cw, ch, e_ok), crop.in_y(ww, hh, xx, yy, cw, ch, e_ok))),
         M1.mul_comm(U32.to_nat(rh), U32.to_nat(rw))) :
         {List.length(&2, U32, rows) == Nat.mul(U32.to_nat(rw), U32.to_nat(rh)) : Nat}}
@@ -589,7 +596,7 @@ def crop.wf_nf(
           Nat.mul(U32.to_nat(rw), U32.to_nat(rh)), el),
         M1.nat_eq_refl(Nat.mul(U32.to_nat(rw), U32.to_nat(rh))))
 
-def Laws.crop_wf(img, xx, yy, cw, ch, area, h_area, h_wf):
+def Laws.crop_wf(img, xx, yy, cw, ch, h_wf):
   match img:
     case Img.Raster{+ww, +hh, +px}:
       +nf = crop.nf(crop.ok(ww, hh, xx, yy, cw, ch), px, ww, xx, yy, Img.u.min(cw, (ww - xx : U32)),
@@ -597,7 +604,7 @@ def Laws.crop_wf(img, xx, yy, cw, ch, area, h_area, h_wf):
       Equal.trans(Bool, D3.wf(Img.crop(Img.Raster{ww, hh, px}, xx, yy, cw, ch)), D3.wf(nf), True{},
         Equal.cong(Img.Raster, Bool, rr => D3.wf(rr), Img.crop(Img.Raster{ww, hh, px}, xx, yy, cw, ch), nf,
           crop.nf_eq(px, ww, hh, xx, yy, cw, ch)),
-        crop.wf_nf(crop.ok(ww, hh, xx, yy, cw, ch), px, ww, hh, xx, yy, cw, ch, {==}, area, h_area, h_wf))
+        crop.wf_nf(crop.ok(ww, hh, xx, yy, cw, ch), px, ww, hh, xx, yy, cw, ch, {==}, h_wf))
 
 # crop.nf at crop's own sides
 def crop.nfx(
@@ -623,8 +630,6 @@ def crop.at_nf(
   +cw: U32,
   +ch: U32,
   +e_ok: {crop.ok(ww, hh, xx, yy, cw, ch) == ok : Bool},
-  +area: U32,
-  +h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(ww), U32.to_nat(hh)) : Nat},
   h_wf: {D3.wf(Img.Raster{ww, hh, px}) == True{} : Bool},
   +ii: Nat,
   +jj: Nat,
@@ -646,8 +651,8 @@ def crop.at_nf(
       +rw = Img.u.min(cw, (ww - xx : U32))
       +rn = U32.to_nat(rw)
       +gn = U32.to_nat((ww - rw : U32))
-      +s0 = U32.to_nat((yy * ww + xx : U32))
-      +ll = List.drop(&2, U32, px, s0)
+      +s0 = Nat.add(Nat.mul(yn, wn), xn)
+      +ll = crop.ll(px, ww, xx, yy)
       +hx = {crop.in_x(ww, hh, xx, yy, cw, ch, e_ok) : {Nat.is_lt(xn, wn) == True{} : Bool}}
       +hy = {crop.in_y(ww, hh, xx, yy, cw, ch, e_ok) : {Nat.is_lt(yn, U32.to_nat(hh)) == True{} : Bool}}
       +jw = Nat.mul(jj, wn)
@@ -658,7 +663,7 @@ def crop.at_nf(
         List.get(&2, U32, ll, Nat.add(Nat.mul(jj, Nat.add(rn, gn)), ii)),
         List.get(&2, U32, px, Nat.add(Nat.mul(Nat.add(yn, jj), wn), Nat.add(xn, ii))),
         crop.rows_get(U32.to_nat(Img.u.min(ch, (hh - yy : U32))), ll, rn, gn, ii, jj, hi, hj,
-          crop.cond(px, ww, hh, xx, yy, cw, ch, area, h_area, h_wf, hx, hy)),
+          crop.cond(px, ww, hh, xx, yy, cw, ch, h_wf, hx, hy)),
         Equal.trans(Maybe<&2, U32>, List.get(&2, U32, ll, Nat.add(Nat.mul(jj, Nat.add(rn, gn)), ii)),
           List.get(&2, U32, ll, Nat.add(jw, ii)),
           List.get(&2, U32, px, Nat.add(Nat.mul(Nat.add(yn, jj), wn), Nat.add(xn, ii))),
@@ -668,20 +673,24 @@ def crop.at_nf(
           Equal.trans(Maybe<&2, U32>, List.get(&2, U32, ll, Nat.add(jw, ii)),
             List.get(&2, U32, px, Nat.add(s0, Nat.add(jw, ii))),
             List.get(&2, U32, px, Nat.add(Nat.mul(Nat.add(yn, jj), wn), Nat.add(xn, ii))),
-            M2.get_drop(px, s0, Nat.add(jw, ii)),
+            Equal.trans(Maybe<&2, U32>, List.get(&2, U32, ll, Nat.add(jw, ii)),
+              List.get(&2, U32, List.drop(&2, U32, px, s0), Nat.add(jw, ii)), List.get(&2, U32, px, Nat.add(s0,
+                Nat.add(jw, ii))),
+              Equal.cong(List<&2, U32>, Maybe<&2, U32>, xs => List.get(&2, U32, xs, Nat.add(jw, ii)), ll,
+                List.drop(&2, U32, px, s0), M6.drop_rows(yn, px, wn, xn)),
+              M2.get_drop(px, s0, Nat.add(jw, ii))),
             Equal.cong(Nat, Maybe<&2, U32>, nn => List.get(&2, U32, px, nn), Nat.add(s0, Nat.add(jw, ii)),
               Nat.add(Nat.mul(Nat.add(yn, jj), wn), Nat.add(xn, ii)),
               Equal.trans(Nat, Nat.add(s0, Nat.add(jw, ii)), Nat.add(Nat.add(yw, xn), Nat.add(jw, ii)),
                 Nat.add(Nat.mul(Nat.add(yn, jj), wn), Nat.add(xn, ii)),
-                Equal.cong(Nat, Nat, nn => Nat.add(nn, Nat.add(jw, ii)), s0, Nat.add(yw, xn),
-                  M3.u32_index(ww, xx, yy, hh, area, h_area, hx, hy)),
+                Equal.cong(Nat, Nat, nn => Nat.add(nn, Nat.add(jw, ii)), s0, Nat.add(yw, xn), {==}),
                 Equal.trans(Nat, Nat.add(Nat.add(yw, xn), Nat.add(jw, ii)), Nat.add(Nat.add(yw, jw), Nat.add(xn, ii)),
                   Nat.add(Nat.mul(Nat.add(yn, jj), wn), Nat.add(xn, ii)), M5.add4(yw, xn, jw, ii),
                   Equal.cong(Nat, Nat, nn => Nat.add(nn, Nat.add(xn, ii)), Nat.add(yw, jw), Nat.mul(Nat.add(yn, jj),
                     wn),
                     Equal.sym(Nat, Nat.mul(Nat.add(yn, jj), wn), Nat.add(yw, jw), M1.mul_add(yn, jj, wn)))))))))
 
-def Laws.crop_at(img, xx, yy, cw, ch, area, h_area, h_wf, ii, jj, hi, hj):
+def Laws.crop_at(img, xx, yy, cw, ch, h_wf, ii, jj, hi, hj):
   match img:
     case Img.Raster{+ww, +hh, +px}:
       +cr = Img.crop(Img.Raster{ww, hh, px}, xx, yy, cw, ch)
@@ -695,7 +704,7 @@ def Laws.crop_at(img, xx, yy, cw, ch, area, h_area, h_wf, ii, jj, hi, hj):
           ii))),
         Equal.cong(Img.Raster, Maybe<&2, U32>,
           +rr => List.get(&2, U32, Img.pixels(rr), Nat.add(Nat.mul(jj, U32.to_nat(Img.width(rr))), ii)), cr, nf, en),
-        crop.at_nf(crop.ok(ww, hh, xx, yy, cw, ch), px, ww, hh, xx, yy, cw, ch, {==}, area, h_area, h_wf, ii, jj,
+        crop.at_nf(crop.ok(ww, hh, xx, yy, cw, ch), px, ww, hh, xx, yy, cw, ch, {==}, h_wf, ii, jj,
           Equal.trans(Bool, Nat.is_lt(ii, U32.to_nat(Img.width(nf))), Nat.is_lt(ii, U32.to_nat(Img.width(cr))), True{},
             Equal.cong(Img.Raster, Bool, rr => Nat.is_lt(ii, U32.to_nat(Img.width(rr))), nf, cr,
               Equal.sym(Img.Raster, cr, nf, en)), hi),

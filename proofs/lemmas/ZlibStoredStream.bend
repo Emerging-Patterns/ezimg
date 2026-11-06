@@ -14,7 +14,7 @@ def run.of(bytes: List<&2, U32>, +run: U32) -> U32:
     case Nil{}:
       run
     case +bt <> tl:
-      run.of(tl, ((255 .&. M3.rdv(Inf.bits.push(7n, bt, []), 0, 0) : U32) .|. (run << 8n : U32) : U32))
+      run.of(tl, ((255 .&. M3.rdv(M3.bits8(bt), 0, 0) : U32) .|. (run << 8n : U32) : U32))
 
 # the four bytes enc.be writes, folded back, each bit or'd with zero twice
 def run_be.raw(+ss: U32) -> {run.of(Png.enc.be(ss), 0) == U32.or(U32.or(ss, 0), 0) : U32}:
@@ -48,46 +48,58 @@ def run_be(+ss: U32) -> {run.of(Png.enc.be(ss), 0) == ss : U32}:
 # the zlib header 120 1 leaves the reader at the first block header
 def hdr(
   rest: List<&2, U32>
-) -> {M3.run.bytes(120 <> 1 <> rest, Inf.st.empty()) == M3.run.bytes(rest, M3.st.blk(0, [])) : Maybe<&2, List<&2,
+) -> {M3.run.bytes(120 <> 1 <> rest, Inf.st.empty()) == M3.run.bytes(rest, M3.st.blk(0, [], 0)) : Maybe<&2, List<&2,
     U32>>}:
   {==}
 
 # the reader once the Adler-32 field is read, `zz` its check
-def st.done(zz: Bool, +raw: List<&2, U32>, +run: U32) -> Inf.St:
-  Inf.rd.adler.eq(zz, raw, Inf.WLit{}, True{}, 0, 0, [], [], [], [], 0, 0, 120, 0, 0, 0, run, 0, 0)
+def st.done(zz: Bool, +raw: List<&2, U32>, +run: U32, +pend: U32) -> Inf.St:
+  Inf.rd.adler.eq(zz, 0, Inf.Cx{True{}, 0, 0, raw, Inf.TNone{}, 0, pend, run, Inf.hs.none()})
+
 
 # the four Adler bytes, as the reader first folds them
 def adler.raw(
   +ss: U32,
-  +out: List<&2, U32>
-) -> {M3.run.bytes(Png.enc.be(ss), M2.st.adler(out)) == Inf.inflate.go([],
-    st.done(U32.is_eq(Inf.adler.of(List.reverse(&2,
-  U32, out)), run.of(Png.enc.be(ss), 0)), List.reverse(&2, U32, out), run.of(Png.enc.be(ss), 0))) : Maybe<&2, List<&2,
-  U32>>}:
+  +out: List<&2, U32>,
+  +pend: U32
+) -> {M3.run.bytes(Png.enc.be(ss), M2.st.adler(out, pend)) == Inf.inflate.go([], st.done(U32.is_eq(Inf.adler.of(
+  List.reverse(&2, U32, out)), run.of(Png.enc.be(ss), 0)), List.reverse(&2, U32, out), run.of(Png.enc.be(ss), 0),
+  pend)) : Maybe<&2, List<&2, U32>>}:
   {==}
 
 # the four Adler bytes of the bytes copied: the reader answers those bytes
 def adler.ok(
   +ss: U32,
   +out: List<&2, U32>,
+  +pend: U32,
   e_sum: {ss == Inf.adler.of(List.reverse(&2, U32, out)) : U32}
-) -> {M3.run.bytes(Png.enc.be(ss), M2.st.adler(out)) == Some{List.reverse(&2, U32, out)} : Maybe<&2, List<&2, U32>>}:
+) -> {M3.run.bytes(Png.enc.be(ss), M2.st.adler(out, pend)) == Some{List.reverse(&2, U32, out)} : Maybe<&2, List<&2,
+  U32>>}:
   +raw = List.reverse(&2, U32, out)
   +aa = Inf.adler.of(raw)
   +r4 = run.of(Png.enc.be(ss), 0)
-  Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(Png.enc.be(ss), M2.st.adler(out)),
-    Inf.inflate.go([], st.done(U32.is_eq(aa, r4), raw, r4)), Some{raw},
-    adler.raw(ss, out),
-    Equal.trans(Maybe<&2, List<&2, U32>>, Inf.inflate.go([], st.done(U32.is_eq(aa, r4), raw, r4)),
-      Inf.inflate.go([], st.done(U32.is_eq(aa, ss), raw, r4)), Some{raw},
-      Equal.cong(U32, Maybe<&2, List<&2, U32>>, vv => Inf.inflate.go([], st.done(U32.is_eq(aa, vv), raw, r4)), r4, ss,
-        run_be(ss)),
-      Equal.trans(Maybe<&2, List<&2, U32>>, Inf.inflate.go([], st.done(U32.is_eq(aa, ss), raw, r4)),
-        Inf.inflate.go([], st.done(U32.is_eq(aa, aa), raw, r4)), Some{raw},
-        Equal.cong(U32, Maybe<&2, List<&2, U32>>, vv => Inf.inflate.go([], st.done(U32.is_eq(aa, vv), raw, r4)), ss, aa,
-          e_sum),
-        Equal.cong(Bool, Maybe<&2, List<&2, U32>>, bb => Inf.inflate.go([], st.done(bb, raw, r4)), U32.is_eq(aa, aa),
-          True{}, M1.u32_eq_refl(aa)))))
+  Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(Png.enc.be(ss), M2.st.adler(out, pend)),
+    Inf.inflate.go([], st.done(U32.is_eq(aa, r4), raw, r4, pend)), Some{raw},
+    adler.raw(ss, out, pend),
+    Equal.trans(Maybe<&2, List<&2, U32>>, Inf.inflate.go([], st.done(U32.is_eq(aa, r4), raw, r4, pend)),
+      Inf.inflate.go([], st.done(U32.is_eq(aa, ss), raw, r4, pend)), Some{raw},
+      Equal.cong(U32, Maybe<&2, List<&2, U32>>, vv => Inf.inflate.go([], st.done(U32.is_eq(aa, vv), raw, r4, pend)), r4,
+        ss, run_be(ss)),
+      Equal.trans(Maybe<&2, List<&2, U32>>, Inf.inflate.go([], st.done(U32.is_eq(aa, ss), raw, r4, pend)),
+        Inf.inflate.go([], st.done(U32.is_eq(aa, aa), raw, r4, pend)), Some{raw},
+        Equal.cong(U32, Maybe<&2, List<&2, U32>>, vv => Inf.inflate.go([], st.done(U32.is_eq(aa, vv), raw, r4, pend)),
+          ss, aa, e_sum),
+        Equal.cong(Bool, Maybe<&2, List<&2, U32>>, bb => Inf.inflate.go([], st.done(bb, raw, r4, pend)),
+          U32.is_eq(aa, aa), True{}, M1.u32_eq_refl(aa)))))
+
+# the stored bytes enc.blocks owes the window on top of `pend`: one block's
+# LEN when xs fits in sz bytes (zz), enc.feed's blocks' otherwise
+def pend.at(zz: Bool, +sz: U32, +xs: List<&2, U32>, +pend: U32) -> U32:
+  match zz:
+    case True{}:
+      (pend + U32.and(65535, Png.enc.len(xs, 0)) : U32)
+    case False{}:
+      M2.pend.fl(xs, U32.is_zero(sz), sz, sz, [], pend)
 
 # enc.blocks: one final block when xs fits in sz bytes (zz), enc.feed's blocks
 # otherwise; either way the reader copies xs and reaches the Adler field
@@ -98,14 +110,16 @@ def bl.at(
   +rest: List<&2, U32>,
   +left: U32,
   +out: List<&2, U32>,
+  +pend: U32,
   +ez: {U32.is_le(Png.enc.len(xs, 0), sz) == zz : Bool},
   +h_nz: {U32.is_zero(sz) == False{} : Bool},
   +h_sz: {U32.is_le(sz, 65535) == True{} : Bool},
   +h_bx: {D1.bytes.go(xs, True{}) == True{} : Bool},
   +h_n: {U32.to_nat(Png.enc.len(xs, 0)) == List.length(&2, U32, xs) : Nat}
 ) -> {M3.run.bytes(List.append(&2, U32, Png.enc.blocks.fit(zz, sz, Png.enc.len(xs, 0), xs), rest), M3.st.blk(left,
-    out)) ==
-  M3.run.bytes(rest, M2.st.adler(List.reverse.go(&2, U32, xs, out))) : Maybe<&2, List<&2, U32>>}:
+    out, pend)) ==
+  M3.run.bytes(rest, M2.st.adler(List.reverse.go(&2, U32, xs, out), pend.at(zz, sz, xs, pend))) : Maybe<&2, List<&2,
+    U32>>}:
   match zz:
     case True{}:
       +nn = Png.enc.len(xs, 0)
@@ -115,20 +129,21 @@ def bl.at(
           U32.is_zero(nn),
         nn), True{}, Equal.cong(U32, Bool, vv => M3.cnt(xs, U32.is_zero(vv), vv), U32.and(65535, nn), nn, em),
         M2.ncnt(xs, nn, U32.is_zero(nn), {==}, h_n))
+      +p1 = (pend + U32.and(65535, nn) : U32)
+      +o1 = List.reverse.go(&2, U32, xs, out)
       Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(List.append(&2, U32, Png.enc.cat(hd, xs), rest),
           M3.st.blk(left,
-        out)), M3.run.bytes(List.append(&2, U32, List.append(&2, U32, hd, xs), rest), M3.st.blk(left, out)),
-        M3.run.bytes(rest, M2.st.adler(List.reverse.go(&2, U32, xs, out))),
+        out, pend)), M3.run.bytes(List.append(&2, U32, List.append(&2, U32, hd, xs), rest), M3.st.blk(left, out, pend)),
+        M3.run.bytes(rest, M2.st.adler(o1, p1)),
         Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, ll => M3.run.bytes(List.append(&2, U32, ll, rest),
-          M3.st.blk(left, out)), Png.enc.cat(hd, xs), List.append(&2, U32, hd, xs), M2.cat_app(hd, xs)),
+          M3.st.blk(left, out, pend)), Png.enc.cat(hd, xs), List.append(&2, U32, hd, xs), M2.cat_app(hd, xs)),
         Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(List.append(&2, U32, List.append(&2, U32, hd, xs), rest),
-          M3.st.blk(left, out)), M3.run.bytes(rest, M3.st.after(True{}, M1.cd(xs, U32.and(65535, nn)),
-              List.reverse.go(&2, U32, xs,
-          out))), M3.run.bytes(rest, M2.st.adler(List.reverse.go(&2, U32, xs, out))),
-          M3.blk(True{}, nn, xs, rest, left, out, hc, h_bx),
-          M2.after_last(M1.cd(xs, U32.and(65535, nn)), List.reverse.go(&2, U32, xs, out), rest)))
+          M3.st.blk(left, out, pend)), M3.run.bytes(rest, M3.st.after(True{}, M1.cd(xs, U32.and(65535, nn)), o1, p1)),
+          M3.run.bytes(rest, M2.st.adler(o1, p1)),
+          M3.blk(True{}, nn, xs, rest, left, out, pend, hc, h_bx),
+          M2.after_last(M1.cd(xs, U32.and(65535, nn)), o1, rest, p1)))
     case False{}:
-      M2.fl(xs, U32.is_zero(sz), sz, sz, [], rest, left, out, {==}, {==}, h_nz, h_sz, h_bx, {==})
+      M2.fl(xs, U32.is_zero(sz), sz, sz, [], rest, left, out, pend, {==}, {==}, h_nz, h_sz, h_bx, {==})
 
 # a size at least 1 is not zero, once whether it is zero is named zz
 def sz_nz(
@@ -160,19 +175,21 @@ def inflate_stored(
   +bb = Png.enc.blocks(sz, xs)
   +ox = List.reverse.go(&2, U32, xs, [])
   +rx = M1.inf.rev_rev(xs)
+  +zz = U32.is_le(Png.enc.len(xs, 0), sz)
+  +pz = pend.at(zz, sz, xs, 0)
   Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(L1.zlib.stored(sz, xs), Inf.st.empty()),
-    M3.run.bytes(Png.enc.cat(bb, Png.enc.be(aa)), M3.st.blk(0, [])), Some{xs},
+    M3.run.bytes(Png.enc.cat(bb, Png.enc.be(aa)), M3.st.blk(0, [], 0)), Some{xs},
     hdr(Png.enc.cat(bb, Png.enc.be(aa))),
-    Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(Png.enc.cat(bb, Png.enc.be(aa)), M3.st.blk(0, [])),
-      M3.run.bytes(List.append(&2, U32, bb, Png.enc.be(aa)), M3.st.blk(0, [])), Some{xs},
-      Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, ll => M3.run.bytes(ll, M3.st.blk(0, [])), Png.enc.cat(bb,
+    Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(Png.enc.cat(bb, Png.enc.be(aa)), M3.st.blk(0, [], 0)),
+      M3.run.bytes(List.append(&2, U32, bb, Png.enc.be(aa)), M3.st.blk(0, [], 0)), Some{xs},
+      Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, ll => M3.run.bytes(ll, M3.st.blk(0, [], 0)), Png.enc.cat(bb,
         Png.enc.be(aa)), List.append(&2, U32, bb, Png.enc.be(aa)), M2.cat_app(bb, Png.enc.be(aa))),
-      Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(List.append(&2, U32, bb, Png.enc.be(aa)), M3.st.blk(0, [])),
-        M3.run.bytes(Png.enc.be(aa), M2.st.adler(ox)), Some{xs},
-        bl.at(U32.is_le(Png.enc.len(xs, 0), sz), sz, xs, Png.enc.be(aa), 0, [], {==}, h_nz, h_top, h_by, h_n),
-        Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(Png.enc.be(aa), M2.st.adler(ox)), Some{List.reverse(&2, U32,
-          ox)}, Some{xs},
-          adler.ok(aa, ox, Equal.cong(List<&2, U32>, U32, ll => Inf.adler.of(ll), xs, List.reverse(&2, U32, ox),
+      Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(List.append(&2, U32, bb, Png.enc.be(aa)), M3.st.blk(0, [], 0)),
+        M3.run.bytes(Png.enc.be(aa), M2.st.adler(ox, pz)), Some{xs},
+        bl.at(zz, sz, xs, Png.enc.be(aa), 0, [], 0, {==}, h_nz, h_top, h_by, h_n),
+        Equal.trans(Maybe<&2, List<&2, U32>>, M3.run.bytes(Png.enc.be(aa), M2.st.adler(ox, pz)), Some{List.reverse(&2,
+          U32, ox)}, Some{xs},
+          adler.ok(aa, ox, pz, Equal.cong(List<&2, U32>, U32, ll => Inf.adler.of(ll), xs, List.reverse(&2, U32, ox),
             Equal.sym(List<&2, U32>, List.reverse(&2, U32, ox), xs, rx))),
           Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, ll => Some{ll}, List.reverse(&2, U32, ox), xs, rx)))))
 

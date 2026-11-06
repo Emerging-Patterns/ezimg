@@ -40,8 +40,12 @@ dropping alpha, and returns none exactly when a side is 0 or past 65535 (a JPEG 
 raster has more than 2^31 points, or its sample count is not the area. Every sample is one `U32` packed `0xAARRGGBB`, whichever
 decoder returned it: a JPEG sample has alpha 255, and a gray JPEG sample
 repeats its level in R, G and B.
-`width`,
-`height`, `size`, `count`, and `fill` are the pixel helpers.
+`raster(w, h, px)` takes the samples as they are, and `checked_raster(w, h, px)`
+returns none unless there are exactly `w * h` of them. `width`, `height`,
+`size`, `count`, `fill`, `get`, `set`, `crop`, `blit` and `map` are the
+pixel helpers. `count` is the number of samples as a natural number (`w * h`
+for a well-formed raster), and every helper reaches sample `y * w + x` a row
+at a time, so no size or index wraps, whatever the sides.
 
 ```
 import emerging-ezimg@1.2.0.0/main.bend as Img
@@ -63,7 +67,16 @@ reading other encoders' files, is said on the code that assumes it. The plan
 and the audit behind them are in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md).
 
 Scope today: PNG decode reads 8-bit colour types 0, 2, 3, 4 and 6 without
-interlace, and refuses anything else; PNG encode writes colour type 2 or 6.
-JPEG decode reads one-scan sequential 8-bit Huffman frames (baseline or
-extended) and refuses progressive, lossless, arithmetic and multi-scan ones; JPEG encode writes baseline 4:4:4. Full codec conformance is
-not claimed.
+interlace, and refuses anything else; PNG encode writes colour type 2 or 6,
+for rasters of fewer than 2^28 samples. JPEG decode reads one-scan sequential
+8-bit Huffman frames (baseline or extended) and refuses progressive, lossless,
+arithmetic and multi-scan ones; JPEG encode writes baseline 4:4:4. Full codec
+conformance is not claimed.
+
+PNG encode does not compress. Every row has filter type None and the zlib
+stream is stored (uncompressed) DEFLATE blocks, so a file is about the size
+of its samples: `h * (k * w + 1)` bytes for `k` = 3 (RGB) or 4 (RGBA)
+channels, plus 5 bytes per 65535 of them and about 60 bytes of chunks. A
+320x260 RGB picture is about 250 KB, where zlib at level 6 makes about
+33 KB of the same picture. The round-trip proof rests on the stored blocks;
+re-compress the file with another tool when size matters.

@@ -26,12 +26,15 @@
 # replaced.
 import Base
 import ./laws/BlitCopiesCoveredPoints.bend as BlitCopiesCoveredPoints
+import ./laws/CheckedRasterIsWellFormed.bend as CheckedRasterIsWellFormed
+import ./laws/CountIsArea.bend as CountIsArea
 import ./laws/CrcIsIso3309.bend as CrcIsIso3309
 import ./laws/CropTakesIntersection.bend as CropTakesIntersection
 import ./laws/DecodedSamplesPackArgb.bend as DecodedSamplesPackArgb
 import ./laws/FillIsUniform.bend as FillIsUniform
 import ./laws/GetSetTouchOnePoint.bend as GetSetTouchOnePoint
 import ./laws/InflateReadsStoredBlocks.bend as InflateReadsStoredBlocks
+import ./laws/InflateUptoKeepsBudget.bend as InflateUptoKeepsBudget
 import ./laws/JpegEncodeIgnoresAlpha.bend as JpegEncodeIgnoresAlpha
 import ./laws/JpegEncodeRefusesBadRasters.bend as JpegEncodeRefusesBadRasters
 import ./laws/JpegPlacesComponentSamples.bend as JpegPlacesComponentSamples
