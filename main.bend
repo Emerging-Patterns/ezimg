@@ -338,25 +338,38 @@ def sig.pick(ok: Bool) -> Maybe<&2, List<&2, U32>>:
 def parse_signature(bytes: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   sig.pick(sig.match(png_sig(), bytes, True{}))
 
+# the raster of the decoded samples when there are exactly h * w of them,
+# otherwise none
+def decode_png.keep(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&2, Raster>:
+  match ok:
+    case True{}:
+      Some{Raster{ww, hh, px}}
+    case False{}:
+      None{}
+
+# a decoded picture as a raster. The sample count is checked against the
+# header's h * w, computed as a natural number, so a header whose scanline
+# length wraps a U32 cannot hand back a raster that is not well formed.
 def decode_png.pic(mm: Maybe<&2, Png.Pic>) -> Maybe<&2, Raster>:
   match mm:
     case None{}:
       None{}
-    case Some{Png.Pic{+w, +h, px}}:
-      Some{Raster{w, h, px}}
+    case Some{Png.Pic{+w, +h, +px}}:
+      decode_png.keep(Nat.is_eq(List.length(&2, U32, px), Nat.mul(U32.to_nat(h), U32.to_nat(w))), w, h, px)
 
-def decode_png.of(mm: Maybe<&2, List<&2, U32>>, +bytes: List<&2, U32>) -> Maybe<&2, Raster>:
+# the picture of the chunks after the signature, when the bytes open with it
+def decode_png.of(mm: Maybe<&2, List<&2, U32>>, +bytes: List<&2, U32>) -> Maybe<&2, Png.Pic>:
   match mm bytes:
     case None{} _bytes:
       None{}
     case Some{_sig} 137 <> 80 <> 78 <> 71 <> 13 <> 10 <> 26 <> 10 <> rest:
-      decode_png.pic(Png.decode(rest))
+      Png.decode(rest)
     case Some{_sig} _other:
       None{}
 
 # PNG bytes, or none when the signature or the encoding is rejected
 def decode_png(+bytes: List<&2, U32>) -> Maybe<&2, Raster>:
-  decode_png.of(parse_signature(bytes), bytes)
+  decode_png.pic(decode_png.of(parse_signature(bytes), bytes))
 
 # ISO/IEC 15948 / W3C PNG — bytes of an 8-bit picture, interlace method 0.
 # Colour type 2 when every sample is opaque, otherwise colour type 6.

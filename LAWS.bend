@@ -40,7 +40,9 @@ import ./laws/JpegRoundTripKeepsSize.bend as JpegRoundTripKeepsSize
 import ./laws/JpegWritesJfifLayout.bend as JpegWritesJfifLayout
 import ./laws/MapAppliesPerSample.bend as MapAppliesPerSample
 import ./laws/PngAncillaryChunksIgnored.bend as PngAncillaryChunksIgnored
+import ./laws/PngDecodesWellFormed.bend as PngDecodesWellFormed
 import ./laws/PngHeaderPicksColourType.bend as PngHeaderPicksColourType
+import ./laws/PngIgnoresBytesAfterIend.bend as PngIgnoresBytesAfterIend
 import ./laws/PngRefusesBadRasters.bend as PngRefusesBadRasters
 import ./laws/PngRefusesUnsupportedHeaders.bend as PngRefusesUnsupportedHeaders
 import ./laws/PngRoundTrips.bend as PngRoundTrips

@@ -262,8 +262,8 @@ def bt0(+nn: U32) -> U32:
 
 # the walker applies the chunk to its state, then goes on with the bytes after
 def chunk.next(+typ: U32, +data: List<&2, U32>, +rest: List<&2, U32>, +pg: Png.Pg) -> Maybe<&2, Png.Pic>:
-  Png.png.crc(Png.png.apply(typ, data, pg), List.is_empty(&2, U32, rest), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0,
-    [], [], Png.png.pgof(Png.png.apply(typ, data, pg))))
+  Png.png.crc(Png.png.apply(typ, data, pg), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [],
+    Png.png.pgof(Png.png.apply(typ, data, pg))))
 
 # one chunk laid out as spec.chunk: its length field counts the data and its
 # stored CRC is the CRC-32 of its type and data, so the walker applies it
@@ -303,8 +303,8 @@ def chunk.walk(
     chunk.next(typ, dat, rest, pg),
     M2.walk_chunk(bt3(nn), bt2(nn), bt1(nn), bt0(nn), t0, t1, t2, t3, data, bt3(sum), bt2(sum), bt1(sum), bt0(sum),
       rest, pg, hn),
-    Equal.cong(Bool, Maybe<&2, Png.Pic>, zz => Png.png.crc(Png.png.judge.at(zz, typ, dat, pg), List.is_empty(&2, U32,
-      rest), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(Png.png.judge.at(zz, typ, dat, pg)))),
+    Equal.cong(Bool, Maybe<&2, Png.Pic>, zz => Png.png.crc(Png.png.judge.at(zz, typ, dat, pg),
+      Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(Png.png.judge.at(zz, typ, dat, pg)))),
       U32.is_eq(got, want), True{}, e_eq))
 
 # a chunk the state takes, NMore: the walker goes on with the bytes after it
@@ -326,29 +326,31 @@ def chunk.more(
     chunk.next(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), rest, pg),
     Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], pg2),
     chunk.walk(t0, t1, t2, t3, data, rest, pg, hf),
-    Equal.cong(Png.Nx, Maybe<&2, Png.Pic>, nx => Png.png.crc(nx, List.is_empty(&2, U32, rest), Png.png.go(rest,
+    Equal.cong(Png.Nx, Maybe<&2, Png.Pic>, nx => Png.png.crc(nx, Png.png.go(rest,
       Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(nx))), Png.png.apply(Png.be.u32(t0, t1, t2, t3),
       List.reverse(&2, U32, data), pg), Png.NMore{pg2}, ea))
 
-# the last chunk, which ends the image, NEnd: the walker finishes the picture
+# the chunk that ends the image, NEnd: the walker finishes the picture,
+# whatever bytes follow
 def chunk.end(
   +t0: U32,
   +t1: U32,
   +t2: U32,
   +t3: U32,
   +data: List<&2, U32>,
+  +rest: List<&2, U32>,
   +pg: Png.Pg,
   +pg2: Png.Pg,
   hf: D1.spec.fits(data),
   ea: {Png.png.apply(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), pg) == Png.NEnd{pg2} : Png.Nx}
-) -> {Png.png.go(D1.spec.chunk([t0, t1, t2, t3], data, []), Png.ZLen{}, False{}, 0, 0, [], [], pg) ==
+) -> {Png.png.go(D1.spec.chunk([t0, t1, t2, t3], data, rest), Png.ZLen{}, False{}, 0, 0, [], [], pg) ==
   Png.png.finish(pg2) : Maybe<&2, Png.Pic>}:
   Equal.trans(Maybe<&2, Png.Pic>,
-    Png.png.go(D1.spec.chunk([t0, t1, t2, t3], data, []), Png.ZLen{}, False{}, 0, 0, [], [], pg),
-    chunk.next(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), [], pg),
+    Png.png.go(D1.spec.chunk([t0, t1, t2, t3], data, rest), Png.ZLen{}, False{}, 0, 0, [], [], pg),
+    chunk.next(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), rest, pg),
     Png.png.finish(pg2),
-    chunk.walk(t0, t1, t2, t3, data, [], pg, hf),
-    Equal.cong(Png.Nx, Maybe<&2, Png.Pic>, nx => Png.png.crc(nx, True{}, Png.png.go([], Png.ZLen{}, False{}, 0, 0, [],
+    chunk.walk(t0, t1, t2, t3, data, rest, pg, hf),
+    Equal.cong(Png.Nx, Maybe<&2, Png.Pic>, nx => Png.png.crc(nx, Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [],
       [], Png.png.pgof(nx))), Png.png.apply(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), pg),
       Png.NEnd{pg2}, ea))
 
@@ -620,6 +622,19 @@ def prt.rev_app(
       List.reverse(&2, U32, done)), List.append(&2, U32, List.reverse(&2, U32, dd), List.reverse(&2, U32, done)),
       revgo_app(done, dd, []), revgo_acc(dd, [], List.reverse(&2, U32, done))))
 
+# the code's sample-count check keeps what spec.raster's keeps
+def frame.keep(
+  ok: Bool,
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>
+) -> {Img.decode_png.keep(ok, ww, hh, px) == D1.spec.raster.keep(ok, ww, hh, px) : Maybe<&2, Img.Raster>}:
+  match ok:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
 # the picture of px.of's samples, as a raster: spec.raster's
 def frame.px(
   mm: Maybe<&2, List<&2, U32>>,
@@ -629,8 +644,8 @@ def frame.px(
   match mm:
     case None{}:
       {==}
-    case Some{_px}:
-      {==}
+    case Some{+px}:
+      frame.keep(Nat.is_eq(List.length(&2, U32, px), Nat.mul(U32.to_nat(hh), U32.to_nat(ww))), ww, hh, px)
 
 # the unfiltered scanlines packed, as a raster
 def frame.scan(

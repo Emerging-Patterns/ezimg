@@ -226,7 +226,7 @@ def pfin.walk.idats(
         Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(ie, Png.ZLen{}, False{}, 0, 0, [], [], pg),
           Png.png.finish(Png.pg.iend(pg)), Png.png.samples(Inf.inflate(List.append(&2, U32, done, [])), ww, hh, cc, pl,
           tr),
-          M2.chunk.end(73, 69, 78, 68, [], pg, Png.pg.iend(pg), {==}, M2.iend.ok.true(M1.need(cc, plte), pg, h_nd)),
+          M2.chunk.end(73, 69, 78, 68, [], [], pg, Png.pg.iend(pg), {==}, M2.iend.ok.true(M1.need(cc, plte), pg, h_nd)),
           Equal.trans(Maybe<&2, Png.Pic>, Png.png.finish(Png.pg.iend(pg)), Png.png.samples(Inf.inflate(done), ww, hh,
             cc,
             pl, tr), Png.png.samples(Inf.inflate(List.append(&2, U32, done, [])), ww, hh, cc, pl, tr),

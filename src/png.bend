@@ -932,15 +932,16 @@ def png.finish(pg: Pg) -> Maybe<&2, Pic>:
       png.finish.at(Bool.and(ihdr, iend), Bool.and(U32.is_eq(d, 8), Bool.and(U32.is_zero(comp), Bool.and(U32.is_zero(f),
         U32.is_zero(i)))), w, h, colour, idat, plte, trns)
 
-def png.crc(nx: Nx, empty: Bool, more: Maybe<&2, Pic>) -> Maybe<&2, Pic>:
-  match nx empty:
-    case NBad{} _e:
+# after a judged chunk: none when it was refused, the picture when it was
+# IEND (whatever bytes follow it, as libpng and other decoders stop reading
+# there), and the walk over the rest otherwise
+def png.crc(nx: Nx, more: Maybe<&2, Pic>) -> Maybe<&2, Pic>:
+  match nx:
+    case NBad{}:
       None{}
-    case NEnd{_pg} False{}:
-      None{}
-    case NEnd{pg} True{}:
+    case NEnd{pg}:
       png.finish(pg)
-    case NMore{_pg} _e:
+    case NMore{_pg}:
       more
 
 # one byte of a PNG chunk stream. `zlast` is the last data byte of the chunk.
@@ -970,9 +971,9 @@ def png.go(
     case +b <> rest ZDat{} False{}:
       +n = (left - 1 : U32)
       png.go(rest, ZDat{}, U32.is_eq(n, 1), n, typ, {b <> crc : List<&2, U32>}, {b <> data : List<&2, U32>}, pg)
-    case +a <> +b <> +c <> +d <> +rest ZCrc{} _z:
+    case +a <> +b <> +c <> +d <> rest ZCrc{} _z:
       +nx = png.judge(be.u32(a, b, c, d), crc, typ, data, pg)
-      png.crc(nx, List.is_empty(&2, U32, rest), png.go(rest, ZLen{}, False{}, 0, 0, [], [], png.pgof(nx)))
+      png.crc(nx, png.go(rest, ZLen{}, False{}, 0, 0, [], [], png.pgof(nx)))
     case _xs _pz _z:
       None{}
 

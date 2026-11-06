@@ -17,7 +17,9 @@ import ./proofs/JpegRoundTripKeepsSize.bend as PJpegRoundTripKeepsSize
 import ./proofs/JpegWritesJfifLayout.bend as PJpegWritesJfifLayout
 import ./proofs/MapAppliesPerSample.bend as PMapAppliesPerSample
 import ./proofs/PngAncillaryChunksIgnored.bend as PPngAncillaryChunksIgnored
+import ./proofs/PngDecodesWellFormed.bend as PPngDecodesWellFormed
 import ./proofs/PngHeaderPicksColourType.bend as PPngHeaderPicksColourType
+import ./proofs/PngIgnoresBytesAfterIend.bend as PPngIgnoresBytesAfterIend
 import ./proofs/PngRefusesBadRasters.bend as PPngRefusesBadRasters
 import ./proofs/PngRefusesUnsupportedHeaders.bend as PPngRefusesUnsupportedHeaders
 import ./proofs/PngRoundTrips.bend as PPngRoundTrips

@@ -149,18 +149,17 @@ def ihdr.judged(
   +comp: U32,
   +ff: U32,
   +ii: U32,
-  empty: Bool,
   more: Maybe<&2, Png.Pic>,
   hg: {Png.png.good(be.back(ww), be.back(hh), dd, cc, comp, ff, ii) == False{} : Bool}
 ) -> {Img.decode_png.pic(Png.png.crc(Png.png.judge.at(zz, Png.tag.ihdr(), ihdr.held(ww, hh, dd, cc, comp, ff, ii),
-  Png.pg.empty()), empty, more)) == None{} : Maybe<&2, Img.Raster>}:
+  Png.pg.empty()), more)) == None{} : Maybe<&2, Img.Raster>}:
   match zz:
     case False{}:
       {==}
     case True{}:
       Equal.cong(Bool, Maybe<&2, Img.Raster>,
         gg => Img.decode_png.pic(Png.png.crc(Png.png.ihdr.ok(gg, be.back(ww), be.back(hh), dd, cc, comp, ff, ii),
-          empty, more)),
+          more)),
         Png.png.good(be.back(ww), be.back(hh), dd, cc, comp, ff, ii), False{}, hg)
 
 # the walker at the CRC of that IHDR chunk, whatever the CRC bytes, the bytes after and the CRC register so far
@@ -182,7 +181,7 @@ def ihdr.at.crc(
 ) -> {Img.decode_png.pic(Png.png.go(c3 <> c2 <> c1 <> c0 <> rest, Png.ZCrc{}, False{}, 0, Png.tag.ihdr(), crc,
   ihdr.held(ww, hh, dd, cc, comp, ff, ii), Png.pg.empty())) == None{} : Maybe<&2, Img.Raster>}:
   ihdr.judged(U32.is_eq(Png.be.u32(c3, c2, c1, c0), Crc.crc32(List.reverse(&2, U32, crc))), ww, hh, dd, cc, comp, ff,
-    ii, List.is_empty(&2, U32, rest),
+    ii,
     Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(Png.png.judge(Png.be.u32(c3, c2, c1, c0), crc,
       Png.tag.ihdr(), ihdr.held(ww, hh, dd, cc, comp, ff, ii), Png.pg.empty()))),
     hg)

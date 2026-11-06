@@ -1,6 +1,8 @@
 # `Crc.crc32(xs)` equals the bitwise ISO 3309 CRC-32 of `xs` for every byte
-# list, and `decode_png` returns none for every input in which some chunk's
-# stored CRC differs from the CRC-32 of its type and data.
+# list, and `decode_png` returns none for every input in which some chunk up
+# to IEND has a stored CRC that differs from the CRC-32 of its type and data.
+# Bytes after IEND are not read (laws/PngIgnoresBytesAfterIend.bend), so a
+# chunk there is not checked.
 import Base
 import ../main.bend as Img
 import ../src/crc.bend as Crc
@@ -51,6 +53,20 @@ def chunks.framed(cs: List<&2, Chunk>) -> Type:
     case ck <> tl:
       chunk.framed(ck) & chunks.framed(tl)
 
+# the chunk is not IEND: its type is not 73 69 78 68 (PNG section 11.2.5)
+def chunk.open(ck: Chunk) -> Bool:
+  match ck:
+    case Chunk{_l0, _l1, _l2, _l3, t0, t1, t2, t3, _data, _s0, _s1, _s2, _s3}:
+      Bool.not(U32.is_eq(be.word(t0, t1, t2, t3), 1229278788))
+
+# no chunk is IEND
+def chunks.open(cs: List<&2, Chunk>) -> Type:
+  match cs:
+    case Nil{}:
+      Unit
+    case ck <> tl:
+      {chunk.open(ck) == True{} : Bool} & chunks.open(tl)
+
 # the CRC a chunk stores
 def chunk.stored(ck: Chunk) -> U32:
   match ck:
@@ -63,13 +79,14 @@ def chunk.sum(ck: Chunk) -> U32:
     case Chunk{_l0, _l1, _l2, _l3, t0, t1, t2, t3, data, _s0, _s1, _s2, _s3}:
       D1.crc.ref(t0 <> t1 <> t2 <> t3 <> data)
 
-# LAW: after the signature and any framed chunks, a framed chunk whose stored CRC differs from the CRC-32 of its type
-# and data makes decode_png none, whatever follows
+# LAW: after the signature and any framed chunks none of which is IEND, a framed chunk whose stored CRC differs from
+# the CRC-32 of its type and data makes decode_png none, whatever follows
 law png_crc_refused:
   for +pre: List<&2, Chunk>
   for +bad: Chunk
   for +rest: List<&2, U32>
   for h_pre: chunks.framed(pre)
+  for h_open: chunks.open(pre)
   for h_bad: chunk.framed(bad)
   for h_crc: {chunk.stored(bad) == chunk.sum(bad) : U32} -> Empty
   {Img.decode_png(List.append(&2, U32, Img.png_sig(), chunks.onto(pre, chunk.onto(bad, rest))))

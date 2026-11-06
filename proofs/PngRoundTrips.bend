@@ -4907,6 +4907,44 @@ def rt.pix(
         L3.spec.rgba(chans.all(False{}, px)), Some{px}, L3.png_px_rgba(chans.all(False{}, px), []),
         rgba.back(px))
 
+# a true sample-count check keeps the raster
+def rt.keep.at(
+  ok: Bool,
+  eo: {ok == True{} : Bool},
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>
+) -> {D1.spec.raster.keep(ok, ww, hh, px) == Some{Img.raster(ww, hh, px)} : Maybe<&2, Img.Raster>}:
+  match ok:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd({D1.spec.raster.keep(False{}, ww, hh, px) == Some{Img.raster(ww, hh, px)}
+        : Maybe<&2, Img.Raster>}, M1.false_true(eo))
+
+# the round trip's raster has h * w samples, so spec.raster keeps it
+def rt.keep(
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>,
+  +wp: Nat,
+  +hp: Nat,
+  +e_w: {U32.to_nat(ww) == 1n+wp : Nat},
+  +e_h: {U32.to_nat(hh) == 1n+hp : Nat},
+  +hl: {List.length(&2, U32, px) == Nat.mul(1n+hp, 1n+wp) : Nat}
+) -> {D1.spec.raster(Some{px}, ww, hh) == Some{Img.raster(ww, hh, px)} : Maybe<&2, Img.Raster>}:
+  +area = Nat.mul(U32.to_nat(hh), U32.to_nat(ww))
+  +nb = Nat.mul(1n+hp, 1n+wp)
+  +e_a = {Equal.trans(Nat, area, Nat.mul(1n+hp, U32.to_nat(ww)), nb,
+    Equal.cong(Nat, Nat, kk => Nat.mul(kk, U32.to_nat(ww)), U32.to_nat(hh), 1n+hp, e_h),
+    Equal.cong(Nat, Nat, kk => Nat.mul(1n+hp, kk), U32.to_nat(ww), 1n+wp, e_w)) : {area == nb : Nat}}
+  +e_ok = {Equal.trans(Bool, Nat.is_eq(List.length(&2, U32, px), area), Nat.is_eq(nb, area), True{},
+    Equal.cong(Nat, Bool, kk => Nat.is_eq(kk, area), List.length(&2, U32, px), nb, hl),
+    Equal.trans(Bool, Nat.is_eq(nb, area), Nat.is_eq(nb, nb), True{},
+      Equal.cong(Nat, Bool, kk => Nat.is_eq(nb, kk), area, nb, e_a), M1.nat_eq_refl(nb)))
+    : {Nat.is_eq(List.length(&2, U32, px), area) == True{} : Bool}}
+  rt.keep.at(Nat.is_eq(List.length(&2, U32, px), area), e_ok, ww, hh, px)
+
 # the pixel stage: the scanlines unfilter to the rows, and the rows pack to the samples
 def rt.px(
   +ww: U32,
@@ -4960,8 +4998,11 @@ def rt.px(
         Equal.trans(Maybe<&2, List<&2, U32>>, Png.unfilter(fr, ww, hh, bp), Some{List.concat(&2, U32, rows)},
           Some{chans.all(op, px)}, e_un, Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, xs => Some{xs},
           List.concat(&2, U32, rows), chans.all(op, px), e_cat)))),
-    Equal.cong(Maybe<&2, List<&2, U32>>, Maybe<&2, Img.Raster>, mm => D1.spec.raster(mm, ww, hh),
-      Png.px.of(ct, chans.all(op, px), [], []), Some{px}, rt.pix(op, px, hao)))
+    Equal.trans(Maybe<&2, Img.Raster>, D1.spec.raster(Png.px.of(ct, chans.all(op, px), [], []), ww, hh),
+      D1.spec.raster(Some{px}, ww, hh), Some{Img.raster(ww, hh, px)},
+      Equal.cong(Maybe<&2, List<&2, U32>>, Maybe<&2, Img.Raster>, mm => D1.spec.raster(mm, ww, hh),
+        Png.px.of(ct, chans.all(op, px), [], []), Some{px}, rt.pix(op, px, hao)),
+      rt.keep(ww, hh, px, wp, hp, e_w, e_h, hl)))
 
 # the pixel stage after the layout: the one-block layout around any zlib stream of the scanlines that inflates to
 # them decodes to the raster. The layout is stated stuck on zb, which is False

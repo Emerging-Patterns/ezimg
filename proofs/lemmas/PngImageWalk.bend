@@ -22,7 +22,7 @@ def iend.step(
   Png.NEnd{Png.pg.iend(M1.st(ww, hh, cc, plte, trns, acc, sid))} : Png.Nx}:
   M2.iend.ok.true(M1.need(cc, plte), M1.st(ww, hh, cc, plte, trns, acc, sid), h_nd)
 
-# the IDAT chunks, then IEND: with done the IDAT data read so far, the image
+# the IDAT chunks, then IEND and any bytes after it: with done the IDAT data read so far, the image
 # is the samples of done and the rest of the data, inflated
 def walk.idats(
   +ww: U32,
@@ -33,9 +33,10 @@ def walk.idats(
   +ds: List<&2, List<&2, U32>>,
   +done: List<&2, U32>,
   +sid: Bool,
+  +junk: List<&2, U32>,
   +h_nd: {M1.need(cc, plte) == True{} : Bool},
   hf: D1.spec.fits.all(ds)
-) -> {Png.png.go(D1.spec.idats(ds, D1.spec.chunk([73, 69, 78, 68], [], [])), Png.ZLen{}, False{}, 0, 0, [], [],
+) -> {Png.png.go(D1.spec.idats(ds, D1.spec.chunk([73, 69, 78, 68], [], junk)), Png.ZLen{}, False{}, 0, 0, [], [],
   M1.st(ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid)) == Png.png.samples(Inf.inflate(List.append(&2, U32,
   done, List.concat(&2, U32, ds))), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Png.Pic>}:
   match ds:
@@ -44,10 +45,10 @@ def walk.idats(
       +tr = D1.spec.or.nil(trns)
       +pg = M1.st(ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid)
       Equal.trans(Maybe<&2, Png.Pic>,
-        Png.png.go(D1.spec.chunk([73, 69, 78, 68], [], []), Png.ZLen{}, False{}, 0, 0, [], [], pg),
+        Png.png.go(D1.spec.chunk([73, 69, 78, 68], [], junk), Png.ZLen{}, False{}, 0, 0, [], [], pg),
         Png.png.finish(Png.pg.iend(pg)),
         Png.png.samples(Inf.inflate(List.append(&2, U32, done, [])), ww, hh, cc, pl, tr),
-        M2.chunk.end(73, 69, 78, 68, [], pg, Png.pg.iend(pg), {==}, iend.step(ww, hh, cc, plte, trns,
+        M2.chunk.end(73, 69, 78, 68, [], junk, pg, Png.pg.iend(pg), {==}, iend.step(ww, hh, cc, plte, trns,
           List.reverse(&2, U32, done), sid, h_nd)),
         Equal.trans(Maybe<&2, Png.Pic>, Png.png.finish(Png.pg.iend(pg)),
           Png.png.samples(Inf.inflate(done), ww, hh, cc, pl, tr),
@@ -61,7 +62,7 @@ def walk.idats(
       (hd, htl) = hf
       +pl = D1.spec.or.nil(plte)
       +tr = D1.spec.or.nil(trns)
-      +rest = D1.spec.idats(tl, D1.spec.chunk([73, 69, 78, 68], [], []))
+      +rest = D1.spec.idats(tl, D1.spec.chunk([73, 69, 78, 68], [], junk))
       +pg = M1.st(ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid)
       +d2 = List.append(&2, U32, done, dd)
       Equal.trans(Maybe<&2, Png.Pic>,
@@ -93,7 +94,7 @@ def walk.idats(
             Png.png.samples(Inf.inflate(List.append(&2, U32, d2, List.concat(&2, U32, tl))), ww, hh, cc, pl, tr),
             Png.png.samples(Inf.inflate(List.append(&2, U32, done, List.append(&2, U32, dd, List.concat(&2, U32, tl)))),
               ww, hh, cc, pl, tr),
-            walk.idats(ww, hh, cc, plte, trns, tl, d2, True{}, h_nd, htl),
+            walk.idats(ww, hh, cc, plte, trns, tl, d2, True{}, junk, h_nd, htl),
             Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate(xs), ww, hh, cc, pl, tr),
               List.append(&2, U32, d2, List.concat(&2, U32, tl)), List.append(&2, U32, done, List.append(&2, U32, dd,
               List.concat(&2, U32, tl))), M1.app_assoc(done, dd, List.concat(&2, U32, tl))))))
@@ -107,6 +108,7 @@ def walk.png(
   +plte: Maybe<&2, List<&2, U32>>,
   +trns: Maybe<&2, List<&2, U32>>,
   +idats: List<&2, List<&2, U32>>,
+  +junk: List<&2, U32>,
   h_ww: {U32.is_gt(ww, 0) == True{} : Bool},
   h_hh: {U32.is_gt(hh, 0) == True{} : Bool},
   h_cc: {D1.spec.colour.ok(cc) == True{} : Bool},
@@ -117,9 +119,9 @@ def walk.png(
   h_fi: D1.spec.fits.all(idats)
 ) -> {Png.decode(D1.spec.chunk([73, 72, 68, 82], D1.spec.ihdr.data(ww, hh, cc), D1.spec.chunk.opt([80, 76, 84,
   69], plte, D1.spec.chunk.opt([116, 82, 78, 83], trns, D1.spec.idats(idats, D1.spec.chunk([73, 69, 78, 68], [],
-  [])))))) == Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte),
+  junk)))))) == Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte),
   D1.spec.or.nil(trns)) : Maybe<&2, Png.Pic>}:
-  +r3 = D1.spec.idats(idats, D1.spec.chunk([73, 69, 78, 68], [], []))
+  +r3 = D1.spec.idats(idats, D1.spec.chunk([73, 69, 78, 68], [], junk))
   +r2 = D1.spec.chunk.opt([116, 82, 78, 83], trns, r3)
   +r1 = D1.spec.chunk.opt([80, 76, 84, 69], plte, r2)
   +s0 = M1.st(ww, hh, cc, None{}, None{}, [], False{})
@@ -143,7 +145,7 @@ def walk.png(
         Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte),
           D1.spec.or.nil(trns)),
         M2.walk.trns(ww, hh, cc, plte, trns, r3, h_tr, h_ft),
-        walk.idats(ww, hh, cc, plte, trns, idats, [], False{}, M2.need.ok(cc, plte, h_pl), h_fi))))
+        walk.idats(ww, hh, cc, plte, trns, idats, [], False{}, junk, M2.need.ok(cc, plte, h_pl), h_fi))))
 
 # one sample more on the accumulator is one sample more in front of the list
 def onto.cons(
@@ -225,19 +227,39 @@ def L1.png_px_rgba(xs, _plte):
   Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.rgba(xs, []), M1.onto([], L1.spec.rgba(xs)), L1.spec.rgba(xs),
     rgba.acc(xs, []), onto.nil(L1.spec.rgba(xs)))
 
-# laws/PngSamplesFollowColourType.bend: the walker takes each chunk and leaves the pixel stage's inputs
-def L1.png_walk(ww, hh, cc, plte, trns, idats, h_ww, h_hh, h_cc, h_pl, h_tr, h_fp, h_ft, h_fi):
+# a file laid out as PNG section 5.6 gives, with any bytes after IEND, is the
+# pixel stage of its IDAT data, inflated
+def walk.decoded(
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  +plte: Maybe<&2, List<&2, U32>>,
+  +trns: Maybe<&2, List<&2, U32>>,
+  +idats: List<&2, List<&2, U32>>,
+  +junk: List<&2, U32>,
+  h_ww: {U32.is_gt(ww, 0) == True{} : Bool},
+  h_hh: {U32.is_gt(hh, 0) == True{} : Bool},
+  h_cc: {D1.spec.colour.ok(cc) == True{} : Bool},
+  +h_pl: {D1.spec.plte.ok(cc, plte) == True{} : Bool},
+  h_tr: {D1.spec.trns.ok(cc, plte, trns) == True{} : Bool},
+  h_fp: D1.spec.fits.opt(plte),
+  h_ft: D1.spec.fits.opt(trns),
+  h_fi: D1.spec.fits.all(idats)
+) -> {Img.decode_png(D1.spec.png.then(ww, hh, cc, plte, trns, idats, junk)) == D1.spec.decoded(Inf.inflate(
+  List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Img.Raster>}:
   +mm = Inf.inflate(List.concat(&2, U32, idats))
   +pl = D1.spec.or.nil(plte)
   +tr = D1.spec.or.nil(trns)
-  Equal.trans(Maybe<&2, Img.Raster>, Img.decode_png.pic(Png.decode(D1.spec.chunk([73, 72, 68, 82],
-    D1.spec.ihdr.data(ww, hh, cc), D1.spec.chunk.opt([80, 76, 84, 69], plte, D1.spec.chunk.opt([116, 82, 78, 83],
-    trns, D1.spec.idats(idats, D1.spec.chunk([73, 69, 78, 68], [], []))))))),
+  +file = D1.spec.chunk([73, 72, 68, 82], D1.spec.ihdr.data(ww, hh, cc), D1.spec.chunk.opt([80, 76, 84, 69], plte,
+    D1.spec.chunk.opt([116, 82, 78, 83], trns, D1.spec.idats(idats, D1.spec.chunk([73, 69, 78, 68], [], junk)))))
+  Equal.trans(Maybe<&2, Img.Raster>, Img.decode_png.pic(Png.decode(file)),
     Img.decode_png.pic(Png.png.samples(mm, ww, hh, cc, pl, tr)),
     D1.spec.decoded(mm, ww, hh, cc, pl, tr),
-    Equal.cong(Maybe<&2, Png.Pic>, Maybe<&2, Img.Raster>, xx => Img.decode_png.pic(xx), Png.decode(D1.spec.chunk([73,
-      72, 68, 82], D1.spec.ihdr.data(ww, hh, cc), D1.spec.chunk.opt([80, 76, 84, 69], plte,
-      D1.spec.chunk.opt([116, 82, 78, 83], trns, D1.spec.idats(idats, D1.spec.chunk([73, 69, 78, 68], [],
-      [])))))), Png.png.samples(mm, ww, hh, cc, pl, tr),
-      walk.png(ww, hh, cc, plte, trns, idats, h_ww, h_hh, h_cc, h_pl, h_tr, h_fp, h_ft, h_fi)),
+    Equal.cong(Maybe<&2, Png.Pic>, Maybe<&2, Img.Raster>, xx => Img.decode_png.pic(xx), Png.decode(file),
+      Png.png.samples(mm, ww, hh, cc, pl, tr),
+      walk.png(ww, hh, cc, plte, trns, idats, junk, h_ww, h_hh, h_cc, h_pl, h_tr, h_fp, h_ft, h_fi)),
     M2.frame.decoded(mm, ww, hh, cc, pl, tr))
+
+# laws/PngSamplesFollowColourType.bend: the walker takes each chunk and leaves the pixel stage's inputs
+def L1.png_walk(ww, hh, cc, plte, trns, idats, h_ww, h_hh, h_cc, h_pl, h_tr, h_fp, h_ft, h_fi):
+  walk.decoded(ww, hh, cc, plte, trns, idats, [], h_ww, h_hh, h_cc, h_pl, h_tr, h_fp, h_ft, h_fi)

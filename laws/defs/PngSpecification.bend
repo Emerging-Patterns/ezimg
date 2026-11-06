@@ -131,8 +131,23 @@ def spec.idats(ds: List<&2, List<&2, U32>>, rest: List<&2, U32>) -> List<&2, U32
 def spec.ihdr.data(+ww: U32, +hh: U32, +cc: U32) -> List<&2, U32>:
   List.append(&2, U32, spec.be4(ww), List.append(&2, U32, spec.be4(hh), [8, cc, 0, 0, 0]))
 
-# a PNG file in the order PNG section 5.6 gives: the signature, IHDR, PLTE if
-# there is one, tRNS if there is one, the IDAT chunks, and IEND
+# a PNG file in the order PNG section 5.6 gives, then rest: the signature,
+# IHDR, PLTE if there is one, tRNS if there is one, the IDAT chunks, IEND,
+# and the bytes of rest after IEND
+def spec.png.then(
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  plte: Maybe<&2, List<&2, U32>>,
+  trns: Maybe<&2, List<&2, U32>>,
+  idats: List<&2, List<&2, U32>>,
+  rest: List<&2, U32>
+) -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), spec.chunk([73, 72, 68, 82], spec.ihdr.data(ww, hh, cc),
+    spec.chunk.opt([80, 76, 84, 69], plte, spec.chunk.opt([116, 82, 78, 83], trns,
+      spec.idats(idats, spec.chunk([73, 69, 78, 68], [], rest))))))
+
+# a PNG file in the order PNG section 5.6 gives, with nothing after IEND
 def spec.png(
   +ww: U32,
   +hh: U32,
@@ -141,9 +156,7 @@ def spec.png(
   trns: Maybe<&2, List<&2, U32>>,
   idats: List<&2, List<&2, U32>>
 ) -> List<&2, U32>:
-  List.append(&2, U32, Img.png_sig(), spec.chunk([73, 72, 68, 82], spec.ihdr.data(ww, hh, cc),
-    spec.chunk.opt([80, 76, 84, 69], plte, spec.chunk.opt([116, 82, 78, 83], trns,
-      spec.idats(idats, spec.chunk([73, 69, 78, 68], [], []))))))
+  spec.png.then(ww, hh, cc, plte, trns, idats, [])
 
 # a list's length, counted in a U32, does not wrap: the list is shorter than 2^32
 def spec.fits(xs: List<&2, U32>) -> Type:
@@ -197,13 +210,22 @@ def spec.or.nil(mm: Maybe<&2, List<&2, U32>>) -> List<&2, U32>:
     case Some{xs}:
       xs
 
-# a raster of the samples, when there are some
+# a raster of the samples when there are exactly h * w of them, counted as
+# natural numbers: h rows of w
+def spec.raster.keep(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&2, Img.Raster>:
+  match ok:
+    case True{}:
+      Some{Img.raster(ww, hh, px)}
+    case False{}:
+      None{}
+
+# a raster of the samples, when there are some and they are h * w
 def spec.raster(mm: Maybe<&2, List<&2, U32>>, +ww: U32, +hh: U32) -> Maybe<&2, Img.Raster>:
   match mm:
     case None{}:
       None{}
-    case Some{px}:
-      Some{Img.raster(ww, hh, px)}
+    case Some{+px}:
+      spec.raster.keep(Nat.is_eq(List.length(&2, U32, px), Nat.mul(U32.to_nat(hh), U32.to_nat(ww))), ww, hh, px)
 
 # the pixel stage's raster from the inflated data: the scanlines unfiltered,
 # then packed by px.of for the colour type, PLTE and tRNS; none when the data
