@@ -279,7 +279,8 @@ def correct_jpeg():
                     r = x * 255 // (w - 1); g = y * 255 // (h - 1); b = (x + y) * 255 // (w + h - 2)
                 else:
                     r, g, b = rng.randrange(256), rng.randrange(256), rng.randrange(256)
-                pix.append(pack_rgb(r, g, b))
+                # opaque: encode_jpeg flattens a sample onto white by its alpha
+                pix.append(pack_rgba(r, g, b, 255))
         im = Image.new("RGB", (w, h))
         im.putdata([((p >> 16) & 255, (p >> 8) & 255, p & 255) for p in pix])
         return pix, im
