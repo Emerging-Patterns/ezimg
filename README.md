@@ -36,8 +36,12 @@ raster for a baseline sequential JPEG, and none when the bytes are not one.
 dropping alpha, and returns none for exactly the rasters `encode_png` refuses. Every sample is one `U32` packed `0xAARRGGBB`, whichever
 decoder returned it: a JPEG sample has alpha 255, and a gray JPEG sample
 repeats its level in R, G and B.
-`width`,
-`height`, `size`, `count`, and `fill` are the pixel helpers.
+`raster(w, h, px)` takes the samples as they are, and `checked_raster(w, h, px)`
+returns none unless there are exactly `w * h` of them. `width`, `height`,
+`size`, `count`, `fill`, `get`, `set`, `crop`, `blit` and `map` are the
+pixel helpers. `count` is the number of samples as a natural number (`w * h`
+for a well-formed raster), and every helper reaches sample `y * w + x` a row
+at a time, so no size or index wraps, whatever the sides.
 
 ```
 import emerging-ezimg@1.2.0.0/main.bend as Img

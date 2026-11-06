@@ -26,6 +26,8 @@
 # replaced.
 import Base
 import ./laws/BlitCopiesCoveredPoints.bend as BlitCopiesCoveredPoints
+import ./laws/CheckedRasterIsWellFormed.bend as CheckedRasterIsWellFormed
+import ./laws/CountIsArea.bend as CountIsArea
 import ./laws/CrcIsIso3309.bend as CrcIsIso3309
 import ./laws/CropTakesIntersection.bend as CropTakesIntersection
 import ./laws/DecodedSamplesPackArgb.bend as DecodedSamplesPackArgb

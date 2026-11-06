@@ -1,7 +1,7 @@
-# For every well-formed `r` with `w * h < 2^32` and rectangle `(x, y, cw,
-# ch)`, `crop` is well formed, its size is the rectangle's intersection with
-# `r` (0 by 0 when that is empty), and its sample at `(i, j)` is `r`'s sample
-# at `(x + i, y + j)`.
+# For every rectangle `(x, y, cw, ch)`, `crop`'s size is the rectangle's
+# intersection with `r` (0 by 0 when that is empty), and for every
+# well-formed `r`, whatever its sides, `crop` is well formed and its sample
+# at `(i, j)` is `r`'s sample at `(x + i, y + j)`.
 import Base
 import ../main.bend as Img
 import ./defs/CropSpan.bend as D1
@@ -20,28 +20,24 @@ law crop_size:
     (D2.side(D1.cut(Img.width(img), xx, cw), D1.cut(Img.height(img), yy, ch)),
       D2.side(D1.cut(Img.height(img), yy, ch), D1.cut(Img.width(img), xx, cw))) : Nat & Nat}
 
-# LAW: crop of a well-formed raster is well formed, when w * h < 2^32
+# LAW: crop of a well-formed raster is well formed
 law crop_wf:
   for +img: Img.Raster
   for +xx: U32
   for +yy: U32
   for +cw: U32
   for +ch: U32
-  for +area: U32
-  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(Img.width(img)), U32.to_nat(Img.height(img))) : Nat}
   for h_wf: {D3.wf(img) == True{} : Bool}
   {D3.wf(Img.crop(img, xx, yy, cw, ch)) == True{} : Bool}
 
 # LAW: the crop's sample at (i, j) is the raster's sample at (x + i, y + j), for every point (i, j) of the crop of
-# a well-formed raster, when w * h < 2^32
+# a well-formed raster
 law crop_at:
   for +img: Img.Raster
   for +xx: U32
   for +yy: U32
   for +cw: U32
   for +ch: U32
-  for +area: U32
-  for h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(Img.width(img)), U32.to_nat(Img.height(img))) : Nat}
   for h_wf: {D3.wf(img) == True{} : Bool}
   for +ii: Nat
   for +jj: Nat
