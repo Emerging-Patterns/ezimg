@@ -1468,6 +1468,41 @@ def a7.go(
   +h3 = png.up(png.up(png.up(hh)))
   a7.s1(pass.read(raw, w3, h3, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
+# the filtered bytes of a pass of pw by ph pixels: a filter byte and a
+# scanline for each row, none for an empty pass
+def png.pass.len.at(zz: Bool, +pw: U32, +ph: U32, +bits: U32) -> Nat:
+  match zz:
+    case True{}:
+      0n
+    case False{}:
+      Nat.mul(U32.to_nat(ph), 1n+png.stride(U32.to_nat(pw), bits))
+
+def png.pass.len(+pw: U32, +ph: U32, +bits: U32) -> Nat:
+  png.pass.len.at(Bool.or(U32.is_zero(pw), U32.is_zero(ph)), pw, ph, bits)
+
+# the filtered bytes of the seven Adam7 passes, as a7.go reads them
+def png.a7.len(+ww: U32, +hh: U32, +bits: U32) -> Nat:
+  +w1 = png.up(ww)
+  +w2 = png.up(w1)
+  +h1 = png.up(hh)
+  +h2 = png.up(h1)
+  Nat.add(png.pass.len(png.up(w2), png.up(h2), bits), Nat.add(png.pass.len(png.dn(w2), png.up(h2), bits),
+    Nat.add(png.pass.len(w2, png.dn(h2), bits), Nat.add(png.pass.len(png.dn(w1), h2, bits),
+    Nat.add(png.pass.len(w1, png.dn(h1), bits), Nat.add(png.pass.len(png.dn(ww), h1, bits),
+    png.pass.len(ww, png.dn(hh), bits)))))))
+
+def png.budget.at(zz: Bool, +ww: U32, +hh: U32, +bits: U32) -> Nat:
+  match zz:
+    case True{}:
+      png.pass.len(ww, hh, bits)
+    case False{}:
+      png.a7.len(ww, hh, bits)
+
+# the exact length the inflated IDAT data must have for the header: what
+# unfilter reads, so the inflater can stop as soon as a stream passes it
+def png.budget(+ww: U32, +hh: U32, +dd: U32, +cc: U32, +ii: U32) -> Nat:
+  png.budget.at(U32.is_zero(ii), ww, hh, png.bits(dd, cc))
+
 # a picture without interlacing: one pass of the whole size
 def png.flat(pp: Pass) -> Maybe<&2, List<&2, U32>>:
   match pp:
@@ -1510,7 +1545,10 @@ def png.deep(
       png.pic(png.deep.at(U32.is_zero(ii), raw, ww, hh, dd, cc, plte, trns), ww, hh)
 
 # 8-bit samples without interlacing take png.samples; any other bit depth,
-# or Adam7, png.deep
+# or Adam7, png.deep, with the inflater stopped once the data passes the
+# length the header implies (the 8-bit path keeps plain inflate: the
+# round-trip proof reads it, and inflate.upto agreeing with inflate under
+# its budget is not proved)
 def png.finish.go(
   zenc: Bool,
   +ww: U32,
@@ -1526,7 +1564,8 @@ def png.finish.go(
     case True{}:
       png.samples(Inf.inflate(List.reverse(&2, U32, idat)), ww, hh, colour, plte, trns)
     case False{}:
-      png.deep(Inf.inflate(List.reverse(&2, U32, idat)), ww, hh, dd, colour, ii, plte, trns)
+      png.deep(Inf.inflate.upto(png.budget(ww, hh, dd, colour, ii), List.reverse(&2, U32, idat)), ww, hh, dd,
+        colour, ii, plte, trns)
 
 def png.finish.at(
   zz: Bool,
