@@ -90,7 +90,7 @@ def spec.png.anc(
 # LAW: ancillary chunks where PNG section 5.6 allows them leave what decode_png makes of a file: the file png_walk
 # reads, with ancillary chunks after IHDR, PLTE, tRNS and the IDAT chunks (tRNS among the last when there is an
 # IDAT), and with tRNS before PLTE where the decoder takes that order (late), decodes to the raster px.of packs from
-# the unfiltered inflated IDAT data, with the IHDR colour type and the PLTE and tRNS data
+# the unfiltered IDAT data, inflated under spec.budget, with the IHDR colour type and the PLTE and tRNS data
 law png_walk_anc:
   for +ww: U32
   for +hh: U32
@@ -116,5 +116,6 @@ law png_walk_anc:
   for h_a1: spec.ancs.ok(a1)
   for h_a2: spec.ancs.ok(a2)
   for h_a3: spec.ancs.after(Bool.not(List.is_empty(&2, List<&2, U32>, idats)), a3)
-  {Img.decode_png(spec.png.anc(ww, hh, cc, late, a0, plte, a1, trns, a2, idats, a3)) == D1.spec.decoded(Inf.inflate(
+  {Img.decode_png(spec.png.anc(ww, hh, cc, late, a0, plte, a1, trns, a2, idats, a3)) ==
+    D1.spec.decoded(Inf.inflate.upto(D1.spec.budget(ww, hh, cc),
     List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Img.Raster>}

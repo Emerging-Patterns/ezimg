@@ -182,6 +182,12 @@ def spec.fits(xs: List<&2, U32>) -> Type:
   {U32.to_nat(U32.from_nat(List.length(&2, U32, xs))) == List.length(&2, U32, xs) : Nat} &
     {D2.below(31n, List.length(&2, U32, xs)) == True{} : Bool}
 
+# the length the IDAT data of 8-bit samples without interlacing inflates to
+# (PNG sections 7.2 and 9.1): h scanlines, each a filter byte and w pixels
+# of the colour type's bytes per pixel. The decoder stops inflating past it
+def spec.budget(+ww: U32, +hh: U32, +cc: U32) -> Nat:
+  Nat.mul(U32.to_nat(hh), 1n+Nat.mul(U32.to_nat(ww), U32.to_nat(Png.png.bpp(cc))))
+
 # a width or height IHDR may give: from 1 to 2^31 - 1 (PNG section 11.2.1)
 def spec.side(+nn: U32) -> Bool:
   Bool.and(U32.is_gt(nn, 0), D2.below(31n, U32.to_nat(nn)))

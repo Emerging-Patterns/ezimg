@@ -204,7 +204,11 @@ law png_samples_frame:
 # LAW: the chunk walker hands the pixel stage the IHDR's size and colour type,
 # the PLTE and tRNS data, and the IDAT data concatenated: a file of the
 # signature, IHDR, PLTE and tRNS where allowed, any IDAT chunks and IEND
-# decodes to the raster px.of packs from the unfiltered inflated data
+# decodes to the raster px.of packs from the unfiltered data, inflated
+# under spec.budget, the length the header implies: a stream that inflates
+# past it is refused once it passes it. Until 2026-11 such a stream was
+# inflated in full and unfilter then refused the extra bytes, so the answer
+# is the one it was; the work the decoder does on such a stream is bounded
 law png_walk:
   for +ww: U32
   for +hh: U32
@@ -220,6 +224,6 @@ law png_walk:
   for h_fp: D1.spec.fits.opt(plte)
   for h_ft: D1.spec.fits.opt(trns)
   for h_fi: D1.spec.fits.all(idats)
-  {Img.decode_png(D1.spec.png(ww, hh, cc, plte, trns, idats)) == D1.spec.decoded(Inf.inflate(List.concat(&2, U32,
-      idats)),
-    ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Img.Raster>}
+  {Img.decode_png(D1.spec.png(ww, hh, cc, plte, trns, idats)) ==
+    D1.spec.decoded(Inf.inflate.upto(D1.spec.budget(ww, hh, cc),
+    List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Img.Raster>}

@@ -1553,11 +1553,15 @@ def png.deep(
     case Some{+raw}:
       png.pic(png.deep.at(U32.is_zero(ii), raw, ww, hh, dd, cc, plte, trns), ww, hh)
 
+# the filtered bytes of 8-bit samples without interlacing: h rows, each a
+# filter byte and w pixels of bpp bytes. png.budget at bit depth 8 and
+# interlace method 0, in the form the round trip reads
+def png.budget8(+ww: U32, +hh: U32, +cc: U32) -> Nat:
+  Nat.mul(U32.to_nat(hh), 1n+Nat.mul(U32.to_nat(ww), U32.to_nat(png.bpp(cc))))
+
 # 8-bit samples without interlacing take png.samples; any other bit depth,
-# or Adam7, png.deep, with the inflater stopped once the data passes the
-# length the header implies (the 8-bit path keeps plain inflate: the
-# round-trip proof reads it, and inflate.upto agreeing with inflate under
-# its budget is not proved)
+# or Adam7, png.deep. Either way the inflater stops once the data passes the
+# length the header implies
 def png.finish.go(
   zenc: Bool,
   +ww: U32,
@@ -1571,7 +1575,8 @@ def png.finish.go(
 ) -> Maybe<&2, Pic>:
   match zenc:
     case True{}:
-      png.samples(Inf.inflate(List.reverse(&2, U32, idat)), ww, hh, colour, plte, trns)
+      png.samples(Inf.inflate.upto(png.budget8(ww, hh, colour), List.reverse(&2, U32, idat)), ww, hh, colour, plte,
+        trns)
     case False{}:
       png.deep(Inf.inflate.upto(png.budget(ww, hh, dd, colour, ii), List.reverse(&2, U32, idat)), ww, hh, dd,
         colour, ii, plte, trns)

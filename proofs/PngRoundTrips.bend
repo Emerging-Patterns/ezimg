@@ -5,6 +5,7 @@ import ../src/crc.bend as Crc
 import ../src/inflate.bend as Inf
 import ../src/png.bend as Png
 import ../laws/InflateReadsStoredBlocks.bend as L1
+import ../laws/InflateUptoReadsStoredBlocks.bend as L5
 import ../laws/PngRefusesBadRasters.bend as L2
 import ../laws/PngRoundTrips.bend as Laws
 import ../laws/PngSamplesFollowColourType.bend as L3
@@ -23,6 +24,7 @@ import ./lemmas/StoredBlockReader.bend as M9
 import ./lemmas/SubtractionAndHuffmanWalk.bend as M10
 import ./lemmas/WordAddition.bend as M11
 import ./lemmas/ZlibStoredStream.bend as M12
+import ./InflateUptoReadsStoredBlocks.bend as P5
 
 # a + b - a is b
 law sub_add_cancel:
@@ -5044,6 +5046,14 @@ def rt.px(
         Png.px.of(ct, chans.all(op, px), [], []), Some{px}, rt.pix(op, px, hao)),
       rt.keep(ww, hh, px, wp, hp, e_w, e_h, hl)))
 
+# the bytes per pixel of the colour type encode_png writes are its channels
+def bpp.nch(op: Bool) -> {Laws.spec.nch(op) == U32.to_nat(Png.png.bpp(Png.enc.ct(op))) : Nat}:
+  match op:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
 # a nonzero side below 2^31 is a side spec.side takes
 def side.from(
   +nn: U32,
@@ -5115,13 +5125,31 @@ def rt.tail(
   +h_by = {Equal.trans(Bool, D1.bytes(ss), D1.bytes.go(M1.scan(rows), True{}), True{}, Equal.cong(List<&2, U32>,
     Bool, xs => D1.bytes.go(xs, True{}), ss, M1.scan(rows), e_s), bytes.scan(rows, masked.rows.of(hh1, ww1, op,
     px))) : {D1.bytes(ss) == True{} : Bool}}
-  +e_inf = {L1.inflate_enc_zlib(ss, h_by, h_nl) : {Inf.inflate(zz) == Some{ss} : Maybe<&2, List<&2, U32>>}}
   +ct = Png.enc.ct(op)
+  +bud = D1.spec.budget(ww, hh, ct)
+  +nn = Nat.mul(hh1, 1n+Nat.mul(ww1, Laws.spec.nch(op)))
+  +e_ls = {Equal.trans(Nat, List.length(&2, U32, ss), List.length(&2, U32, M1.scan(rows)), nn, Equal.cong(List<&2, U32>,
+    Nat, xs => List.length(&2, U32, xs), ss, M1.scan(rows), e_s), len.scan(hh1, ww1, op, px, hl)) :
+    {List.length(&2, U32, ss) == nn : Nat}}
+  +e_bud = {Equal.trans(Nat, nn, Nat.mul(U32.to_nat(hh), 1n+Nat.mul(ww1, Laws.spec.nch(op))), bud,
+    Equal.cong(Nat, Nat, kk => Nat.mul(kk, 1n+Nat.mul(ww1, Laws.spec.nch(op))), hh1, U32.to_nat(hh), Equal.sym(Nat,
+      U32.to_nat(hh), hh1, e_h)),
+    Equal.trans(Nat, Nat.mul(U32.to_nat(hh), 1n+Nat.mul(ww1, Laws.spec.nch(op))), Nat.mul(U32.to_nat(hh),
+      1n+Nat.mul(U32.to_nat(ww), Laws.spec.nch(op))), bud,
+      Equal.cong(Nat, Nat, kk => Nat.mul(U32.to_nat(hh), 1n+Nat.mul(kk, Laws.spec.nch(op))), ww1, U32.to_nat(ww),
+        Equal.sym(Nat, U32.to_nat(ww), ww1, e_w)),
+      Equal.cong(Nat, Nat, kk => Nat.mul(U32.to_nat(hh), 1n+Nat.mul(U32.to_nat(ww), kk)), Laws.spec.nch(op),
+        U32.to_nat(Png.png.bpp(ct)), bpp.nch(op)))) : {nn == bud : Nat}}
+  +h_lim = {M1.le_rw_r(List.length(&2, U32, ss), nn, bud, e_bud, M1.le_rw_l(nn, List.length(&2, U32, ss), nn,
+    Equal.sym(Nat, List.length(&2, U32, ss), nn, e_ls), M1.le_refl(nn))) :
+    {Nat.is_le(List.length(&2, U32, ss), bud) == True{} : Bool}}
+  +e_inf = {L5.upto_enc_zlib(bud, ss, h_by, h_nl, h_lim) : {Inf.inflate.upto(bud, zz) == Some{ss} :
+    Maybe<&2, List<&2, U32>>}}
   +h_ww = side.from(ww, gt.pos(ww, wp, e_w), h_bw)
   +h_hh = side.from(hh, gt.pos(hh, hp, e_h), h_bh)
   +a6 = Img.decode_png(Png.enc.seal.at(zb, ww, hh, op, ss, ll))
   +a8 = Img.decode_png(D1.spec.png(ww, hh, ct, None{}, None{}, [zz]))
-  +a9 = D1.spec.decoded(Inf.inflate(List.concat(&2, U32, [zz])), ww, hh, ct, [], [])
+  +a9 = D1.spec.decoded(Inf.inflate.upto(bud, List.concat(&2, U32, [zz])), ww, hh, ct, [], [])
   +a10 = D1.spec.decoded(Some{ss}, ww, hh, ct, [], [])
   Equal.trans(Maybe<&2, Img.Raster>, a6, a8, Some{Img.raster(ww, hh, px)},
     Equal.trans(Maybe<&2, Img.Raster>, a6, Img.decode_png(Png.enc.seal.one(ww, hh, op, ss, ll)), a8,
@@ -5132,14 +5160,14 @@ def rt.tail(
     Equal.trans(Maybe<&2, Img.Raster>, a8, a9, Some{Img.raster(ww, hh, px)},
       L3.png_walk(ww, hh, ct, None{}, None{}, [zz], h_ww, h_hh, rt.col(op), rt.plte(op), {==}, Unit{}, Unit{},
         (h_fz, Unit{})),
-      Equal.trans(Maybe<&2, Img.Raster>, a9, D1.spec.decoded(Inf.inflate(zz), ww, hh, ct, [], []),
+      Equal.trans(Maybe<&2, Img.Raster>, a9, D1.spec.decoded(Inf.inflate.upto(bud, zz), ww, hh, ct, [], []),
         Some{Img.raster(ww, hh, px)},
-        Equal.cong(List<&2, U32>, Maybe<&2, Img.Raster>, xs => D1.spec.decoded(Inf.inflate(xs), ww, hh, ct, [],
-          []), List.append(&2, U32, zz, []), zz, M1.app_nil(zz)),
-        Equal.trans(Maybe<&2, Img.Raster>, D1.spec.decoded(Inf.inflate(zz), ww, hh, ct, [], []), a10,
+        Equal.cong(List<&2, U32>, Maybe<&2, Img.Raster>, xs => D1.spec.decoded(Inf.inflate.upto(bud, xs), ww, hh, ct,
+          [], []), List.append(&2, U32, zz, []), zz, M1.app_nil(zz)),
+        Equal.trans(Maybe<&2, Img.Raster>, D1.spec.decoded(Inf.inflate.upto(bud, zz), ww, hh, ct, [], []), a10,
           Some{Img.raster(ww, hh, px)},
           Equal.cong(Maybe<&2, List<&2, U32>>, Maybe<&2, Img.Raster>, mm => D1.spec.decoded(mm, ww, hh, ct, [],
-            []), Inf.inflate(zz), Some{ss}, e_inf),
+            []), Inf.inflate.upto(bud, zz), Some{ss}, e_inf),
           rt.px(ww, hh, px, op, wp, hp, hao, e_w, e_h, hl, e_m)))))
 
 # the one-block round trip, with the width and height 1 + w' and 1 + h', and

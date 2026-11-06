@@ -27,5 +27,6 @@ law png_after_iend:
   for h_fp: D1.spec.fits.opt(plte)
   for h_ft: D1.spec.fits.opt(trns)
   for h_fi: D1.spec.fits.all(idats)
-  {Img.decode_png(D1.spec.png.then(ww, hh, cc, plte, trns, idats, rest)) == D1.spec.decoded(Inf.inflate(
+  {Img.decode_png(D1.spec.png.then(ww, hh, cc, plte, trns, idats, rest)) ==
+    D1.spec.decoded(Inf.inflate.upto(D1.spec.budget(ww, hh, cc),
     List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Img.Raster>}
