@@ -375,179 +375,67 @@ def huf.app_nil(xs: List<&2, Bool>) -> {List.append(&2, Bool, xs, []) == xs : Li
     case +hh <> tt:
       Equal.cong(List<&2, Bool>, List<&2, Bool>, ws => hh <> ws, List.append(&2, Bool, tt, []), tt, huf.app_nil(tt))
 
-# the dc book the encoder builds, written out
-def dcbook.lit() -> Array<U32>:
-  ANode{ANode{ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{131072}, ALeaf{196610}}, ANode{ALeaf{196611},
-    ALeaf{196612}}}, ANode{ANode{ALeaf{196613}, ALeaf{196614}}, ANode{ALeaf{262158}, ALeaf{327710}}}},
-    ANode{ANode{ANode{ALeaf{393278}, ALeaf{458878}}, ANode{ALeaf{524542}, ALeaf{590334}}}, ANode{ANode{ALeaf{0},
-    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}, ANode{ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}},
-    ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}}, ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}},
-    ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}}}}}, ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0},
-    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}, ANode{ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}},
-    ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}}, ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}},
-    ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}, ANode{ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}},
-    ANode{ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
-    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}, ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}},
-    ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}, ANode{ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}},
-    ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}}, ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}, ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0},
-    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}},
-    ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}, ANode{ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}},
-    ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}}, ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}},
-    ANode{ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}},
-    ANode{ALeaf{0}, ALeaf{0}}}}}}}}}
-
-# a symbol's code in the dc book
-def code.dc(+sy: U32) -> List<&2, Bool>:
-  L1.jpg.cbw(D1.jpg.val(Array.get(U32, dcbook.lit(), sy)))
-
-# the ac book the encoder builds, written out
-def acbook.lit() -> Array<U32>:
-  ANode{ANode{ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{262154}, ALeaf{131072}}, ANode{ALeaf{131073},
-    ALeaf{196612}}}, ANode{ANode{ALeaf{262155}, ALeaf{327706}}, ANode{ALeaf{458872}, ALeaf{524536}}}},
-    ANode{ANode{ANode{ALeaf{656374}, ALeaf{1113986}}, ANode{ALeaf{1113987}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
-    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{262156}}, ANode{ALeaf{327707},
-    ALeaf{458873}}}, ANode{ANode{ALeaf{590326}, ALeaf{722934}}, ANode{ALeaf{1113988}, ALeaf{1113989}}}},
-    ANode{ANode{ANode{ALeaf{1113990}, ALeaf{1113991}}, ANode{ALeaf{1113992}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
-    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{327708}},
-    ANode{ALeaf{524537}, ALeaf{656375}}}, ANode{ANode{ALeaf{790516}, ALeaf{1113993}}, ANode{ALeaf{1113994},
-    ALeaf{1113995}}}}, ANode{ANode{ANode{ALeaf{1113996}, ALeaf{1113997}}, ANode{ALeaf{1113998}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{393274}},
-    ANode{ALeaf{590327}, ALeaf{790517}}}, ANode{ANode{ALeaf{1113999}, ALeaf{1114000}}, ANode{ALeaf{1114001},
-    ALeaf{1114002}}}}, ANode{ANode{ANode{ALeaf{1114003}, ALeaf{1114004}}, ANode{ALeaf{1114005}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}, ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0},
-    ALeaf{393275}}, ANode{ALeaf{656376}, ALeaf{1114006}}}, ANode{ANode{ALeaf{1114007}, ALeaf{1114008}},
-    ANode{ALeaf{1114009}, ALeaf{1114010}}}}, ANode{ANode{ANode{ALeaf{1114011}, ALeaf{1114012}}, ANode{ALeaf{1114013},
-    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0},
-    ALeaf{458874}}, ANode{ALeaf{722935}, ALeaf{1114014}}}, ANode{ANode{ALeaf{1114015}, ALeaf{1114016}},
-    ANode{ALeaf{1114017}, ALeaf{1114018}}}}, ANode{ANode{ANode{ALeaf{1114019}, ALeaf{1114020}}, ANode{ALeaf{1114021},
-    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}},
-    ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{458875}}, ANode{ALeaf{790518}, ALeaf{1114022}}},
-    ANode{ANode{ALeaf{1114023}, ALeaf{1114024}}, ANode{ALeaf{1114025}, ALeaf{1114026}}}},
-    ANode{ANode{ANode{ALeaf{1114027}, ALeaf{1114028}}, ANode{ALeaf{1114029}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
-    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{524538}}, ANode{ALeaf{790519},
-    ALeaf{1114030}}}, ANode{ANode{ALeaf{1114031}, ALeaf{1114032}}, ANode{ALeaf{1114033}, ALeaf{1114034}}}},
-    ANode{ANode{ANode{ALeaf{1114035}, ALeaf{1114036}}, ANode{ALeaf{1114037}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
-    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}}, ANode{ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{590328}},
-    ANode{ALeaf{1015744}, ALeaf{1114038}}}, ANode{ANode{ALeaf{1114039}, ALeaf{1114040}}, ANode{ALeaf{1114041},
-    ALeaf{1114042}}}}, ANode{ANode{ANode{ALeaf{1114043}, ALeaf{1114044}}, ANode{ALeaf{1114045}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{590329}},
-    ANode{ALeaf{1114046}, ALeaf{1114047}}}, ANode{ANode{ALeaf{1114048}, ALeaf{1114049}}, ANode{ALeaf{1114050},
-    ALeaf{1114051}}}}, ANode{ANode{ANode{ALeaf{1114052}, ALeaf{1114053}}, ANode{ALeaf{1114054}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0},
-    ALeaf{590330}}, ANode{ALeaf{1114055}, ALeaf{1114056}}}, ANode{ANode{ALeaf{1114057}, ALeaf{1114058}},
-    ANode{ALeaf{1114059}, ALeaf{1114060}}}}, ANode{ANode{ANode{ALeaf{1114061}, ALeaf{1114062}}, ANode{ALeaf{1114063},
-    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0},
-    ALeaf{656377}}, ANode{ALeaf{1114064}, ALeaf{1114065}}}, ANode{ANode{ALeaf{1114066}, ALeaf{1114067}},
-    ANode{ALeaf{1114068}, ALeaf{1114069}}}}, ANode{ANode{ANode{ALeaf{1114070}, ALeaf{1114071}}, ANode{ALeaf{1114072},
-    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}},
-    ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{656378}}, ANode{ALeaf{1114073}, ALeaf{1114074}}},
-    ANode{ANode{ALeaf{1114075}, ALeaf{1114076}}, ANode{ALeaf{1114077}, ALeaf{1114078}}}},
-    ANode{ANode{ANode{ALeaf{1114079}, ALeaf{1114080}}, ANode{ALeaf{1114081}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
-    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{722936}}, ANode{ALeaf{1114082},
-    ALeaf{1114083}}}, ANode{ANode{ALeaf{1114084}, ALeaf{1114085}}, ANode{ALeaf{1114086}, ALeaf{1114087}}}},
-    ANode{ANode{ANode{ALeaf{1114088}, ALeaf{1114089}}, ANode{ALeaf{1114090}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
-    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{1114091}},
-    ANode{ALeaf{1114092}, ALeaf{1114093}}}, ANode{ANode{ALeaf{1114094}, ALeaf{1114095}}, ANode{ALeaf{1114096},
-    ALeaf{1114097}}}}, ANode{ANode{ANode{ALeaf{1114098}, ALeaf{1114099}}, ANode{ALeaf{1114100}, ALeaf{0}}},
-    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{722937},
-    ALeaf{1114101}}, ANode{ALeaf{1114102}, ALeaf{1114103}}}, ANode{ANode{ALeaf{1114104}, ALeaf{1114105}},
-    ANode{ALeaf{1114106}, ALeaf{1114107}}}}, ANode{ANode{ANode{ALeaf{1114108}, ALeaf{1114109}}, ANode{ALeaf{1114110},
-    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}}}
-
-# a symbol's code in the ac book
-def code.ac(+sy: U32) -> List<&2, Bool>:
-  L1.jpg.cbw(D1.jpg.val(Array.get(U32, acbook.lit(), sy)))
-
-# the bits of AC tokens: each symbol's code in the AC book, then its magnitude bits
-def acbits(ts: List<&2, L1.JTok>) -> List<&2, Bool>:
-  match ts:
-    case Nil{}:
-      []
-    case L1.JTok{+sym, ex} <> rest:
-      List.append(&2, Bool, code.ac(sym), List.append(&2, Bool, ex, acbits(rest)))
-
-# a block's bits: the DC symbol's code in the DC book, its magnitude bits, and the AC tokens' bits
-def blkbits(bt: L1.JBlkTok) -> List<&2, Bool>:
-  match bt:
-    case L1.JBlkTok{+dcs, dcx, acs}:
-      List.append(&2, Bool, code.dc(dcs), List.append(&2, Bool, dcx, acbits(acs)))
-
-# the encoder's AC book, written out
-def acbk() -> Array<U32>:
-  acbook.lit()
-
-# the encoder's DC book, written out
-def dcbk() -> Array<U32>:
-  dcbook.lit()
-
 # a symbol's code from the AC book: the book back, the code's bits fed to the writer
 def emitp.ac(
+  +cls: Bool,
   +sy: U32,
   +pp: Jenc.Put
-) -> {Jenc.encode.emit(Jenc.encode.sym(acbk(), sy), pp) == (acbk(), L1.jpg.feed( code.ac(sy),
+) -> {Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls), sy), pp) == (Jenc.encode.acof(cls),
+  L1.jpg.feed( L1.jpg.acode(cls, sy),
   pp)) : Array<U32> & Jenc.Put}:
-  +vv = D1.jpg.val(Array.get(U32, acbk(), sy))
-  Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.emit(Jenc.encode.coded(Array.get(U32, acbk(), sy)), pp),
-    Jenc.encode.emit(Jenc.encode.coded((acbk(), vv)), pp), (acbk(), L1.jpg.feed(code.ac(sy), pp)),
+  +vv = D1.jpg.val(Array.get(U32, Jenc.encode.acof(cls), sy))
+  Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.emit(Jenc.encode.coded(Array.get(U32, Jenc.encode.acof(cls), sy)), pp),
+    Jenc.encode.emit(Jenc.encode.coded((Jenc.encode.acof(cls), vv)), pp), (Jenc.encode.acof(cls),
+    L1.jpg.feed(L1.jpg.acode(cls, sy), pp)),
     Equal.cong(Array<U32> & U32, Array<U32> & Jenc.Put, gg => Jenc.encode.emit(Jenc.encode.coded(gg), pp),
-    Array.get(U32, acbk(), sy), (acbk(), vv), get.eq(acbk(), sy)), Equal.cong(Jenc.Put, Array<U32> & Jenc.Put,
-    qq => (acbk(), qq), Jenc.encode.bits.go(U32.to_nat(U32.shrn(vv, 16n)), pp, U32.and(vv, 65535)),
-    L1.jpg.feed(code.ac(sy), pp), bits_go(U32.to_nat(U32.shrn(vv, 16n)), pp, U32.and(vv, 65535))))
+    Array.get(U32, Jenc.encode.acof(cls), sy), (Jenc.encode.acof(cls), vv), get.eq(Jenc.encode.acof(cls), sy)),
+      Equal.cong(Jenc.Put, Array<U32> & Jenc.Put,
+    qq => (Jenc.encode.acof(cls), qq), Jenc.encode.bits.go(U32.to_nat(U32.shrn(vv, 16n)), pp, U32.and(vv, 65535)),
+    L1.jpg.feed(L1.jpg.acode(cls, sy), pp), bits_go(U32.to_nat(U32.shrn(vv, 16n)), pp, U32.and(vv, 65535))))
 
 # the AC tokens' bits, joined
 def acbits_app(
+  +cls: Bool,
   xs: List<&2, L1.JTok>,
   +ys: List<&2, L1.JTok>
-) -> {acbits(List.append(&2, L1.JTok, xs, ys)) == List.append(&2, Bool, acbits(xs),
-  acbits(ys)) : List<&2, Bool>}:
+) -> {L1.jpg.acbits(cls, List.append(&2, L1.JTok, xs, ys)) == List.append(&2, Bool, L1.jpg.acbits(cls, xs),
+  L1.jpg.acbits(cls, ys)) : List<&2, Bool>}:
   match xs:
     case Nil{}:
       {==}
     case L1.JTok{+sym, +ex} <> +rest:
-      Equal.trans(List<&2, Bool>, List.append(&2, Bool, code.ac(sym), List.append(&2, Bool, ex,
-        acbits(List.append(&2, L1.JTok, rest, ys)))), List.append(&2, Bool, code.ac(sym), List.append(&2,
+      Equal.trans(List<&2, Bool>, List.append(&2, Bool, L1.jpg.acode(cls, sym), List.append(&2, Bool, ex,
+        L1.jpg.acbits(cls, List.append(&2, L1.JTok, rest, ys)))), List.append(&2, Bool, L1.jpg.acode(cls, sym),
+        List.append(&2,
           Bool, ex,
-        List.append(&2, Bool, acbits(rest), acbits(ys)))), List.append(&2, Bool, List.append(&2, Bool,
-        code.ac(sym), List.append(&2, Bool, ex, acbits(rest))), acbits(ys)), Equal.cong(List<&2, Bool>,
-        List<&2, Bool>, zs => List.append(&2, Bool, code.ac(sym), List.append(&2, Bool, ex, zs)),
-        acbits(List.append(&2, L1.JTok, rest, ys)), List.append(&2, Bool, acbits(rest), acbits(ys)),
-        acbits_app(rest, ys)), Equal.sym(List<&2, Bool>, List.append(&2, Bool, List.append(&2, Bool, code.ac(sym),
-        List.append(&2, Bool, ex, acbits(rest))), acbits(ys)), List.append(&2, Bool, code.ac(sym),
-        List.append(&2, Bool, ex, List.append(&2, Bool, acbits(rest), acbits(ys)))), Equal.trans(List<&2, Bool>,
-        List.append(&2, Bool, List.append(&2, Bool, code.ac(sym), List.append(&2, Bool, ex, acbits(rest))),
-        acbits(ys)), List.append(&2, Bool, code.ac(sym), List.append(&2, Bool, List.append(&2, Bool, ex,
-        acbits(rest)), acbits(ys))), List.append(&2, Bool, code.ac(sym), List.append(&2, Bool, ex,
-        List.append(&2, Bool, acbits(rest), acbits(ys)))), huf.app_assoc(code.ac(sym), List.append(&2, Bool,
-        ex, acbits(rest)), acbits(ys)), Equal.cong(List<&2, Bool>, List<&2, Bool>, zs => List.append(&2, Bool,
-        code.ac(sym), zs), List.append(&2, Bool, List.append(&2, Bool, ex, acbits(rest)), acbits(ys)),
-        List.append(&2, Bool, ex, List.append(&2, Bool, acbits(rest), acbits(ys))), huf.app_assoc(ex,
-        acbits(rest), acbits(ys))))))
+        List.append(&2, Bool, L1.jpg.acbits(cls, rest), L1.jpg.acbits(cls, ys)))), List.append(&2, Bool,
+          List.append(&2, Bool,
+        L1.jpg.acode(cls, sym), List.append(&2, Bool, ex, L1.jpg.acbits(cls, rest))), L1.jpg.acbits(cls, ys)),
+          Equal.cong(List<&2, Bool>,
+        List<&2, Bool>, zs => List.append(&2, Bool, L1.jpg.acode(cls, sym), List.append(&2, Bool, ex, zs)),
+        L1.jpg.acbits(cls, List.append(&2, L1.JTok, rest, ys)), List.append(&2, Bool, L1.jpg.acbits(cls, rest),
+          L1.jpg.acbits(cls, ys)),
+        acbits_app(cls, rest, ys)), Equal.sym(List<&2, Bool>, List.append(&2, Bool, List.append(&2, Bool,
+          L1.jpg.acode(cls, sym),
+        List.append(&2, Bool, ex, L1.jpg.acbits(cls, rest))), L1.jpg.acbits(cls, ys)), List.append(&2, Bool,
+          L1.jpg.acode(cls, sym),
+        List.append(&2, Bool, ex, List.append(&2, Bool, L1.jpg.acbits(cls, rest), L1.jpg.acbits(cls, ys)))),
+          Equal.trans(List<&2, Bool>,
+        List.append(&2, Bool, List.append(&2, Bool, L1.jpg.acode(cls, sym), List.append(&2, Bool, ex,
+          L1.jpg.acbits(cls, rest))),
+        L1.jpg.acbits(cls, ys)), List.append(&2, Bool, L1.jpg.acode(cls, sym), List.append(&2, Bool, List.append(&2,
+          Bool, ex,
+        L1.jpg.acbits(cls, rest)), L1.jpg.acbits(cls, ys))), List.append(&2, Bool, L1.jpg.acode(cls, sym),
+          List.append(&2, Bool, ex,
+        List.append(&2, Bool, L1.jpg.acbits(cls, rest), L1.jpg.acbits(cls, ys)))), huf.app_assoc(L1.jpg.acode(cls,
+          sym), List.append(&2, Bool,
+        ex, L1.jpg.acbits(cls, rest)), L1.jpg.acbits(cls, ys)), Equal.cong(List<&2, Bool>, List<&2, Bool>,
+          zs => List.append(&2, Bool,
+        L1.jpg.acode(cls, sym), zs), List.append(&2, Bool, List.append(&2, Bool, ex, L1.jpg.acbits(cls, rest)),
+          L1.jpg.acbits(cls, ys)),
+        List.append(&2, Bool, ex, List.append(&2, Bool, L1.jpg.acbits(cls, rest), L1.jpg.acbits(cls, ys))),
+          huf.app_assoc(ex,
+        L1.jpg.acbits(cls, rest), L1.jpg.acbits(cls, ys))))))
 
 # j ZRL tokens
 def zrltoks(jj: Nat) -> List<&2, L1.JTok>:
@@ -559,29 +447,37 @@ def zrltoks(jj: Nat) -> List<&2, L1.JTok>:
 
 # the encoder's run of ZRL codes is the ZRL tokens' bits fed to the writer
 def zrls_eq(
+  +cls: Bool,
   jj: Nat,
   +pp: Jenc.Put
-) -> {Jenc.encode.zrls(jj, (acbk(), pp)) == (acbk(), L1.jpg.feed(acbits(zrltoks(jj)),
+) -> {Jenc.encode.zrls(jj, (Jenc.encode.acof(cls), pp)) == (Jenc.encode.acof(cls), L1.jpg.feed(L1.jpg.acbits(cls,
+  zrltoks(jj)),
   pp)) : Array<U32> & Jenc.Put}:
   match jj:
     case 0n:
       {==}
     case 1n+ +kk:
-      +cz = code.ac(240)
-      Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.zrls(kk, Jenc.encode.emit(Jenc.encode.sym(acbk(), 240), pp)),
-        Jenc.encode.zrls(kk, (acbk(), L1.jpg.feed(cz, pp))), (acbk(), L1.jpg.feed(acbits(zrltoks(1n+kk)), pp)),
+      +cz = L1.jpg.acode(cls, 240)
+      Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.zrls(kk, Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls),
+        240), pp)),
+        Jenc.encode.zrls(kk, (Jenc.encode.acof(cls), L1.jpg.feed(cz, pp))), (Jenc.encode.acof(cls),
+          L1.jpg.feed(L1.jpg.acbits(cls, zrltoks(1n+kk)), pp)),
         Equal.cong(Array<U32> & Jenc.Put, Array<U32> & Jenc.Put, st => Jenc.encode.zrls(kk, st),
-        Jenc.encode.emit(Jenc.encode.sym(acbk(), 240), pp), (acbk(), L1.jpg.feed(cz, pp)), emitp.ac(240, pp)),
-        Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.zrls(kk, (acbk(), L1.jpg.feed(cz, pp))), (acbk(),
+        Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls), 240), pp), (Jenc.encode.acof(cls), L1.jpg.feed(cz,
+          pp)), emitp.ac(cls, 240, pp)),
+        Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.zrls(kk, (Jenc.encode.acof(cls), L1.jpg.feed(cz, pp))),
+          (Jenc.encode.acof(cls),
           L1.jpg.feed(
-        acbits(zrltoks(kk)), L1.jpg.feed(cz, pp))), (acbk(), L1.jpg.feed(acbits(zrltoks(1n+kk)), pp)),
-          zrls_eq(kk,
-        L1.jpg.feed(cz, pp)), Equal.cong(Jenc.Put, Array<U32> & Jenc.Put, qq => (acbk(), qq),
-          L1.jpg.feed(acbits(
-        zrltoks(kk)), L1.jpg.feed(cz, pp)), L1.jpg.feed(acbits(zrltoks(1n+kk)), pp), Equal.sym(Jenc.Put,
-        L1.jpg.feed(List.append(&2, Bool, cz, acbits(zrltoks(kk))), pp), L1.jpg.feed(acbits(zrltoks(kk)),
+        L1.jpg.acbits(cls, zrltoks(kk)), L1.jpg.feed(cz, pp))), (Jenc.encode.acof(cls), L1.jpg.feed(L1.jpg.acbits(cls,
+          zrltoks(1n+kk)), pp)),
+          zrls_eq(cls, kk,
+        L1.jpg.feed(cz, pp)), Equal.cong(Jenc.Put, Array<U32> & Jenc.Put, qq => (Jenc.encode.acof(cls), qq),
+          L1.jpg.feed(L1.jpg.acbits(cls,
+        zrltoks(kk)), L1.jpg.feed(cz, pp)), L1.jpg.feed(L1.jpg.acbits(cls, zrltoks(1n+kk)), pp), Equal.sym(Jenc.Put,
+        L1.jpg.feed(List.append(&2, Bool, cz, L1.jpg.acbits(cls, zrltoks(kk))), pp), L1.jpg.feed(L1.jpg.acbits(cls,
+          zrltoks(kk)),
           L1.jpg.feed(cz,
-        pp)), feed_app(cz, acbits(zrltoks(kk)), pp)))))
+        pp)), feed_app(cz, L1.jpg.acbits(cls, zrltoks(kk)), pp)))))
 
 # the magnitude bits of a size and value: none for size 0
 def mz(zero: Bool, +cat: U32, +vv: U32) -> List<&2, Bool>:
@@ -638,55 +534,66 @@ def stoks(+zj: Nat, +sym: U32, +cat: U32, +clip: U32) -> List<&2, L1.JTok>:
 
 # the encoder's step for a coefficient, once its clipped value, size and symbol are named
 def hit_eq(
+  +cls: Bool,
   +zj: Nat,
   +sym: U32,
   +cat: U32,
   +clip: U32,
   +pp: Jenc.Put
-) -> {Jenc.encode.ac.hit(Jenc.encode.zrls(zj, (acbk(), pp)), sym, cat, clip) == (acbk(),
-  L1.jpg.feed(acbits(stoks(zj, sym, cat, clip)), pp)) : Array<U32> & Jenc.Put}:
+) -> {Jenc.encode.ac.hit(Jenc.encode.zrls(zj, (Jenc.encode.acof(cls), pp)), sym, cat, clip) == (Jenc.encode.acof(cls),
+  L1.jpg.feed(L1.jpg.acbits(cls, stoks(zj, sym, cat, clip)), pp)) : Array<U32> & Jenc.Put}:
   +zt = zrltoks(zj)
-  +zb = acbits(zt)
-  +cb = code.ac(sym)
+  +zb = L1.jpg.acbits(cls, zt)
+  +cb = L1.jpg.acode(cls, sym)
   +mb = mz(U32.is_eq(cat, 0), cat, clip)
   +tk = {L1.JTok{sym, mb} : L1.JTok}
-  Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.ac.hit(Jenc.encode.zrls(zj, (acbk(), pp)), sym, cat, clip),
-    Jenc.encode.ac.hit((acbk(), L1.jpg.feed(zb, pp)), sym, cat, clip), (acbk(), L1.jpg.feed(acbits(stoks(zj,
+  Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.ac.hit(Jenc.encode.zrls(zj, (Jenc.encode.acof(cls), pp)), sym, cat,
+    clip),
+    Jenc.encode.ac.hit((Jenc.encode.acof(cls), L1.jpg.feed(zb, pp)), sym, cat, clip), (Jenc.encode.acof(cls),
+      L1.jpg.feed(L1.jpg.acbits(cls, stoks(zj,
       sym, cat, clip)), pp)),
     Equal.cong(Array<U32> & Jenc.Put, Array<U32> & Jenc.Put, st => Jenc.encode.ac.hit(st, sym, cat, clip),
-    Jenc.encode.zrls(zj, (acbk(), pp)), (acbk(), L1.jpg.feed(zb, pp)), zrls_eq(zj, pp)),
+    Jenc.encode.zrls(zj, (Jenc.encode.acof(cls), pp)), (Jenc.encode.acof(cls), L1.jpg.feed(zb, pp)), zrls_eq(cls, zj,
+      pp)),
       Equal.trans(Array<U32> & Jenc.Put,
-    Jenc.encode.ac.mag(Jenc.encode.emit(Jenc.encode.sym(acbk(), sym), L1.jpg.feed(zb, pp)), cat, clip),
-    Jenc.encode.ac.mag((acbk(), L1.jpg.feed(cb, L1.jpg.feed(zb, pp))), cat, clip), (acbk(),
-      L1.jpg.feed(acbits(stoks(zj, sym, cat, clip)), pp)), Equal.cong(Array<U32> & Jenc.Put,
+    Jenc.encode.ac.mag(Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls), sym), L1.jpg.feed(zb, pp)), cat, clip),
+    Jenc.encode.ac.mag((Jenc.encode.acof(cls), L1.jpg.feed(cb, L1.jpg.feed(zb, pp))), cat, clip),
+      (Jenc.encode.acof(cls),
+      L1.jpg.feed(L1.jpg.acbits(cls, stoks(zj, sym, cat, clip)), pp)), Equal.cong(Array<U32> & Jenc.Put,
       Array<U32> & Jenc.Put, st => Jenc.encode.ac.mag(st, cat, clip),
-    Jenc.encode.emit(Jenc.encode.sym(acbk(), sym), L1.jpg.feed(zb, pp)), (acbk(), L1.jpg.feed(cb,
+    Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls), sym), L1.jpg.feed(zb, pp)), (Jenc.encode.acof(cls),
+      L1.jpg.feed(cb,
       L1.jpg.feed(zb, pp))),
-    emitp.ac(sym, L1.jpg.feed(zb, pp))), Equal.cong(Jenc.Put, Array<U32> & Jenc.Put, qq => (acbk(), qq),
+    emitp.ac(cls, sym, L1.jpg.feed(zb, pp))), Equal.cong(Jenc.Put, Array<U32> & Jenc.Put,
+      qq => (Jenc.encode.acof(cls), qq),
     Jenc.encode.magp.z(U32.is_eq(cat, 0), L1.jpg.feed(cb, L1.jpg.feed(zb, pp)), cat, clip),
-      L1.jpg.feed(acbits(stoks(zj, sym, cat, clip)), pp), Equal.trans(Jenc.Put,
+      L1.jpg.feed(L1.jpg.acbits(cls, stoks(zj, sym, cat, clip)), pp), Equal.trans(Jenc.Put,
       Jenc.encode.magp.z(U32.is_eq(cat, 0), L1.jpg.feed(cb, L1.jpg.feed(zb, pp)), cat, clip),
-    L1.jpg.feed(mb, L1.jpg.feed(cb, L1.jpg.feed(zb, pp))), L1.jpg.feed(acbits(stoks(zj, sym, cat, clip)),
+    L1.jpg.feed(mb, L1.jpg.feed(cb, L1.jpg.feed(zb, pp))), L1.jpg.feed(L1.jpg.acbits(cls, stoks(zj, sym, cat, clip)),
       pp), magp_eq(U32.is_eq(cat, 0),
     L1.jpg.feed(cb, L1.jpg.feed(zb, pp)), cat, clip), Equal.trans(Jenc.Put, L1.jpg.feed(mb, L1.jpg.feed(cb,
       L1.jpg.feed(zb, pp))),
     L1.jpg.feed(List.append(&2, Bool, zb, List.append(&2, Bool, cb, List.append(&2, Bool, mb, []))), pp),
-    L1.jpg.feed(acbits(stoks(zj, sym, cat, clip)), pp), feed3(zb, cb, mb, pp), Equal.cong(List<&2, Bool>,
+    L1.jpg.feed(L1.jpg.acbits(cls, stoks(zj, sym, cat, clip)), pp), feed3(zb, cb, mb, pp), Equal.cong(List<&2, Bool>,
       Jenc.Put, xs =>
-    L1.jpg.feed(xs, pp), List.append(&2, Bool, zb, acbits([tk])), acbits(List.append(&2, L1.JTok, zt,
+    L1.jpg.feed(xs, pp), List.append(&2, Bool, zb, L1.jpg.acbits(cls, [tk])), L1.jpg.acbits(cls, List.append(&2,
+      L1.JTok, zt,
       [tk])),
-    Equal.sym(List<&2, Bool>, acbits(List.append(&2, L1.JTok, zt, [tk])), List.append(&2, Bool, zb,
-    acbits([tk])), acbits_app(zt, [tk]))))))))
+    Equal.sym(List<&2, Bool>, L1.jpg.acbits(cls, List.append(&2, L1.JTok, zt, [tk])), List.append(&2, Bool, zb,
+    L1.jpg.acbits(cls, [tk])), acbits_app(cls, zt, [tk]))))))))
 
 # the encoder's step for a coefficient is its tokens' bits fed to the writer
 def step_eq(
+  +cls: Bool,
   +cc: U32,
   +run: U32,
   +pp: Jenc.Put
-) -> {Jenc.encode.ac.step(cc, run, (acbk(), pp)) == (acbk(), L1.jpg.feed(acbits(stoks(U32.to_nat(U32.shrn(run,
+) -> {Jenc.encode.ac.step(cc, run, (Jenc.encode.acof(cls), pp)) == (Jenc.encode.acof(cls),
+  L1.jpg.feed(L1.jpg.acbits(cls, stoks(U32.to_nat(U32.shrn(run,
   4n)), U32.or(Jenc.encode.cat(Jenc.encode.clip(cc, 1023)), U32.shln(U32.and(15, run), 4n)),
   Jenc.encode.cat(Jenc.encode.clip(cc, 1023)), Jenc.encode.clip(cc, 1023))), pp)) : Array<U32> & Jenc.Put}:
-  hit_eq(U32.to_nat(U32.shrn(run, 4n)), U32.or(Jenc.encode.cat(Jenc.encode.clip(cc, 1023)), U32.shln(U32.and(15, run),
+  hit_eq(cls, U32.to_nat(U32.shrn(run, 4n)), U32.or(Jenc.encode.cat(Jenc.encode.clip(cc, 1023)), U32.shln(U32.and(15,
+    run),
     4n)), Jenc.encode.cat(Jenc.encode.clip(cc, 1023)), Jenc.encode.clip(cc, 1023), pp)
 
 # a word compare that sets the low bit against a clear one is never equal
@@ -1658,19 +1565,24 @@ def mznlen(
 
 # the DC book's code for a size, then the magnitude bits of a difference
 def dcuse_eq(
+  +cls: Bool,
   +cat: U32,
   +pp: Jenc.Put,
   +xx: U32
-) -> {Jenc.encode.dc.use(Jenc.encode.sym(dcbk(), cat), pp, cat, xx) == (dcbk(), L1.jpg.feed(List.append(&2, Bool,
-  code.dc(cat), mz(U32.is_eq(cat, 0), cat, xx)), pp)) : Array<U32> & Jenc.Put}:
-  +vv = D1.jpg.val(Array.get(U32, dcbk(), cat))
-  +cd = code.dc(cat)
+) -> {Jenc.encode.dc.use(Jenc.encode.sym(Jenc.encode.dcof(cls), cat), pp, cat, xx) == (Jenc.encode.dcof(cls),
+  L1.jpg.feed(List.append(&2, Bool,
+  L1.jpg.dcode(cls, cat), mz(U32.is_eq(cat, 0), cat, xx)), pp)) : Array<U32> & Jenc.Put}:
+  +vv = D1.jpg.val(Array.get(U32, Jenc.encode.dcof(cls), cat))
+  +cd = L1.jpg.dcode(cls, cat)
   +mb = mz(U32.is_eq(cat, 0), cat, xx)
-  Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.dc.use(Jenc.encode.coded(Array.get(U32, dcbk(), cat)), pp, cat, xx),
-    Jenc.encode.dc.use(Jenc.encode.coded((dcbk(), vv)), pp, cat, xx), (dcbk(), L1.jpg.feed(List.append(&2, Bool, cd,
+  Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.dc.use(Jenc.encode.coded(Array.get(U32, Jenc.encode.dcof(cls), cat)),
+    pp, cat, xx),
+    Jenc.encode.dc.use(Jenc.encode.coded((Jenc.encode.dcof(cls), vv)), pp, cat, xx), (Jenc.encode.dcof(cls),
+      L1.jpg.feed(List.append(&2, Bool, cd,
     mb), pp)), Equal.cong(Array<U32> & U32, Array<U32> & Jenc.Put, gg => Jenc.encode.dc.use(Jenc.encode.coded(gg), pp,
-    cat, xx), Array.get(U32, dcbk(), cat), (dcbk(), vv), get.eq(dcbk(), cat)), Equal.cong(Jenc.Put,
-    Array<U32> & Jenc.Put, qq => (dcbk(), qq), Jenc.encode.magp.z(U32.is_eq(cat, 0), Jenc.encode.bits.go(
+    cat, xx), Array.get(U32, Jenc.encode.dcof(cls), cat), (Jenc.encode.dcof(cls), vv), get.eq(Jenc.encode.dcof(cls),
+      cat)), Equal.cong(Jenc.Put,
+    Array<U32> & Jenc.Put, qq => (Jenc.encode.dcof(cls), qq), Jenc.encode.magp.z(U32.is_eq(cat, 0), Jenc.encode.bits.go(
     U32.to_nat(U32.shrn(vv, 16n)), pp, U32.and(vv, 65535)), cat, xx), L1.jpg.feed(List.append(&2, Bool, cd, mb), pp),
     Equal.trans(Jenc.Put, Jenc.encode.magp.z(U32.is_eq(cat, 0), Jenc.encode.bits.go(U32.to_nat(U32.shrn(vv, 16n)), pp,
     U32.and(vv, 65535)), cat, xx), Jenc.encode.magp.z(U32.is_eq(cat, 0), L1.jpg.feed(cd, pp), cat, xx), L1.jpg.feed(
@@ -1685,19 +1597,24 @@ def dcuse_eq(
 
 # the DC book's code for a size, then the magnitude bits of a negative difference
 def dcneg_eq(
+  +cls: Bool,
   +cat: U32,
   +pp: Jenc.Put,
   +mm: U32
-) -> {Jenc.encode.dc.use.neg(Jenc.encode.sym(dcbk(), cat), pp, cat, mm) == (dcbk(), L1.jpg.feed(List.append(&2,
-  Bool, code.dc(cat), mzn(U32.is_eq(cat, 0), cat, mm)), pp)) : Array<U32> & Jenc.Put}:
-  +vv = D1.jpg.val(Array.get(U32, dcbk(), cat))
-  +cd = code.dc(cat)
+) -> {Jenc.encode.dc.use.neg(Jenc.encode.sym(Jenc.encode.dcof(cls), cat), pp, cat, mm) == (Jenc.encode.dcof(cls),
+  L1.jpg.feed(List.append(&2,
+  Bool, L1.jpg.dcode(cls, cat), mzn(U32.is_eq(cat, 0), cat, mm)), pp)) : Array<U32> & Jenc.Put}:
+  +vv = D1.jpg.val(Array.get(U32, Jenc.encode.dcof(cls), cat))
+  +cd = L1.jpg.dcode(cls, cat)
   +mb = mzn(U32.is_eq(cat, 0), cat, mm)
-  Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.dc.use.neg(Jenc.encode.coded(Array.get(U32, dcbk(), cat)), pp, cat,
-    mm), Jenc.encode.dc.use.neg(Jenc.encode.coded((dcbk(), vv)), pp, cat, mm), (dcbk(), L1.jpg.feed(List.append(&2,
+  Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.dc.use.neg(Jenc.encode.coded(Array.get(U32, Jenc.encode.dcof(cls),
+    cat)), pp, cat,
+    mm), Jenc.encode.dc.use.neg(Jenc.encode.coded((Jenc.encode.dcof(cls), vv)), pp, cat, mm), (Jenc.encode.dcof(cls),
+      L1.jpg.feed(List.append(&2,
     Bool, cd, mb), pp)), Equal.cong(Array<U32> & U32, Array<U32> & Jenc.Put, gg => Jenc.encode.dc.use.neg(
-    Jenc.encode.coded(gg), pp, cat, mm), Array.get(U32, dcbk(), cat), (dcbk(), vv), get.eq(dcbk(), cat)),
-    Equal.cong(Jenc.Put, Array<U32> & Jenc.Put, qq => (dcbk(), qq), Jenc.encode.magp.n(U32.is_eq(cat, 0),
+    Jenc.encode.coded(gg), pp, cat, mm), Array.get(U32, Jenc.encode.dcof(cls), cat), (Jenc.encode.dcof(cls), vv),
+      get.eq(Jenc.encode.dcof(cls), cat)),
+    Equal.cong(Jenc.Put, Array<U32> & Jenc.Put, qq => (Jenc.encode.dcof(cls), qq), Jenc.encode.magp.n(U32.is_eq(cat, 0),
     Jenc.encode.bits.go(U32.to_nat(U32.shrn(vv, 16n)), pp, U32.and(vv, 65535)), cat, mm),
       L1.jpg.feed(List.append(&2, Bool,
     cd, mb), pp), Equal.trans(Jenc.Put, Jenc.encode.magp.n(U32.is_eq(cat, 0), Jenc.encode.bits.go(U32.to_nat(
@@ -1713,14 +1630,16 @@ def dcneg_eq(
       pp))))))
 
 # the DC part of a block: a size of the DC table, its code and as many magnitude bits, fed to the writer
-def DcRes(+bb: U32, +pb: U32, +pp: Jenc.Put) -> Type:
-  &dcs: U32 -> &dcx: List<&2, Bool> -> &_e: {Jenc.encode.dcdiff(dcbk(), pp, bb, pb) == (dcbk(), L1.jpg.feed(
-    List.append(&2, Bool, code.dc(dcs), dcx), pp)) : Array<U32> & Jenc.Put} -> &_h: {L1.jpg.memb(dcs,
+def DcRes(+cls: Bool, +bb: U32, +pb: U32, +pp: Jenc.Put) -> Type:
+  &dcs: U32 -> &dcx: List<&2, Bool> -> &_e: {Jenc.encode.dcdiff(Jenc.encode.dcof(cls), pp, bb,
+    pb) == (Jenc.encode.dcof(cls), L1.jpg.feed(
+    List.append(&2, Bool, L1.jpg.dcode(cls, dcs), dcx), pp)) : Array<U32> & Jenc.Put} -> &_h: {L1.jpg.memb(dcs,
     Jenc.encode.dcsyms()) == True{} : Bool} -> {Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(dcs)) == True{} :
     Bool}
 
 # the DC part of a block, by the difference's sign
 def dcres.b(
+  +cls: Bool,
   up: Bool,
   +bb: U32,
   +pb: U32,
@@ -1728,41 +1647,48 @@ def dcres.b(
   hb: {U32.is_lt(bb, 2048) == True{} : Bool},
   hp: {U32.is_lt(pb, 2048) == True{} : Bool},
   hg: {U32.is_ge(bb, pb) == up : Bool}
-) -> {Jenc.encode.dcdiff.b(up, dcbk(), pp, bb, pb) == Jenc.encode.dcdiff(dcbk(), pp, bb,
-  pb) : Array<U32> & Jenc.Put} -> DcRes(bb, pb, pp):
+) -> {Jenc.encode.dcdiff.b(up, Jenc.encode.dcof(cls), pp, bb, pb) == Jenc.encode.dcdiff(Jenc.encode.dcof(cls), pp, bb,
+  pb) : Array<U32> & Jenc.Put} -> DcRes(cls, bb, pb, pp):
   match up:
     case True{}:
       +xx = (bb - pb : U32)
       +cat = Jenc.encode.cat(xx)
       +hx = {up_lt(bb, pb, hb, hg) : {U32.is_lt(xx, 2048) == True{} : Bool}}
-      ed => (cat, mz(U32.is_eq(cat, 0), cat, xx), Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.dcdiff(dcbk(),
-        pp, bb, pb), Jenc.encode.dc.use(Jenc.encode.sym(dcbk(), cat), pp, cat, xx), (dcbk(), L1.jpg.feed(
-        List.append(&2, Bool, code.dc(cat), mz(U32.is_eq(cat, 0), cat, xx)), pp)), Equal.sym(Array<U32> &
-        Jenc.Put, Jenc.encode.dcdiff.b(True{}, dcbk(), pp, bb, pb), Jenc.encode.dcdiff(dcbk(), pp, bb, pb), ed),
-        dcuse_eq(cat, pp, xx)), memcat.dc(xx, Equal.trans(Bool, U32.is_lt(Jpeg.decode.abs(xx), 2048),
+      ed => (cat, mz(U32.is_eq(cat, 0), cat, xx), Equal.trans(Array<U32> & Jenc.Put,
+        Jenc.encode.dcdiff(Jenc.encode.dcof(cls),
+        pp, bb, pb), Jenc.encode.dc.use(Jenc.encode.sym(Jenc.encode.dcof(cls), cat), pp, cat, xx),
+          (Jenc.encode.dcof(cls), L1.jpg.feed(
+        List.append(&2, Bool, L1.jpg.dcode(cls, cat), mz(U32.is_eq(cat, 0), cat, xx)), pp)), Equal.sym(Array<U32> &
+        Jenc.Put, Jenc.encode.dcdiff.b(True{}, Jenc.encode.dcof(cls), pp, bb, pb),
+          Jenc.encode.dcdiff(Jenc.encode.dcof(cls), pp, bb, pb), ed),
+        dcuse_eq(cls, cat, pp, xx)), memcat.dc(xx, Equal.trans(Bool, U32.is_lt(Jpeg.decode.abs(xx), 2048),
         U32.is_lt(xx, 2048), True{}, Equal.cong(U32, Bool, uu => U32.is_lt(uu, 2048), Jpeg.decode.abs(xx), xx,
         abs_small(xx, hx)), hx)), mzlen(U32.is_eq(cat, 0), cat, xx, {==}))
     case False{}:
       +mm = (pb - bb : U32)
       +cat = Jenc.encode.cat(mm)
       +hm = {down_lt(bb, pb, hp, hg) : {U32.is_lt(mm, 2048) == True{} : Bool}}
-      ed => (cat, mzn(U32.is_eq(cat, 0), cat, mm), Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.dcdiff(dcbk(), pp,
-        bb, pb), Jenc.encode.dc.use.neg(Jenc.encode.sym(dcbk(), cat), pp, cat, mm), (dcbk(), L1.jpg.feed(
-        List.append(&2, Bool, code.dc(cat), mzn(U32.is_eq(cat, 0), cat, mm)), pp)), Equal.sym(Array<U32> &
-        Jenc.Put, Jenc.encode.dcdiff.b(False{}, dcbk(), pp, bb, pb), Jenc.encode.dcdiff(dcbk(), pp, bb, pb), ed),
-        dcneg_eq(cat, pp, mm)), memcat.dc(mm, Equal.trans(Bool, U32.is_lt(Jpeg.decode.abs(mm), 2048),
+      ed => (cat, mzn(U32.is_eq(cat, 0), cat, mm), Equal.trans(Array<U32> & Jenc.Put,
+        Jenc.encode.dcdiff(Jenc.encode.dcof(cls), pp,
+        bb, pb), Jenc.encode.dc.use.neg(Jenc.encode.sym(Jenc.encode.dcof(cls), cat), pp, cat, mm),
+          (Jenc.encode.dcof(cls), L1.jpg.feed(
+        List.append(&2, Bool, L1.jpg.dcode(cls, cat), mzn(U32.is_eq(cat, 0), cat, mm)), pp)), Equal.sym(Array<U32> &
+        Jenc.Put, Jenc.encode.dcdiff.b(False{}, Jenc.encode.dcof(cls), pp, bb, pb),
+          Jenc.encode.dcdiff(Jenc.encode.dcof(cls), pp, bb, pb), ed),
+        dcneg_eq(cls, cat, pp, mm)), memcat.dc(mm, Equal.trans(Bool, U32.is_lt(Jpeg.decode.abs(mm), 2048),
         U32.is_lt(mm, 2048), True{}, Equal.cong(U32, Bool, uu => U32.is_lt(uu, 2048), Jpeg.decode.abs(mm), mm,
         abs_small(mm, hm)), hm)), mznlen(U32.is_eq(cat, 0), cat, mm, {==}))
 
 # the DC part of a block from two biased DCs below 2048
 def dcres(
+  +cls: Bool,
   +bb: U32,
   +pb: U32,
   +pp: Jenc.Put,
   hb: {U32.is_lt(bb, 2048) == True{} : Bool},
   hp: {U32.is_lt(pb, 2048) == True{} : Bool}
-) -> DcRes(bb, pb, pp):
-  dcres.b(U32.is_ge(bb, pb), bb, pb, pp, hb, hp, {==}, {==})
+) -> DcRes(cls, bb, pb, pp):
+  dcres.b(cls, U32.is_ge(bb, pb), bb, pb, pp, hb, hp, {==}, {==})
 
 # both answers when the first holds are the second
 def also_t(ok: Bool, -rest: Bool, hh: {ok == True{} : Bool}) -> {L1.jpg.also(ok, rest) == rest : Bool}:
@@ -2177,8 +2103,9 @@ def app_t(
 
 # the AC coder from a state: tokens it writes to the writer, read in full by the decoder's loop from the matching
 # state
-def AclRes(-zz: List<&2, U32>, +run: U32, +kk: U32, +left: Nat, +pp: Jenc.Put) -> Type:
-  &ts: List<&2, L1.JTok> -> &_e: {Jenc.encode.ac(zz, run, (acbk(), pp)) == (acbk(), L1.jpg.feed(acbits(ts),
+def AclRes(+cls: Bool, -zz: List<&2, U32>, +run: U32, +kk: U32, +left: Nat, +pp: Jenc.Put) -> Type:
+  &ts: List<&2, L1.JTok> -> &_e: {Jenc.encode.ac(zz, run, (Jenc.encode.acof(cls), pp)) == (Jenc.encode.acof(cls),
+    L1.jpg.feed(L1.jpg.acbits(cls, ts),
     pp)) :
     Array<U32> & Jenc.Put} -> {L1.jpg.acwf(ts, L1.JAcSt{kk, left, U32.is_eq(kk, 64)}) == True{} : Bool}
 
@@ -2191,9 +2118,9 @@ def AclLeft(+run: U32, -zz: List<&2, U32>, +left: Nat) -> Type:
   {Nat.is_le(Nat.add(U32.to_nat(run), List.length(&2, U32, zz)), left) == True{} : Bool}
 
 # the AC coder on the rest of the coefficients, from any state that keeps the invariant
-def AclIh(-ct: List<&2, U32>) -> Type:
+def AclIh(+cls: Bool, -ct: List<&2, U32>) -> Type:
   @r2: U32 -> @k2: U32 -> @l2: Nat -> @p2: Jenc.Put -> @e2: AclPos(k2, r2, ct) -> @h2: AclLeft(r2, ct, l2) ->
-    AclRes(ct, r2, k2, l2, p2)
+    AclRes(cls, ct, r2, k2, l2, p2)
 
 # a U32 above 0, as a Nat compare
 def ugt0(
@@ -2207,6 +2134,7 @@ def ugt0(
 
 # the AC coder at the end of the coefficients, by whether a zero run is open
 def acl_nil(
+  +cls: Bool,
   gz: Bool,
   +run: U32,
   +kk: U32,
@@ -2215,7 +2143,7 @@ def acl_nil(
   +hg: {U32.is_gt(run, 0) == gz : Bool},
   ee: AclPos(kk, run, []),
   hl: AclLeft(run, [], left)
-) -> AclRes([], run, kk, left, pp):
+) -> AclRes(cls, [], run, kk, left, pp):
   match gz:
     case True{}:
       +rn = U32.to_nat(run)
@@ -2235,18 +2163,23 @@ def acl_nil(
         ez)), hl)) : {Nat.is_lt(0n, left) == True{} : Bool}}
       +tk = {L1.JTok{0, []} : L1.JTok}
       +st = {L1.JAcSt{kk, left, U32.is_eq(kk, 64)} : L1.JAcSt}
-      +c0 = code.ac(0)
+      +c0 = L1.jpg.acode(cls, 0)
       +ok = {and_tt(Bool.not(U32.is_eq(kk, 64)), Bool.and(Nat.is_lt(0n, left), Bool.and(L1.jpg.memb(0,
         Jenc.encode.acsyms()), L1.jpg.acok.k(True{}, False{}, 0, [], kk))), not_f(U32.is_eq(kk, 64), he), and_tt(
         Nat.is_lt(0n, left), Bool.and(L1.jpg.memb(0, Jenc.encode.acsyms()), L1.jpg.acok.k(True{}, False{}, 0, [],
           kk)), hp,
         {==})) : {L1.jpg.acok(tk, st) == True{} : Bool}}
-      ([tk], Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.eob.on(U32.is_gt(run, 0), (acbk(), pp)),
-        Jenc.encode.eob.on(True{}, (acbk(), pp)), (acbk(), L1.jpg.feed(acbits([tk]), pp)), Equal.cong(Bool,
-        Array<U32> & Jenc.Put, gg => Jenc.encode.eob.on(gg, (acbk(), pp)), U32.is_gt(run, 0), True{}, hg),
-        Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.emit(Jenc.encode.sym(acbk(), 0), pp), (acbk(), L1.jpg.feed(c0,
-        pp)), (acbk(), L1.jpg.feed(acbits([tk]), pp)), emitp.ac(0, pp), Equal.cong(List<&2, Bool>,
-        Array<U32> & Jenc.Put, xs => (acbk(), L1.jpg.feed(xs, pp)), c0, List.append(&2, Bool, c0, []), Equal.sym(
+      ([tk], Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.eob.on(U32.is_gt(run, 0), (Jenc.encode.acof(cls), pp)),
+        Jenc.encode.eob.on(True{}, (Jenc.encode.acof(cls), pp)), (Jenc.encode.acof(cls),
+        L1.jpg.feed(L1.jpg.acbits(cls, [tk]), pp)), Equal.cong(Bool,
+        Array<U32> & Jenc.Put, gg => Jenc.encode.eob.on(gg, (Jenc.encode.acof(cls), pp)), U32.is_gt(run, 0), True{},
+          hg),
+        Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.emit(Jenc.encode.sym(Jenc.encode.acof(cls), 0), pp),
+          (Jenc.encode.acof(cls), L1.jpg.feed(c0,
+        pp)), (Jenc.encode.acof(cls), L1.jpg.feed(L1.jpg.acbits(cls, [tk]), pp)), emitp.ac(cls, 0, pp),
+          Equal.cong(List<&2, Bool>,
+        Array<U32> & Jenc.Put, xs => (Jenc.encode.acof(cls), L1.jpg.feed(xs, pp)), c0, List.append(&2, Bool, c0, []),
+          Equal.sym(
         List<&2, Bool>, List.append(&2, Bool, c0, []), c0, huf.app_nil(c0))))), Equal.trans(Bool,
           L1.jpg.also(L1.jpg.acok(tk,
         st), L1.jpg.acwf([], L1.jpg.acnx(tk, st))), L1.jpg.acwf([], L1.jpg.acnx(tk, st)), True{},
@@ -2264,11 +2197,13 @@ def acl_nil(
       +he = {Equal.trans(Bool, U32.is_eq(kk, 64), Nat.is_eq(kn, 64n), True{}, M1.u32_eq(kk, 64), Equal.trans(Bool,
         Nat.is_eq(kn, 64n), Nat.is_eq(64n, 64n), True{}, Equal.cong(Nat, Bool, nn => Nat.is_eq(nn, 64n), kn, 64n, ek),
         {==})) : {U32.is_eq(kk, 64) == True{} : Bool}}
-      ([], Equal.cong(Bool, Array<U32> & Jenc.Put, gg => Jenc.encode.eob.on(gg, (acbk(), pp)), U32.is_gt(run, 0),
+      ([], Equal.cong(Bool, Array<U32> & Jenc.Put, gg => Jenc.encode.eob.on(gg, (Jenc.encode.acof(cls), pp)),
+        U32.is_gt(run, 0),
         False{}, hg), he)
 
 # the AC coder past a zero coefficient, from its run one longer
 def acl_zero(
+  +cls: Bool,
   +cc: U32,
   +ct: List<&2, U32>,
   +run: U32,
@@ -2276,13 +2211,16 @@ def acl_zero(
   +left: Nat,
   +pp: Jenc.Put,
   hz: {U32.is_eq(cc, 0) == True{} : Bool},
-  res: AclRes(ct, (run + 1 : U32), kk, left, pp)
-) -> AclRes(cc <> ct, run, kk, left, pp):
+  res: AclRes(cls, ct, (run + 1 : U32), kk, left, pp)
+) -> AclRes(cls, cc <> ct, run, kk, left, pp):
   (ts, eq, wf) = res
   (ts, Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.ac(ct, Jenc.encode.ac.run(U32.is_eq(cc, 0), run),
-    Jenc.encode.ac.at(U32.is_eq(cc, 0), cc, run, (acbk(), pp))), Jenc.encode.ac(ct, (run + 1 : U32), (acbk(),
-    pp)), (acbk(), L1.jpg.feed(acbits(ts), pp)), Equal.cong(Bool, Array<U32> & Jenc.Put, zz => Jenc.encode.ac(ct,
-    Jenc.encode.ac.run(zz, run), Jenc.encode.ac.at(zz, cc, run, (acbk(), pp))), U32.is_eq(cc, 0), True{}, hz), eq),
+    Jenc.encode.ac.at(U32.is_eq(cc, 0), cc, run, (Jenc.encode.acof(cls), pp))), Jenc.encode.ac(ct, (run + 1 : U32),
+    (Jenc.encode.acof(cls),
+    pp)), (Jenc.encode.acof(cls), L1.jpg.feed(L1.jpg.acbits(cls, ts), pp)), Equal.cong(Bool, Array<U32> & Jenc.Put,
+      zz => Jenc.encode.ac(ct,
+    Jenc.encode.ac.run(zz, run), Jenc.encode.ac.at(zz, cc, run, (Jenc.encode.acof(cls), pp))), U32.is_eq(cc, 0),
+      True{}, hz), eq),
     wf)
 
 # the invariant one coefficient on, past a zero
@@ -2339,8 +2277,16 @@ def acl_zero_left(
     1n+ll), ea), hl)
 
 # the type of acl_join's parameter hs
-def acl_join.hs.ty(+_cc: U32, +_ct: List<&2, U32>, +_run: U32, +_pp: Jenc.Put, +_stk: List<&2, L1.JTok>) -> Type:
-  {Jenc.encode.ac(_cc <> _ct, _run, (acbk(), _pp)) == Jenc.encode.ac(_ct, 0, (acbk(), L1.jpg.feed(acbits(_stk),
+def acl_join.hs.ty(
+  +cls: Bool,
+  +_cc: U32,
+  +_ct: List<&2, U32>,
+  +_run: U32,
+  +_pp: Jenc.Put,
+  +_stk: List<&2, L1.JTok>
+) -> Type:
+  {Jenc.encode.ac(_cc <> _ct, _run, (Jenc.encode.acof(cls), _pp)) == Jenc.encode.ac(_ct, 0, (Jenc.encode.acof(cls),
+    L1.jpg.feed(L1.jpg.acbits(cls, _stk),
     _pp))) : Array<U32> & Jenc.Put}
 
 # the type of acl_join's parameter hw
@@ -2350,6 +2296,7 @@ def acl_join.hw.ty(+_kk: U32, +_left: Nat, +_stk: List<&2, L1.JTok>, +_k2: U32, 
 
 # the tokens after a nonzero coefficient, joined to the AC coder's tokens after it
 def acl_join(
+  +cls: Bool,
   +cc: U32,
   +ct: List<&2, U32>,
   +run: U32,
@@ -2359,30 +2306,38 @@ def acl_join(
   +stk: List<&2, L1.JTok>,
   +k2: U32,
   +l2: Nat,
-  hs: acl_join.hs.ty(cc, ct, run, pp, stk),
+  hs: acl_join.hs.ty(cls, cc, ct, run, pp, stk),
   hw: acl_join.hw.ty(kk, left, stk, k2, l2),
-  res: AclRes(ct, 0, k2, l2, L1.jpg.feed(acbits(stk), pp))
-) -> AclRes(cc <> ct, run, kk, left, pp):
+  res: AclRes(cls, ct, 0, k2, l2, L1.jpg.feed(L1.jpg.acbits(cls, stk), pp))
+) -> AclRes(cls, cc <> ct, run, kk, left, pp):
   (+ts, eq, wf) = res
-  +sb = acbits(stk)
-  (List.append(&2, L1.JTok, stk, ts), Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.ac(cc <> ct, run, (acbk(), pp)),
-    Jenc.encode.ac(ct, 0, (acbk(), L1.jpg.feed(sb, pp))), (acbk(), L1.jpg.feed(acbits(List.append(&2,
+  +sb = L1.jpg.acbits(cls, stk)
+  (List.append(&2, L1.JTok, stk, ts), Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.ac(cc <> ct, run,
+    (Jenc.encode.acof(cls), pp)),
+    Jenc.encode.ac(ct, 0, (Jenc.encode.acof(cls), L1.jpg.feed(sb, pp))), (Jenc.encode.acof(cls),
+      L1.jpg.feed(L1.jpg.acbits(cls, List.append(&2,
       L1.JTok, stk,
-    ts)), pp)), hs, Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.ac(ct, 0, (acbk(), L1.jpg.feed(sb, pp))), (acbk(),
-    L1.jpg.feed(acbits(ts), L1.jpg.feed(sb, pp))), (acbk(), L1.jpg.feed(acbits(List.append(&2,
+    ts)), pp)), hs, Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.ac(ct, 0, (Jenc.encode.acof(cls), L1.jpg.feed(sb,
+      pp))), (Jenc.encode.acof(cls),
+    L1.jpg.feed(L1.jpg.acbits(cls, ts), L1.jpg.feed(sb, pp))), (Jenc.encode.acof(cls), L1.jpg.feed(L1.jpg.acbits(cls,
+      List.append(&2,
       L1.JTok, stk, ts)), pp)), eq,
-    Equal.cong(Jenc.Put, Array<U32> & Jenc.Put, qq => (acbk(), qq), L1.jpg.feed(acbits(ts), L1.jpg.feed(sb,
+    Equal.cong(Jenc.Put, Array<U32> & Jenc.Put, qq => (Jenc.encode.acof(cls), qq), L1.jpg.feed(L1.jpg.acbits(cls, ts),
+      L1.jpg.feed(sb,
       pp)),
-    L1.jpg.feed(acbits(List.append(&2, L1.JTok, stk, ts)), pp), Equal.trans(Jenc.Put,
-      L1.jpg.feed(acbits(ts), L1.jpg.feed(sb,
-    pp)), L1.jpg.feed(List.append(&2, Bool, sb, acbits(ts)), pp), L1.jpg.feed(acbits(List.append(&2,
+    L1.jpg.feed(L1.jpg.acbits(cls, List.append(&2, L1.JTok, stk, ts)), pp), Equal.trans(Jenc.Put,
+      L1.jpg.feed(L1.jpg.acbits(cls, ts), L1.jpg.feed(sb,
+    pp)), L1.jpg.feed(List.append(&2, Bool, sb, L1.jpg.acbits(cls, ts)), pp), L1.jpg.feed(L1.jpg.acbits(cls,
+      List.append(&2,
       L1.JTok, stk, ts)),
-    pp), Equal.sym(Jenc.Put, L1.jpg.feed(List.append(&2, Bool, sb, acbits(ts)), pp),
-      L1.jpg.feed(acbits(ts), L1.jpg.feed(sb,
-    pp)), feed_app(sb, acbits(ts), pp)), Equal.cong(List<&2, Bool>, Jenc.Put, xs => L1.jpg.feed(xs, pp),
-    List.append(&2, Bool, sb, acbits(ts)), acbits(List.append(&2, L1.JTok, stk, ts)), Equal.sym(List<&2,
+    pp), Equal.sym(Jenc.Put, L1.jpg.feed(List.append(&2, Bool, sb, L1.jpg.acbits(cls, ts)), pp),
+      L1.jpg.feed(L1.jpg.acbits(cls, ts), L1.jpg.feed(sb,
+    pp)), feed_app(sb, L1.jpg.acbits(cls, ts), pp)), Equal.cong(List<&2, Bool>, Jenc.Put, xs => L1.jpg.feed(xs, pp),
+    List.append(&2, Bool, sb, L1.jpg.acbits(cls, ts)), L1.jpg.acbits(cls, List.append(&2, L1.JTok, stk, ts)),
+      Equal.sym(List<&2,
       Bool>,
-    acbits(List.append(&2, L1.JTok, stk, ts)), List.append(&2, Bool, sb, acbits(ts)), acbits_app(stk,
+    L1.jpg.acbits(cls, List.append(&2, L1.JTok, stk, ts)), List.append(&2, Bool, sb, L1.jpg.acbits(cls, ts)),
+      acbits_app(cls, stk,
     ts))))))), Equal.trans(Bool, L1.jpg.acwf(List.append(&2, L1.JTok, stk, ts), L1.JAcSt{kk, left, U32.is_eq(kk,
       64)}),
     L1.jpg.acwf(ts, L1.JAcSt{k2, l2, U32.is_eq(k2, 64)}), True{}, hw(ts), wf))
@@ -2397,6 +2352,7 @@ def uge64_f(+xx: U32, hh: {Nat.is_lt(U32.to_nat(xx), 64n) == True{} : Bool}) -> 
 
 # the AC coder at a nonzero coefficient: ZRLs and its run and size token, then the rest
 def acl_nz(
+  +cls: Bool,
   +cc: U32,
   +ct: List<&2, U32>,
   +run: U32,
@@ -2406,8 +2362,8 @@ def acl_nz(
   +hz: {U32.is_eq(cc, 0) == False{} : Bool},
   +ee: {Nat.add(U32.to_nat(kk), Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct))) == 64n : Nat},
   +hl: {Nat.is_le(Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct)), left) == True{} : Bool},
-  ih: AclIh(ct)
-) -> AclRes(cc <> ct, run, kk, left, pp):
+  ih: AclIh(cls, ct)
+) -> AclRes(cls, cc <> ct, run, kk, left, pp):
   +clip = Jenc.encode.clip(cc, 1023)
   +cat = Jenc.encode.cat(clip)
   +qq = U32.and(15, run)
@@ -2510,15 +2466,20 @@ def acl_nz(
   +hE = {Equal.trans(Bool, U32.is_eq(kk, 64), Nat.is_eq(kn, 64n), False{}, M1.u32_eq(kk, 64), lt_ne(kn, 64n, hk)) :
     {U32.is_eq(kk, 64) == False{} : Bool}}
   +hs = {Equal.trans(Array<U32> & Jenc.Put, Jenc.encode.ac(ct, Jenc.encode.ac.run(U32.is_eq(cc, 0), run),
-    Jenc.encode.ac.at(U32.is_eq(cc, 0), cc, run, (acbk(), pp))), Jenc.encode.ac(ct, 0, Jenc.encode.ac.step(cc, run,
-    (acbk(), pp))), Jenc.encode.ac(ct, 0, (acbk(), L1.jpg.feed(acbits(stk), pp))), Equal.cong(Bool,
+    Jenc.encode.ac.at(U32.is_eq(cc, 0), cc, run, (Jenc.encode.acof(cls), pp))), Jenc.encode.ac(ct, 0,
+    Jenc.encode.ac.step(cc, run,
+    (Jenc.encode.acof(cls), pp))), Jenc.encode.ac(ct, 0, (Jenc.encode.acof(cls), L1.jpg.feed(L1.jpg.acbits(cls, stk),
+      pp))), Equal.cong(Bool,
     Array<U32> & Jenc.Put, zz => Jenc.encode.ac(ct, Jenc.encode.ac.run(zz, run), Jenc.encode.ac.at(zz, cc, run,
-    (acbk(), pp))), U32.is_eq(cc, 0), False{}, hz), Equal.cong(Array<U32> & Jenc.Put, Array<U32> & Jenc.Put, st =>
-    Jenc.encode.ac(ct, 0, st), Jenc.encode.ac.step(cc, run, (acbk(), pp)), (acbk(), L1.jpg.feed(acbits(stk), pp)),
-    step_eq(cc, run, pp))) : {Jenc.encode.ac(cc <> ct, run, (acbk(), pp)) == Jenc.encode.ac(ct, 0, (acbk(),
-    L1.jpg.feed(acbits(stk), pp))) : Array<U32> & Jenc.Put}}
+    (Jenc.encode.acof(cls), pp))), U32.is_eq(cc, 0), False{}, hz), Equal.cong(Array<U32> & Jenc.Put,
+      Array<U32> & Jenc.Put, st =>
+    Jenc.encode.ac(ct, 0, st), Jenc.encode.ac.step(cc, run, (Jenc.encode.acof(cls), pp)), (Jenc.encode.acof(cls),
+      L1.jpg.feed(L1.jpg.acbits(cls, stk), pp)),
+    step_eq(cls, cc, run, pp))) : {Jenc.encode.ac(cc <> ct, run, (Jenc.encode.acof(cls), pp)) == Jenc.encode.ac(ct, 0,
+      (Jenc.encode.acof(cls),
+    L1.jpg.feed(L1.jpg.acbits(cls, stk), pp))) : Array<U32> & Jenc.Put}}
   +zt = zrltoks(zj)
-  acl_join(cc, ct, run, kk, left, pp, stk, k2, L1.jpg.npred(lz), hs, +ts => Equal.trans(Bool,
+  acl_join(cls, cc, ct, run, kk, left, pp, stk, k2, L1.jpg.npred(lz), hs, +ts => Equal.trans(Bool,
     L1.jpg.acwf(List.append(&2, L1.JTok,
     stk, ts), L1.JAcSt{kk, left, U32.is_eq(kk, 64)}), L1.jpg.acwf(List.append(&2, L1.JTok, stk, ts),
       L1.JAcSt{kk, left, False{}}),
@@ -2537,11 +2498,12 @@ def acl_nz(
     L1.JAcSt{kzz, lz, False{}}), L1.jpg.acwf(ts, L1.JAcSt{k2, L1.jpg.npred(lz), U32.is_eq(k2, 64)}), zrlwf(zj,
       kk, left, tk <> ts, d2,
     hz3), symwf(sym, ex, kzz, lz, ts, he, h240, hm, hp, h1, hge, h3)))), ih(0, k2, L1.jpg.npred(lz),
-      L1.jpg.feed(acbits(stk),
+      L1.jpg.feed(L1.jpg.acbits(cls, stk),
     pp), e2, h2))
 
 # the AC coder at a coefficient, by whether it is zero
 def acl_cons(
+  +cls: Bool,
   zero: Bool,
   +cc: U32,
   +ct: List<&2, U32>,
@@ -2552,17 +2514,19 @@ def acl_cons(
   +hz: {U32.is_eq(cc, 0) == zero : Bool},
   +ee: {Nat.add(U32.to_nat(kk), Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct))) == 64n : Nat},
   +hl: {Nat.is_le(Nat.add(U32.to_nat(run), 1n+List.length(&2, U32, ct)), left) == True{} : Bool},
-  ih: AclIh(ct)
-) -> AclRes(cc <> ct, run, kk, left, pp):
+  ih: AclIh(cls, ct)
+) -> AclRes(cls, cc <> ct, run, kk, left, pp):
   match zero:
     case True{}:
-      acl_zero(cc, ct, run, kk, left, pp, hz, ih((run + 1 : U32), kk, left, pp, acl_zero_pos(ct, run, kk, left, ee, hl),
+      acl_zero(cls, cc, ct, run, kk, left, pp, hz, ih((run + 1 : U32), kk, left, pp, acl_zero_pos(ct, run, kk, left,
+        ee, hl),
         acl_zero_left(ct, run, kk, left, ee, hl)))
     case False{}:
-      acl_nz(cc, ct, run, kk, left, pp, hz, ee, hl, ih)
+      acl_nz(cls, cc, ct, run, kk, left, pp, hz, ee, hl, ih)
 
 # the AC coder over coefficients from a state that keeps the invariant writes tokens the decoder's loop reads in full
 def acl(
+  +cls: Bool,
   zz: List<&2, U32>,
   +run: U32,
   +kk: U32,
@@ -2570,67 +2534,76 @@ def acl(
   +pp: Jenc.Put,
   ee: AclPos(kk, run, zz),
   hl: AclLeft(run, zz, left)
-) -> AclRes(zz, run, kk, left, pp):
+) -> AclRes(cls, zz, run, kk, left, pp):
   match zz:
     case Nil{}:
-      acl_nil(U32.is_gt(run, 0), run, kk, left, pp, {==}, ee, hl)
+      acl_nil(cls, U32.is_gt(run, 0), run, kk, left, pp, {==}, ee, hl)
     case +cc <> +ct:
-      acl_cons(U32.is_eq(cc, 0), cc, ct, run, kk, left, pp, {==}, ee, hl, r2 => k2 => l2 => p2 => e2 => h2 => acl(ct,
+      acl_cons(cls, U32.is_eq(cc, 0), cc, ct, run, kk, left, pp, {==}, ee, hl,
+        r2 => k2 => l2 => p2 => e2 => h2 => acl(cls, ct,
         r2,
         k2, l2, p2, e2, h2))
 
-# the encoder's books, written out
-def book() -> Jenc.Book:
-  Jenc.Book{dcbk(), acbk()}
-
 # one block the encoder codes: a token the decoder reads whole, fed to the writer, the books back, and the next
 # predictor below 2048
-def BlkOut(+pred: U32, +pp: Jenc.Put, -zz: List<&2, U32>) -> Type:
-  &bt: L1.JBlkTok -> &dd: U32 -> &_e: {Jenc.encode.block.go(book(), pp, pred, zz) == (book(), dd,
-    L1.jpg.feed(blkbits(bt),
-    pp)) : Jenc.Book & U32 & Jenc.Put} -> &_h: {U32.is_lt(dd, 2048) == True{} : Bool} -> {L1.jpg.blkwf(bt) == True{} :
-    Bool}
+def BlkOut(+cls: Bool, +pred: U32, +pp: Jenc.Put, -zz: List<&2, U32>) -> Type:
+  &dcs: U32 -> &dcx: List<&2, Bool> -> &acs: List<&2, L1.JTok> -> &dd: U32 -> &_e: {Jenc.encode.block.go(
+    Jenc.encode.bookof(cls), pp, pred, zz) == (Jenc.encode.bookof(cls), dd, L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{cls,
+    dcs, dcx, acs}), pp)) : Jenc.Book & U32 & Jenc.Put} -> &_h: {U32.is_lt(dd, 2048) == True{} : Bool} ->
+    {L1.jpg.blkwf(L1.JBlkTok{cls, dcs, dcx, acs}) == True{} : Bool}
 
 # the type of blk_fin's parameter edc
-def blk_fin.edc.ty(+_dc0: U32, +_pred: U32, +_pp: Jenc.Put, +_dcs: U32, +_dcx: List<&2, Bool>) -> Type:
-  {Jenc.encode.dcdiff(dcbk(), _pp, Jenc.encode.dcbias(_dc0), _pred) == (dcbk(), L1.jpg.feed(List.append(&2, Bool,
-    code.dc(_dcs), _dcx), _pp)) : Array<U32> & Jenc.Put}
+def blk_fin.edc.ty(+cls: Bool, +_dc0: U32, +_pred: U32, +_pp: Jenc.Put, +_dcs: U32, +_dcx: List<&2, Bool>) -> Type:
+  {Jenc.encode.dcdiff(Jenc.encode.dcof(cls), _pp, Jenc.encode.dcbias(_dc0), _pred) == (Jenc.encode.dcof(cls),
+    L1.jpg.feed(List.append(&2, Bool,
+    L1.jpg.dcode(cls, _dcs), _dcx), _pp)) : Array<U32> & Jenc.Put}
 
 # the block's AC part coded after its DC token
 def blk_fin(
+  +cls: Bool,
   +dc0: U32,
   +rest: List<&2, U32>,
   +pred: U32,
   +pp: Jenc.Put,
   +dcs: U32,
   +dcx: List<&2, Bool>,
-  edc: blk_fin.edc.ty(dc0, pred, pp, dcs, dcx),
+  edc: blk_fin.edc.ty(cls, dc0, pred, pp, dcs, dcx),
   hm: {L1.jpg.memb(dcs, Jenc.encode.dcsyms()) == True{} : Bool},
   hl: {Nat.is_eq(List.length(&2, Bool, dcx), U32.to_nat(dcs)) == True{} : Bool},
-  ares: AclRes(rest, 0, 1, 63n, L1.jpg.feed(List.append(&2, Bool, code.dc(dcs), dcx), pp))
-) -> BlkOut(pred, pp, dc0 <> rest):
+  ares: AclRes(cls, rest, 0, 1, 63n, L1.jpg.feed(List.append(&2, Bool, L1.jpg.dcode(cls, dcs), dcx), pp))
+) -> BlkOut(cls, pred, pp, dc0 <> rest):
   (+ts, eac, wf) = ares
   +dd = Jenc.encode.dcbias(dc0)
-  +cd = List.append(&2, Bool, code.dc(dcs), dcx)
+  +cd = List.append(&2, Bool, L1.jpg.dcode(cls, dcs), dcx)
   +p1 = L1.jpg.feed(cd, pp)
-  +ab = acbits(ts)
-  +bt = {L1.JBlkTok{dcs, dcx, ts} : L1.JBlkTok}
-  (bt, dd, Equal.trans(Jenc.Book & U32 & Jenc.Put, Jenc.encode.block.dc(Jenc.encode.dcdiff(dcbk(), pp, dd, pred),
-    acbk(), dd, rest), Jenc.encode.block.dc((dcbk(), p1), acbk(), dd, rest), (book(), dd, L1.jpg.feed(
-    blkbits(bt), pp)), Equal.cong(Array<U32> & Jenc.Put, Jenc.Book & U32 & Jenc.Put, gg => Jenc.encode.block.dc(gg,
-    acbk(), dd, rest), Jenc.encode.dcdiff(dcbk(), pp, dd, pred), (dcbk(), p1), edc), Equal.trans(Jenc.Book &
-    U32 & Jenc.Put, Jenc.encode.block.join(Jenc.encode.ac(rest, 0, (acbk(), p1)), dcbk(), dd),
-    Jenc.encode.block.join((acbk(), L1.jpg.feed(ab, p1)), dcbk(), dd), (book(), dd, L1.jpg.feed(blkbits(bt),
+  +ab = L1.jpg.acbits(cls, ts)
+  +bt = {L1.JBlkTok{cls, dcs, dcx, ts} : L1.JBlkTok}
+  (dcs, dcx, ts, dd, Equal.trans(Jenc.Book & U32 & Jenc.Put,
+    Jenc.encode.block.dc(Jenc.encode.dcdiff(Jenc.encode.dcof(cls), pp, dd, pred),
+    Jenc.encode.acof(cls), dd, rest), Jenc.encode.block.dc((Jenc.encode.dcof(cls), p1), Jenc.encode.acof(cls), dd,
+      rest), (Jenc.encode.bookof(cls), dd, L1.jpg.feed(
+    L1.jpg.blkbits(bt), pp)), Equal.cong(Array<U32> & Jenc.Put, Jenc.Book & U32 & Jenc.Put,
+      gg => Jenc.encode.block.dc(gg,
+    Jenc.encode.acof(cls), dd, rest), Jenc.encode.dcdiff(Jenc.encode.dcof(cls), pp, dd, pred), (Jenc.encode.dcof(cls),
+      p1), edc), Equal.trans(Jenc.Book &
+    U32 & Jenc.Put, Jenc.encode.block.join(Jenc.encode.ac(rest, 0, (Jenc.encode.acof(cls), p1)),
+      Jenc.encode.dcof(cls), dd),
+    Jenc.encode.block.join((Jenc.encode.acof(cls), L1.jpg.feed(ab, p1)), Jenc.encode.dcof(cls), dd),
+      (Jenc.encode.bookof(cls), dd, L1.jpg.feed(L1.jpg.blkbits(bt),
       pp)),
-    Equal.cong(Array<U32> & Jenc.Put, Jenc.Book & U32 & Jenc.Put, gg => Jenc.encode.block.join(gg, dcbk(), dd),
-    Jenc.encode.ac(rest, 0, (acbk(), p1)), (acbk(), L1.jpg.feed(ab, p1)), eac), Equal.cong(Jenc.Put, Jenc.Book & U32 &
-    Jenc.Put, qq => (book(), dd, qq), L1.jpg.feed(ab, p1), L1.jpg.feed(blkbits(bt), pp), Equal.trans(Jenc.Put,
+    Equal.cong(Array<U32> & Jenc.Put, Jenc.Book & U32 & Jenc.Put, gg => Jenc.encode.block.join(gg,
+      Jenc.encode.dcof(cls), dd),
+    Jenc.encode.ac(rest, 0, (Jenc.encode.acof(cls), p1)), (Jenc.encode.acof(cls), L1.jpg.feed(ab, p1)), eac),
+      Equal.cong(Jenc.Put, Jenc.Book & U32 &
+    Jenc.Put, qq => (Jenc.encode.bookof(cls), dd, qq), L1.jpg.feed(ab, p1), L1.jpg.feed(L1.jpg.blkbits(bt), pp),
+      Equal.trans(Jenc.Put,
       L1.jpg.feed(ab,
-    p1), L1.jpg.feed(List.append(&2, Bool, cd, ab), pp), L1.jpg.feed(blkbits(bt), pp), Equal.sym(Jenc.Put,
+    p1), L1.jpg.feed(List.append(&2, Bool, cd, ab), pp), L1.jpg.feed(L1.jpg.blkbits(bt), pp), Equal.sym(Jenc.Put,
       L1.jpg.feed(
     List.append(&2, Bool, cd, ab), pp), L1.jpg.feed(ab, p1), feed_app(cd, ab, pp)), Equal.cong(List<&2, Bool>,
       Jenc.Put,
-    xs => L1.jpg.feed(xs, pp), List.append(&2, Bool, cd, ab), blkbits(bt), huf.app_assoc(code.dc(dcs), dcx,
+    xs => L1.jpg.feed(xs, pp), List.append(&2, Bool, cd, ab), L1.jpg.blkbits(bt), huf.app_assoc(L1.jpg.dcode(cls,
+      dcs), dcx,
       ab)))))),
     bias_lt(dc0), and_tt(L1.jpg.memb(dcs, Jenc.encode.dcsyms()), Bool.and(Nat.is_eq(List.length(&2, Bool, dcx),
     U32.to_nat(dcs)), L1.jpg.acwf(ts, L1.JAcSt{1, 63n, False{}})), hm, and_tt(Nat.is_eq(List.length(&2, Bool, dcx),
@@ -2638,16 +2611,18 @@ def blk_fin(
 
 # the block after its DC token is named
 def blk_dc(
+  +cls: Bool,
   +dc0: U32,
   +rest: List<&2, U32>,
   +pred: U32,
   +pp: Jenc.Put,
   +hr: {List.length(&2, U32, rest) == 63n : Nat},
-  dres: DcRes(Jenc.encode.dcbias(dc0), pred, pp)
-) -> BlkOut(pred, pp, dc0 <> rest):
+  dres: DcRes(cls, Jenc.encode.dcbias(dc0), pred, pp)
+) -> BlkOut(cls, pred, pp, dc0 <> rest):
   (+dcs, +dcx, edc, hm, hl) = dres
-  +p1 = L1.jpg.feed(List.append(&2, Bool, code.dc(dcs), dcx), pp)
-  blk_fin(dc0, rest, pred, pp, dcs, dcx, edc, hm, hl, acl(rest, 0, 1, 63n, p1, Equal.cong(Nat, Nat, nn => Nat.add(1n,
+  +p1 = L1.jpg.feed(List.append(&2, Bool, L1.jpg.dcode(cls, dcs), dcx), pp)
+  blk_fin(cls, dc0, rest, pred, pp, dcs, dcx, edc, hm, hl, acl(cls, rest, 0, 1, 63n, p1, Equal.cong(Nat, Nat,
+    nn => Nat.add(1n,
     Nat.add(0n, nn)), List.length(&2, U32, rest), 63n, hr), Equal.trans(Bool, Nat.is_le(List.length(&2, U32, rest),
       63n),
     Nat.is_le(63n, 63n), True{}, Equal.cong(Nat, Bool, nn => Nat.is_le(nn, 63n), List.length(&2, U32, rest), 63n, hr),
@@ -2659,19 +2634,20 @@ def zero_ne(+nn: Nat, ee: {0n == 1n+nn : Nat}) -> Empty:
 
 # a block of 64 coefficients the encoder codes, from a predictor below 2048
 def jenc.blk(
+  +cls: Bool,
   zz: List<&2, U32>,
   +pred: U32,
   +pp: Jenc.Put,
   hl: {List.length(&2, U32, zz) == 64n : Nat},
   hp: {U32.is_lt(pred, 2048) == True{} : Bool}
-) -> BlkOut(pred, pp, zz):
+) -> BlkOut(cls, pred, pp, zz):
   match zz:
     case Nil{}:
-      Empty.absurd(BlkOut(pred, pp, []), zero_ne(63n, hl))
+      Empty.absurd(BlkOut(cls, pred, pp, []), zero_ne(63n, hl))
     case +dc0 <> +rest:
-      blk_dc(dc0, rest, pred, pp, Equal.cong(Nat, Nat, nn => L1.jpg.npred(nn), 1n+List.length(&2, U32, rest), 64n,
+      blk_dc(cls, dc0, rest, pred, pp, Equal.cong(Nat, Nat, nn => L1.jpg.npred(nn), 1n+List.length(&2, U32, rest), 64n,
         hl),
-        dcres(Jenc.encode.dcbias(dc0), pred, pp, bias_lt(dc0), hp))
+        dcres(cls, Jenc.encode.dcbias(dc0), pred, pp, bias_lt(dc0), hp))
 
 # one value read at an index joins the values read so far, the array handed on
 def vals.put(got: Array<U32> & U32, acc: List<&2, U32>) -> Array<U32> & List<&2, U32>:
@@ -3122,137 +3098,173 @@ def lenz(
   vlen(Jpeg.decode.zig(), bb)
 
 # a block of values, once they are known to be 64
-def Blk64(+_pred: U32, +_pp: Jenc.Put, +_xs: List<&2, U32>) -> Type:
-  @hl: {List.length(&2, U32, _xs) == 64n : Nat} -> BlkOut(_pred, _pp, _xs)
+def Blk64(+cls: Bool, +_pred: U32, +_pp: Jenc.Put, +_xs: List<&2, U32>) -> Type:
+  @hl: {List.length(&2, U32, _xs) == 64n : Nat} -> BlkOut(cls, _pred, _pp, _xs)
 
 # the block of the values an array holds at the zigzag, once they are known to be 64, from a copy of it
 def blkh(
+  +cls: Bool,
   -aa: Array<U32>,
   bb: Array<U32>,
   ee: {bb == aa : Array<U32>},
   +pp: Jenc.Put,
   +pred: U32,
   hp: {U32.is_lt(pred, 2048) == True{} : Bool}
-) -> Blk64(pred, pp, vals(Jpeg.decode.zig(), (aa, []))):
-  %ee : Blk64(pred, pp, vals(Jpeg.decode.zig(), (_, [])))
-  hl => jenc.blk(vals(Jpeg.decode.zig(), (bb, [])), pred, pp, hl, hp)
+) -> Blk64(cls, pred, pp, vals(Jpeg.decode.zig(), (aa, []))):
+  %ee : Blk64(cls, pred, pp, vals(Jpeg.decode.zig(), (_, [])))
+  hl => jenc.blk(cls, vals(Jpeg.decode.zig(), (bb, [])), pred, pp, hl, hp)
 
 # the block of the values an array holds at the zigzag, the array one of two copies
 def blkv(
+  +cls: Bool,
   -aa: Array<U32>,
   +pp: Jenc.Put,
   +pred: U32,
   hp: {U32.is_lt(pred, 2048) == True{} : Bool},
   dd: Dup(aa)
-) -> BlkOut(pred, pp, vals(Jpeg.decode.zig(), (aa, []))):
+) -> BlkOut(cls, pred, pp, vals(Jpeg.decode.zig(), (aa, []))):
   (b1, b2, e1, e2) = dd
-  blkh(aa, b1, e1, pp, pred, hp)(lenz(aa, b2, e2))
+  blkh(cls, aa, b1, e1, pp, pred, hp)(lenz(aa, b2, e2))
 
 # the encoder's scan of any frequency plane codes a block the decoder reads whole
-def ScanOut(-aa: Array<U32>, +pp: Jenc.Put, +pred: U32) -> Type:
-  &bt: L1.JBlkTok -> &dd: U32 -> &_e: {Jenc.encode.scan(book(), pp, pred, aa, Jpeg.decode.zig()) == (book(), dd,
-    L1.jpg.feed(blkbits(bt), pp)) : Jenc.Book & U32 & Jenc.Put} -> &_h: {U32.is_lt(dd, 2048) == True{} : Bool} ->
-    {L1.jpg.blkwf(bt) == True{} : Bool}
+def ScanOut(+cls: Bool, -aa: Array<U32>, +pp: Jenc.Put, +pred: U32) -> Type:
+  &dcs: U32 -> &dcx: List<&2, Bool> -> &acs: List<&2, L1.JTok> -> &dd: U32 -> &_e: {Jenc.encode.scan(
+    Jenc.encode.bookof(cls), pp, pred, aa, Jpeg.decode.zig()) == (Jenc.encode.bookof(cls), dd,
+    L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{cls, dcs, dcx, acs}), pp)) : Jenc.Book & U32 & Jenc.Put} -> &_h:
+    {U32.is_lt(dd, 2048) == True{} : Bool} -> {L1.jpg.blkwf(L1.JBlkTok{cls, dcs, dcx, acs}) == True{} : Bool}
 
 # the type of scan_fin's parameter es
-def scan_fin.es.ty(_aa: Array<U32>, +_pp: Jenc.Put, +_pred: U32) -> Type:
-  {Jenc.encode.scan(book(), _pp, _pred, _aa, Jpeg.decode.zig()) == Jenc.encode.block.go(book(), _pp, _pred,
+def scan_fin.es.ty(+cls: Bool, _aa: Array<U32>, +_pp: Jenc.Put, +_pred: U32) -> Type:
+  {Jenc.encode.scan(Jenc.encode.bookof(cls), _pp, _pred, _aa,
+    Jpeg.decode.zig()) == Jenc.encode.block.go(Jenc.encode.bookof(cls), _pp, _pred,
     vals(Jpeg.decode.zig(), (_aa, []))) : Jenc.Book & U32 & Jenc.Put}
 
 # the scan's block, moved along the scan's equation
 def scan_fin(
+  +cls: Bool,
   -aa: Array<U32>,
   +pp: Jenc.Put,
   +pred: U32,
-  es: scan_fin.es.ty(aa, pp, pred),
-  bo: BlkOut(pred, pp, vals(Jpeg.decode.zig(), (aa, [])))
-) -> ScanOut(aa, pp, pred):
-  (bt, +dd, eb, hd, hw) = bo
-  (bt, dd, Equal.trans(Jenc.Book & U32 & Jenc.Put, Jenc.encode.scan(book(), pp, pred, aa, Jpeg.decode.zig()),
-    Jenc.encode.block.go(book(), pp, pred, vals(Jpeg.decode.zig(), (aa, []))), (book(), dd, L1.jpg.feed(
-    blkbits(bt), pp)), es, eb), hd, hw)
+  es: scan_fin.es.ty(cls, aa, pp, pred),
+  bo: BlkOut(cls, pred, pp, vals(Jpeg.decode.zig(), (aa, [])))
+) -> ScanOut(cls, aa, pp, pred):
+  (+dcs, +dcx, +acs, +dd, eb, hd, hw) = bo
+  (dcs, dcx, acs, dd, Equal.trans(Jenc.Book & U32 & Jenc.Put, Jenc.encode.scan(Jenc.encode.bookof(cls), pp, pred, aa,
+    Jpeg.decode.zig()), Jenc.encode.block.go(Jenc.encode.bookof(cls), pp, pred, vals(Jpeg.decode.zig(), (aa, []))),
+    (Jenc.encode.bookof(cls), dd, L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{cls, dcs, dcx, acs}), pp)), es, eb), hd, hw)
 
 # the scan's equation for an array known equal to another
 def scan_tr(
+  +cls: Bool,
   -aa: Array<U32>,
   bb: Array<U32>,
   ee: {bb == aa : Array<U32>},
   +pp: Jenc.Put,
   +pred: U32
-) -> {Jenc.encode.scan(book(), pp, pred, aa, Jpeg.decode.zig()) == Jenc.encode.block.go(book(), pp, pred,
+) -> {Jenc.encode.scan(Jenc.encode.bookof(cls), pp, pred, aa,
+  Jpeg.decode.zig()) == Jenc.encode.block.go(Jenc.encode.bookof(cls), pp, pred,
   vals( Jpeg.decode.zig(), (aa, []))) : Jenc.Book & U32 & Jenc.Put}:
-  %ee : {Jenc.encode.scan(book(), pp, pred, _, Jpeg.decode.zig()) == Jenc.encode.block.go(book(), pp, pred,
+  %ee : {Jenc.encode.scan(Jenc.encode.bookof(cls), pp, pred, _,
+    Jpeg.decode.zig()) == Jenc.encode.block.go(Jenc.encode.bookof(cls), pp, pred,
     vals(Jpeg.decode.zig(), (_, []))) : Jenc.Book & U32 & Jenc.Put}
-  scan_eq(book(), pp, pred, bb, Jpeg.decode.zig())
+  scan_eq(Jenc.encode.bookof(cls), pp, pred, bb, Jpeg.decode.zig())
 
 # the scan of a plane, from copies of it
 def scan_d(
+  +cls: Bool,
   -aa: Array<U32>,
   +pp: Jenc.Put,
   +pred: U32,
   hp: {U32.is_lt(pred, 2048) == True{} : Bool},
   dd: Dup(aa)
-) -> ScanOut(aa, pp, pred):
+) -> ScanOut(cls, aa, pp, pred):
   (b1, b2, e1, e2) = dd
-  scan_fin(aa, pp, pred, scan_tr(aa, b1, e1, pp, pred), blkv(aa, pp, pred, hp, dup.tr(b2, aa, e2, dup(b2))))
+  scan_fin(cls, aa, pp, pred, scan_tr(cls, aa, b1, e1, pp, pred), blkv(cls, aa, pp, pred, hp, dup.tr(b2, aa, e2,
+    dup(b2))))
 
 # the scan of any plane
 def scan_ok(
+  +cls: Bool,
   aa: Array<U32>,
   +pp: Jenc.Put,
   +pred: U32,
   hp: {U32.is_lt(pred, 2048) == True{} : Bool}
-) -> ScanOut(aa, pp, pred):
-  scan_d(aa, pp, pred, hp, dup(aa))
+) -> ScanOut(cls, aa, pp, pred):
+  scan_d(cls, aa, pp, pred, hp, dup(aa))
 
 # one component's block of an MCU, flat or not
-def ChOut(+flat: Bool, -plane: Array<U32>, +pp: Jenc.Put, +pred: U32, +kern: Jenc.Kern, +qs: List<&2, U32>) -> Type:
-  &bt: L1.JBlkTok -> &dd: U32 -> &_e: {Jenc.encode.chan.go(flat, plane, book(), pp, pred, kern, Jpeg.decode.zig(),
-    qs) ==
-    (book(), dd, L1.jpg.feed(blkbits(bt), pp)) : Jenc.Book & U32 & Jenc.Put} -> &_h: {U32.is_lt(dd,
-      2048) == True{} :
-    Bool} -> {L1.jpg.blkwf(bt) == True{} : Bool}
+def ChOut(
+  +cls: Bool,
+  +flat: Bool,
+  -plane: Array<U32>,
+  +pp: Jenc.Put,
+  +pred: U32,
+  +kern: Jenc.Kern,
+  +qs: List<&2, Jenc.Oct>
+) -> Type:
+  &dcs: U32 -> &dcx: List<&2, Bool> -> &acs: List<&2, L1.JTok> -> &dd: U32 -> &_e: {Jenc.encode.chan.go(flat, plane,
+    Jenc.encode.bookof(cls), pp, pred, kern, Jpeg.decode.zig(), qs) == (Jenc.encode.bookof(cls), dd,
+    L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{cls, dcs, dcx, acs}), pp)) : Jenc.Book & U32 & Jenc.Put} -> &_h:
+    {U32.is_lt(dd, 2048) == True{} : Bool} -> {L1.jpg.blkwf(L1.JBlkTok{cls, dcs, dcx, acs}) == True{} : Bool}
 
 # one component's block, by whether it is flat
 def chan_ok(
+  +cls: Bool,
   flat: Bool,
   plane: Array<U32>,
   +pp: Jenc.Put,
   +pred: U32,
   +kern: Jenc.Kern,
-  +qs: List<&2, U32>,
+  +qs: List<&2, Jenc.Oct>,
   hp: {U32.is_lt(pred, 2048) == True{} : Bool}
-) -> ChOut(flat, plane, pp, pred, kern, qs):
+) -> ChOut(cls, flat, plane, pp, pred, kern, qs):
   match flat:
     case True{}:
-      jenc.blk(List.replicate(U32, 64n, 0), pred, pp, {==}, hp)
+      jenc.blk(cls, List.replicate(U32, 64n, 0), pred, pp, {==}, hp)
     case False{}:
-      scan_ok(Jenc.encode.freq(plane, kern), pp, pred, hp)
+      scan_ok(cls, Jenc.encode.freq(plane, kern, qs), pp, pred, hp)
 
 # the encoder's cosine kernel
 def kern() -> Jenc.Kern:
   Jenc.encode.kern(Jpeg.decode.cos())
 
-# three blocks' bits fed after bits already fed
+# the luminance block, then the two chrominance blocks, fed after bits already fed
 def feed3b(+b1: L1.JBlkTok, +b2: L1.JBlkTok, +b3: L1.JBlkTok, +bit: Jenc.Put) -> Jenc.Put:
-  L1.jpg.feed(blkbits(b3), L1.jpg.feed(blkbits(b2), L1.jpg.feed(blkbits(b1), bit)))
+  L1.jpg.feed(L1.jpg.blkbits(b3), L1.jpg.feed(L1.jpg.blkbits(b2), L1.jpg.feed(L1.jpg.blkbits(b1), bit)))
 
-# one MCU the encoder codes: three blocks the decoder reads whole, fed to the writer, the books back, and the next
-# predictors below 2048
-def McuOut(-tt: Jenc.Tile, +bit: Jenc.Put, +py: U32, +pb: U32, +pr: U32) -> Type:
-  &t1: L1.JBlkTok -> &t2: L1.JBlkTok -> &t3: L1.JBlkTok -> &aa: Array<U32> -> &d1: U32 -> &d2: U32 -> &d3: U32 ->
-    &_e:
-    {Jenc.encode.step.tile(tt, book(), bit, py, pb, pr, kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (aa,
-    book(), d1, d2, d3, feed3b(t1, t2, t3, bit)) : Array<U32> & Jenc.Book & U32 & U32 & U32 & Jenc.Put} -> &_h1:
-    {U32.is_lt(d1, 2048) == True{} : Bool} -> &_h2: {U32.is_lt(d2, 2048) == True{} : Bool} -> &_h3: {U32.is_lt(d3,
-    2048) == True{} : Bool} -> &_w1: {L1.jpg.blkwf(t1) == True{} : Bool} -> &_w2: {L1.jpg.blkwf(t2) == True{} :
-      Bool} ->
-    {L1.jpg.blkwf(t3) == True{} : Bool}
+# one MCU the encoder codes: a luminance block and two chrominance blocks the decoder reads whole, fed to the writer,
+# both books back, and the next predictors below 2048
+def McuOut(
+  -tt: Jenc.Tile,
+  +bit: Jenc.Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +ql: List<&2, Jenc.Oct>,
+  +qc: List<&2, Jenc.Oct>
+) -> Type:
+  &s1: U32 -> &x1: List<&2, Bool> -> &a1: List<&2, L1.JTok> -> &s2: U32 -> &x2: List<&2, Bool> -> &a2: List<&2,
+    L1.JTok> -> &s3: U32 -> &x3: List<&2, Bool> -> &a3: List<&2, L1.JTok> -> &aa: Array<U32> -> &d1: U32 -> &d2: U32
+    -> &d3: U32 -> &_e: {Jenc.encode.step.tile(tt, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), bit, py, pb,
+    pr, kern(), Jpeg.decode.zig(), ql, qc) == (aa, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3,
+    feed3b(L1.JBlkTok{False{}, s1, x1, a1}, L1.JBlkTok{True{}, s2, x2, a2}, L1.JBlkTok{True{}, s3, x3, a3}, bit)) :
+    Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put} -> &_h1: {U32.is_lt(d1, 2048) == True{} : Bool}
+    -> &_h2: {U32.is_lt(d2, 2048) == True{} : Bool} -> &_h3: {U32.is_lt(d3, 2048) == True{} : Bool} -> &_w1:
+    {L1.jpg.blkwf(L1.JBlkTok{False{}, s1, x1, a1}) == True{} : Bool} -> &_w2: {L1.jpg.blkwf(L1.JBlkTok{True{}, s2, x2,
+    a2}) == True{} : Bool} -> {L1.jpg.blkwf(L1.JBlkTok{True{}, s3, x3, a3}) == True{} : Bool}
 
 # the type of mcu3's parameter e1
-def mcu3.e1.ty(_ys: Array<U32>, +_fy: Bool, +_bit: Jenc.Put, +_py: U32, +_t1: L1.JBlkTok, +_d1: U32) -> Type:
-  {Jenc.encode.chan.go(_fy, _ys, book(), _bit, _py, kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (book(), _d1,
-    L1.jpg.feed(blkbits(_t1), _bit)) : Jenc.Book & U32 & Jenc.Put}
+def mcu3.e1.ty(
+  _ys: Array<U32>,
+  +_fy: Bool,
+  +_bit: Jenc.Put,
+  +_py: U32,
+  +_ql: List<&2, Jenc.Oct>,
+  +_t1: L1.JBlkTok,
+  +_d1: U32
+) -> Type:
+  {Jenc.encode.chan.go(_fy, _ys, Jenc.encode.bookof(False{}), _bit, _py, kern(), Jpeg.decode.zig(), _ql) ==
+    (Jenc.encode.bookof(False{}), _d1, L1.jpg.feed(L1.jpg.blkbits(_t1), _bit)) : Jenc.Book & U32 & Jenc.Put}
 
 # the type of mcu3's parameter e2
 def mcu3.e2.ty(
@@ -3260,18 +3272,31 @@ def mcu3.e2.ty(
   +_fb: Bool,
   +_bit: Jenc.Put,
   +_pb: U32,
+  +_qc: List<&2, Jenc.Oct>,
   +_t1: L1.JBlkTok,
   +_t2: L1.JBlkTok,
   +_d2: U32
 ) -> Type:
-  {Jenc.encode.chan.go(_fb, _bs, book(), L1.jpg.feed(blkbits(_t1), _bit), _pb, kern(), Jpeg.decode.zig(),
-    Jenc.encode.quant()) == (book(), _d2, L1.jpg.feed(blkbits(_t2), L1.jpg.feed(blkbits(_t1),
-    _bit))) : Jenc.Book & U32 & Jenc.Put}
+  {Jenc.encode.chan.go(_fb, _bs, Jenc.encode.bookof(True{}), L1.jpg.feed(L1.jpg.blkbits(_t1), _bit), _pb, kern(),
+    Jpeg.decode.zig(), _qc) == (Jenc.encode.bookof(True{}), _d2, L1.jpg.feed(L1.jpg.blkbits(_t2),
+    L1.jpg.feed(L1.jpg.blkbits(_t1), _bit))) : Jenc.Book & U32 & Jenc.Put}
 
 # the type of mcu3's parameter c3
-def mcu3.c3.ty(_rs: Array<U32>, +_fr: Bool, +_bit: Jenc.Put, +_pr: U32, +_t1: L1.JBlkTok, +_t2: L1.JBlkTok) -> Type:
-  ChOut(_fr, _rs, L1.jpg.feed(blkbits(_t2), L1.jpg.feed(blkbits(_t1), _bit)), _pr, kern(),
-    Jenc.encode.quant())
+def mcu3.c3.ty(
+  -_rs: Array<U32>,
+  +_fr: Bool,
+  +_bit: Jenc.Put,
+  +_pr: U32,
+  +_qc: List<&2, Jenc.Oct>,
+  +_s1: U32,
+  +_x1: List<&2, Bool>,
+  +_a1: List<&2, L1.JTok>,
+  +_s2: U32,
+  +_x2: List<&2, Bool>,
+  +_a2: List<&2, L1.JTok>
+) -> Type:
+  ChOut(True{}, _fr, _rs, L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{True{}, _s2, _x2, _a2}),
+    L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{False{}, _s1, _x1, _a1}), _bit)), _pr, kern(), _qc)
 
 # the MCU's Cr block, after its Y and Cb blocks
 def mcu3(
@@ -3286,43 +3311,57 @@ def mcu3(
   +py: U32,
   +pb: U32,
   +pr: U32,
-  +t1: L1.JBlkTok,
+  +ql: List<&2, Jenc.Oct>,
+  +qc: List<&2, Jenc.Oct>,
+  +s1: U32,
+  +x1: List<&2, Bool>,
+  +a1: List<&2, L1.JTok>,
   +d1: U32,
-  e1: mcu3.e1.ty(ys, fy, bit, py, t1, d1),
+  e1: mcu3.e1.ty(ys, fy, bit, py, ql, L1.JBlkTok{False{}, s1, x1, a1}, d1),
   h1: {U32.is_lt(d1, 2048) == True{} : Bool},
-  w1: {L1.jpg.blkwf(t1) == True{} : Bool},
-  +t2: L1.JBlkTok,
+  w1: {L1.jpg.blkwf(L1.JBlkTok{False{}, s1, x1, a1}) == True{} : Bool},
+  +s2: U32,
+  +x2: List<&2, Bool>,
+  +a2: List<&2, L1.JTok>,
   +d2: U32,
-  e2: mcu3.e2.ty(bs, fb, bit, pb, t1, t2, d2),
+  e2: mcu3.e2.ty(bs, fb, bit, pb, qc, L1.JBlkTok{False{}, s1, x1, a1}, L1.JBlkTok{True{}, s2, x2, a2}, d2),
   h2: {U32.is_lt(d2, 2048) == True{} : Bool},
-  w2: {L1.jpg.blkwf(t2) == True{} : Bool},
-  c3: mcu3.c3.ty(rs, fr, bit, pr, t1, t2)
-) -> McuOut(Jenc.Tile{pix, ys, bs, rs, fy, fb, fr}, bit, py, pb, pr):
-  (+t3, +d3, e3, h3, w3) = c3
+  w2: {L1.jpg.blkwf(L1.JBlkTok{True{}, s2, x2, a2}) == True{} : Bool},
+  c3: mcu3.c3.ty(rs, fr, bit, pr, qc, s1, x1, a1, s2, x2, a2)
+) -> McuOut(Jenc.Tile{pix, ys, bs, rs, fy, fb, fr}, bit, py, pb, pr, ql, qc):
+  (+s3, +x3, +a3, +d3, e3, h3, w3) = c3
   +kn = kern()
   +zg = Jpeg.decode.zig()
-  +qs = Jenc.encode.quant()
-  +p1 = L1.jpg.feed(blkbits(t1), bit)
-  +p2 = L1.jpg.feed(blkbits(t2), p1)
-  +p3 = L1.jpg.feed(blkbits(t3), p2)
-  (t1, t2, t3, pix, d1, d2, d3, Equal.trans(Array<U32> & Jenc.Book & U32 & U32 & U32 & Jenc.Put, Jenc.encode.step.cb(
-    Jenc.encode.chan.go(fy, ys, book(), bit, py, kn, zg, qs), pix, bs, rs, fb, fr, pb, pr, kn, zg, qs),
-    Jenc.encode.step.cb((book(), d1, p1), pix, bs, rs, fb, fr, pb, pr, kn, zg, qs), (pix, book(), d1, d2, d3, p3),
-    Equal.cong(Jenc.Book & U32 & Jenc.Put, Array<U32> & Jenc.Book & U32 & U32 & U32 & Jenc.Put, gg =>
-    Jenc.encode.step.cb(gg, pix, bs, rs, fb, fr, pb, pr, kn, zg, qs), Jenc.encode.chan.go(fy, ys, book(), bit, py, kn,
-    zg, qs), (book(), d1, p1), e1), Equal.trans(Array<U32> & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
-    Jenc.encode.step.cr(Jenc.encode.chan.go(fb, bs, book(), p1, pb, kn, zg, qs), pix, rs, fr, d1, pr, kn, zg, qs),
-    Jenc.encode.step.cr((book(), d2, p2), pix, rs, fr, d1, pr, kn, zg, qs), (pix, book(), d1, d2, d3, p3),
-    Equal.cong(Jenc.Book & U32 & Jenc.Put, Array<U32> & Jenc.Book & U32 & U32 & U32 & Jenc.Put, gg =>
-    Jenc.encode.step.cr(gg, pix, rs, fr, d1, pr, kn, zg, qs), Jenc.encode.chan.go(fb, bs, book(), p1, pb, kn, zg, qs),
-    (book(), d2, p2), e2), Equal.cong(Jenc.Book & U32 & Jenc.Put, Array<U32> & Jenc.Book & U32 & U32 & U32 &
-    Jenc.Put, gg => Jenc.encode.step.end(Jenc.encode.chan.pair(gg, pix), d1, d2), Jenc.encode.chan.go(fr, rs, book(),
-    p2, pr, kn, zg, qs), (book(), d3, p3), e3))), h1, h2, h3, w1, w2, w3)
-
-# the type of mcu2's parameter e1
-def mcu2.e1.ty(_ys: Array<U32>, +_fy: Bool, +_bit: Jenc.Put, +_py: U32, +_t1: L1.JBlkTok, +_d1: U32) -> Type:
-  {Jenc.encode.chan.go(_fy, _ys, book(), _bit, _py, kern(), Jpeg.decode.zig(), Jenc.encode.quant()) == (book(), _d1,
-    L1.jpg.feed(blkbits(_t1), _bit)) : Jenc.Book & U32 & Jenc.Put}
+  +t1 = {L1.JBlkTok{False{}, s1, x1, a1} : L1.JBlkTok}
+  +t2 = {L1.JBlkTok{True{}, s2, x2, a2} : L1.JBlkTok}
+  +t3 = {L1.JBlkTok{True{}, s3, x3, a3} : L1.JBlkTok}
+  +p1 = L1.jpg.feed(L1.jpg.blkbits(t1), bit)
+  +p2 = L1.jpg.feed(L1.jpg.blkbits(t2), p1)
+  +p3 = L1.jpg.feed(L1.jpg.blkbits(t3), p2)
+  (s1, x1, a1, s2, x2, a2, s3, x3, a3, pix, d1, d2, d3,
+    Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
+    Jenc.encode.step.cb(Jenc.encode.chan.go(fy, ys,
+    Jenc.encode.bookof(False{}), bit, py, kn, zg, ql), Jenc.encode.bookof(True{}), pix, bs, rs, fb, fr, pb, pr, kn,
+      zg, qc), Jenc.encode.step.cb((Jenc.encode.bookof(False{}), d1, p1), Jenc.encode.bookof(True{}), pix,
+    bs, rs, fb, fr, pb, pr, kn, zg, qc), (pix, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3,
+      p3), Equal.cong(Jenc.Book & U32 & Jenc.Put, Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put, gg =>
+    Jenc.encode.step.cb(gg, Jenc.encode.bookof(True{}), pix, bs, rs, fb, fr, pb, pr, kn, zg, qc),
+      Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn,
+    zg, ql), (Jenc.encode.bookof(False{}), d1, p1), e1),
+      Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
+      Jenc.encode.step.cr(Jenc.encode.chan.go(fb, bs, Jenc.encode.bookof(True{}), p1, pb, kn, zg,
+    qc), Jenc.encode.bookof(False{}), pix, rs, fr, d1, pr, kn, zg, qc),
+      Jenc.encode.step.cr((Jenc.encode.bookof(True{}), d2, p2), Jenc.encode.bookof(False{}), pix, rs, fr, d1, pr, kn,
+      zg, qc),
+    (pix, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3, p3),
+      Equal.cong(Jenc.Book & U32 & Jenc.Put, Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
+      gg => Jenc.encode.step.cr(gg, Jenc.encode.bookof(False{}), pix,
+    rs, fr, d1, pr, kn, zg, qc), Jenc.encode.chan.go(fb, bs, Jenc.encode.bookof(True{}), p1, pb, kn, zg, qc),
+      (Jenc.encode.bookof(True{}), d2, p2), e2),
+    Equal.cong(Jenc.Book & U32 & Jenc.Put, Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
+      gg => Jenc.encode.step.end(gg, Jenc.encode.bookof(False{}), pix, d1, d2), Jenc.encode.chan.go(fr,
+    rs, Jenc.encode.bookof(True{}), p2, pr, kn, zg, qc), (Jenc.encode.bookof(True{}), d3, p3), e3))), h1, h2, h3, w1,
+      w2, w3)
 
 # the MCU's Cb and Cr blocks, after its Y block
 def mcu2(
@@ -3337,18 +3376,22 @@ def mcu2(
   +py: U32,
   +pb: U32,
   +pr: U32,
+  +ql: List<&2, Jenc.Oct>,
+  +qc: List<&2, Jenc.Oct>,
   hr: {U32.is_lt(pr, 2048) == True{} : Bool},
-  +t1: L1.JBlkTok,
+  +s1: U32,
+  +x1: List<&2, Bool>,
+  +a1: List<&2, L1.JTok>,
   +d1: U32,
-  e1: mcu2.e1.ty(ys, fy, bit, py, t1, d1),
+  e1: mcu3.e1.ty(ys, fy, bit, py, ql, L1.JBlkTok{False{}, s1, x1, a1}, d1),
   h1: {U32.is_lt(d1, 2048) == True{} : Bool},
-  w1: {L1.jpg.blkwf(t1) == True{} : Bool},
-  c2: ChOut(fb, bs, L1.jpg.feed(blkbits(t1), bit), pb, kern(), Jenc.encode.quant())
-) -> McuOut(Jenc.Tile{pix, ys, bs, rs, fy, fb, fr}, bit, py, pb, pr):
-  (+t2, +d2, e2, h2, w2) = c2
-  mcu3(pix, ys, bs, rs, fy, fb, fr, bit, py, pb, pr, t1, d1, e1, h1, w1, t2, d2, e2, h2, w2, chan_ok(fr, rs,
-    L1.jpg.feed(
-    blkbits(t2), L1.jpg.feed(blkbits(t1), bit)), pr, kern(), Jenc.encode.quant(), hr))
+  w1: {L1.jpg.blkwf(L1.JBlkTok{False{}, s1, x1, a1}) == True{} : Bool},
+  c2: ChOut(True{}, fb, bs, L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{False{}, s1, x1, a1}), bit), pb, kern(), qc)
+) -> McuOut(Jenc.Tile{pix, ys, bs, rs, fy, fb, fr}, bit, py, pb, pr, ql, qc):
+  (+s2, +x2, +a2, +d2, e2, h2, w2) = c2
+  mcu3(pix, ys, bs, rs, fy, fb, fr, bit, py, pb, pr, ql, qc, s1, x1, a1, d1, e1, h1, w1, s2, x2, a2, d2, e2, h2, w2,
+    chan_ok(True{}, fr, rs, L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{True{}, s2, x2, a2}), L1.jpg.feed(L1.jpg.blkbits(
+    L1.JBlkTok{False{}, s1, x1, a1}), bit)), pr, kern(), qc, hr))
 
 # the MCU's blocks, after its Y block
 def mcu1(
@@ -3363,14 +3406,15 @@ def mcu1(
   +py: U32,
   +pb: U32,
   +pr: U32,
+  +ql: List<&2, Jenc.Oct>,
+  +qc: List<&2, Jenc.Oct>,
   hb: {U32.is_lt(pb, 2048) == True{} : Bool},
   hr: {U32.is_lt(pr, 2048) == True{} : Bool},
-  c1: ChOut(fy, ys, bit, py, kern(), Jenc.encode.quant())
-) -> McuOut(Jenc.Tile{pix, ys, bs, rs, fy, fb, fr}, bit, py, pb, pr):
-  (+t1, +d1, e1, h1, w1) = c1
-  mcu2(pix, ys, bs, rs, fy, fb, fr, bit, py, pb, pr, hr, t1, d1, e1, h1, w1, chan_ok(fb, bs,
-    L1.jpg.feed(blkbits(t1),
-    bit), pb, kern(), Jenc.encode.quant(), hb))
+  c1: ChOut(False{}, fy, ys, bit, py, kern(), ql)
+) -> McuOut(Jenc.Tile{pix, ys, bs, rs, fy, fb, fr}, bit, py, pb, pr, ql, qc):
+  (+s1, +x1, +a1, +d1, e1, h1, w1) = c1
+  mcu2(pix, ys, bs, rs, fy, fb, fr, bit, py, pb, pr, ql, qc, hr, s1, x1, a1, d1, e1, h1, w1, chan_ok(True{}, fb, bs,
+    L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{False{}, s1, x1, a1}), bit), pb, kern(), qc, hb))
 
 # every MCU's tile, whatever it holds, codes three blocks the decoder reads whole
 def mcu(
@@ -3379,13 +3423,15 @@ def mcu(
   +py: U32,
   +pb: U32,
   +pr: U32,
+  +ql: List<&2, Jenc.Oct>,
+  +qc: List<&2, Jenc.Oct>,
   hy: {U32.is_lt(py, 2048) == True{} : Bool},
   hb: {U32.is_lt(pb, 2048) == True{} : Bool},
   hr: {U32.is_lt(pr, 2048) == True{} : Bool}
-) -> McuOut(tt, bit, py, pb, pr):
+) -> McuOut(tt, bit, py, pb, pr, ql, qc):
   match tt:
     case Jenc.Tile{pix, ys, bs, rs, +fy, +fb, +fr}:
-      mcu1(pix, ys, bs, rs, fy, fb, fr, bit, py, pb, pr, hb, hr, chan_ok(fy, ys, bit, py, kern(), Jenc.encode.quant(),
+      mcu1(pix, ys, bs, rs, fy, fb, fr, bit, py, pb, pr, ql, qc, hb, hr, chan_ok(False{}, fy, ys, bit, py, kern(), ql,
         hy))
 
 # decode_jpeg of the state a walk ends in

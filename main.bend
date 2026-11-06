@@ -515,12 +515,13 @@ def colours(px: List<&2, U32>) -> List<&2, U32>:
     case pp <> rest:
       colour(pp) <> colours(rest)
 
-def encode_jpeg.pick(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+def encode_jpeg.pick(ok: Bool, +ww: U32, +hh: U32, +qq: U32, px: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match ok:
     case False{}:
+      +_q = qq
       None{}
     case True{}:
-      Some{Jenc.encode(ww, hh, px)}
+      Some{Jenc.encode(ww, hh, qq, px)}
 
 # a side a JPEG frame holds: 1 to 65535, the 16 bits T.81 B.2.2 gives X and Y
 def encode_jpeg.side(+nn: U32) -> Bool:
@@ -535,19 +536,36 @@ def encode_jpeg.good(+ww: U32, +hh: U32, px: List<&2, U32>) -> Bool:
   Bool.and(Bool.and(encode_jpeg.side(ww), encode_jpeg.side(hh)), Bool.and(U32.is_le((ww * hh : U32), 2147483648),
     Nat.is_eq(List.length(&2, U32, px), Nat.mul(U32.to_nat(ww), U32.to_nat(hh)))))
 
-# a baseline sequential 4:4:4 JPEG of the samples' colour: each sample is
-# flattened onto white before the encoder sees it
-# (laws/JpegEncodeFlattensAlpha.bend). None exactly when encode_jpeg.good says the
-# raster is not one it writes (laws/JpegEncodeRefusesBadRasters.bend).
+# a baseline sequential 4:4:4 JPEG of the samples' colour at a quality of 1
+# to 100 (IJG's scale: T.81 Annex K's tables K.1 and K.2 at 5000 / q percent
+# below 50, else 200 - 2 q percent; a quality outside 1 to 100 is the nearest
+# end), each sample flattened onto white before the encoder sees it
+# (laws/JpegEncodeFlattensAlpha.bend). None exactly when encode_jpeg.good says
+# the raster is not one it writes (laws/JpegEncodeRefusesBadRasters.bend).
 #
-# Trusted, not proved: for every raster encode_jpeg writes, every colour
-# channel of decode_jpeg(encode_jpeg(r)) is within 8 of r's. Measured, not
-# proved: the largest error over 2,000 rasters (random, gradients, saturated
-# colours, checkerboards, sizes 1 to 64) is 4, as libjpeg's with the same
-# settings (all-ones quantisation, 4:4:4); rounding after each DCT pass, as
-# the codec did before it kept fraction bits between passes, reached 6 on the
-# same rasters. A proof needs error bounds on the fixed-point DCT and IDCT.
-def encode_jpeg(img: Raster) -> Maybe<&2, List<&2, U32>>:
+# Trusted, not proved: for every raster r it writes, every colour channel of
+# decode_jpeg(encode_jpeg_q(r, q)) is within E(q) of r's: E is 8 at quality
+# 100, 32 at 95, 64 at 90 and 128 at 75; below 75 no bound short of 255 is
+# claimed. Measured, not proved: the largest error over 400 rasters (random,
+# gradients, saturated colours, checkerboards, stripes, gray, sizes 1 to 64)
+# is 4 at 100, 24 at 95, 45 at 90, 114 at 75, 209 at 50 and 255 at 25 and
+# below (saturated colour noise); libjpeg-turbo (Pillow) at the same quality
+# and subsampling reaches 4, 21, 42, 113, 217 and 255. A proof needs error
+# bounds on the fixed-point DCT and IDCT and on the quantisation.
+def encode_jpeg_q(img: Raster, +qq: U32) -> Maybe<&2, List<&2, U32>>:
   match img:
     case Raster{+w, +h, +px}:
-      encode_jpeg.pick(encode_jpeg.good(w, h, px), w, h, colours(px))
+      encode_jpeg.pick(encode_jpeg.good(w, h, px), w, h, qq, colours(px))
+
+# the quality encode_jpeg writes: 75, the IJG library's default (and Pillow's)
+def encode_jpeg.quality() -> U32:
+  75
+
+# encode_jpeg_q at quality 75 (laws/JpegRoundTripKeepsSize.bend states its
+# round trip for every quality, and this one through it)
+#
+# Trusted, not proved: every colour channel of decode_jpeg(encode_jpeg(r)) is
+# within 128 of r's (encode_jpeg_q's bound at quality 75; measured worst 114,
+# libjpeg-turbo's 113).
+def encode_jpeg(img: Raster) -> Maybe<&2, List<&2, U32>>:
+  encode_jpeg_q(img, encode_jpeg.quality())

@@ -310,11 +310,17 @@ def correct_jpeg():
         pil2 = Image.open(io.BytesIO(enc)); pil2.load()
         pref2 = as_rgb_words(pil2)
         mp = channel_metrics(pref2, pix, "rgb")
-        # After FDCT fix: expect ~45+ dB vs original for qstep-1 style encode
-        ok_enc = mp["psnr"] >= 40.0 and mp["max_abs"] <= 8
+        # encode_jpeg is quality 75 with 4:4:4 chroma, as Pillow's quality=75, subsampling=0: the same
+        # Annex K tables at the same scale, so ezimg's file should be about as close to the original and
+        # about as small as Pillow's (libjpeg-turbo's)
+        ref = pillow_jpeg(im, quality=75, subsampling=0)
+        rim = Image.open(io.BytesIO(ref)); rim.load()
+        mr = channel_metrics(as_rgb_words(rim), pix, "rgb")
+        ok_enc = mp["psnr"] >= mr["psnr"] - 1.0 and len(enc) <= len(ref) * 1.15
         add_case("C2 ezimg jpeg → Pillow vs original", f"16x16 {label}",
                  "PASS" if ok_enc else "FAIL",
-                 f"file {len(enc)}B PSNR={mp['psnr']:.2f} max_abs={mp['max_abs']}")
+                 f"file {len(enc)}B PSNR={mp['psnr']:.2f} max_abs={mp['max_abs']}"
+                 f" (Pillow q75: {len(ref)}B PSNR={mr['psnr']:.2f})")
         r2, got2 = run_decode("jpeg-dec", jpg, 60)
         if got2 is None:
             add_case("C2 ezimg decode vs Pillow decode", f"16x16 {label}", "FAIL", "decode failed")
@@ -367,7 +373,7 @@ def correct_jpeg():
 def speed():
     log("\n== Speed (printable; does not fail the check) ==")
     log("ezimg: IO.now around codec only (native ELF). Pillow: time.perf_counter in-process.")
-    log("PNG Pillow optimize=False. JPEG Pillow quality=95 subsampling=0.")
+    log("PNG Pillow optimize=False. JPEG Pillow quality=75 subsampling=0, as encode_jpeg.")
     log("ezimg PNG solid: opaque gray128. ezimg JPEG solid: packed gray128.")
     jobs = [
         ("png-enc", 8, 8, 50, 30),
@@ -390,7 +396,7 @@ def speed():
         else:
             r = ez(["bench-jpeg-enc", str(w), str(h), str(n)], timeout)
             im = Image.new("RGB", (w, h), (128, 128, 128))
-            kw = dict(quality=95, subsampling=0)
+            kw = dict(quality=75, subsampling=0)
             t0 = time.perf_counter()
             for _ in range(n):
                 buf = io.BytesIO(); im.save(buf, format="JPEG", **kw)

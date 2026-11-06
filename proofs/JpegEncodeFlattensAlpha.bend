@@ -31,7 +31,7 @@ def good.drop(
     Bool.and(U32.is_le((ww * hh : U32), 2147483648), Nat.is_eq(nn, Nat.mul(U32.to_nat(ww), U32.to_nat(hh))))),
     List.length(&2, U32, Laws.flat(px)), List.length(&2, U32, px), len.drop(px))
 
-def Laws.jpeg_flatten_alike(ww, hh, pa, pb, same):
+def Laws.jpeg_flatten_alike_q(ww, hh, qq, pa, pb, same):
   +gab = Equal.trans(Bool, Img.encode_jpeg.good(ww, hh, pa), Img.encode_jpeg.good(ww, hh, Laws.flat(pa)),
     Img.encode_jpeg.good(ww, hh, pb),
     Equal.sym(Bool, Img.encode_jpeg.good(ww, hh, Laws.flat(pa)), Img.encode_jpeg.good(ww, hh, pa),
@@ -45,10 +45,14 @@ def Laws.jpeg_flatten_alike(ww, hh, pa, pb, same):
     Equal.trans(List<&2, U32>, Laws.flat(pa), Laws.flat(pb), Img.colours(pb), same,
       Equal.sym(List<&2, U32>, Img.colours(pb), Laws.flat(pb), colours.drop(pb))))
   Equal.trans(Maybe<&2, List<&2, U32>>,
-    Img.encode_jpeg.pick(Img.encode_jpeg.good(ww, hh, pa), ww, hh, Img.colours(pa)),
-    Img.encode_jpeg.pick(Img.encode_jpeg.good(ww, hh, pb), ww, hh, Img.colours(pa)),
-    Img.encode_jpeg.pick(Img.encode_jpeg.good(ww, hh, pb), ww, hh, Img.colours(pb)),
-    Equal.cong(Bool, Maybe<&2, List<&2, U32>>, bb => Img.encode_jpeg.pick(bb, ww, hh, Img.colours(pa)),
+    Img.encode_jpeg.pick(Img.encode_jpeg.good(ww, hh, pa), ww, hh, qq, Img.colours(pa)),
+    Img.encode_jpeg.pick(Img.encode_jpeg.good(ww, hh, pb), ww, hh, qq, Img.colours(pa)),
+    Img.encode_jpeg.pick(Img.encode_jpeg.good(ww, hh, pb), ww, hh, qq, Img.colours(pb)),
+    Equal.cong(Bool, Maybe<&2, List<&2, U32>>, bb => Img.encode_jpeg.pick(bb, ww, hh, qq, Img.colours(pa)),
       Img.encode_jpeg.good(ww, hh, pa), Img.encode_jpeg.good(ww, hh, pb), gab),
     Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>,
-      ll => Img.encode_jpeg.pick(Img.encode_jpeg.good(ww, hh, pb), ww, hh, ll), Img.colours(pa), Img.colours(pb), cab))
+      ll => Img.encode_jpeg.pick(Img.encode_jpeg.good(ww, hh, pb), ww, hh, qq, ll), Img.colours(pa), Img.colours(pb),
+      cab))
+
+def Laws.jpeg_flatten_alike(ww, hh, pa, pb, same):
+  Laws.jpeg_flatten_alike_q(ww, hh, Img.encode_jpeg.quality(), pa, pb, same)
