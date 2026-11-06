@@ -47,6 +47,7 @@ import ./laws/PngIgnoresFaultyTrns.bend as PngIgnoresFaultyTrns
 import ./laws/PngRefusesBadRasters.bend as PngRefusesBadRasters
 import ./laws/PngRefusesUnsupportedHeaders.bend as PngRefusesUnsupportedHeaders
 import ./laws/PngRoundTrips.bend as PngRoundTrips
+import ./laws/PngSamplesFollowBitDepth.bend as PngSamplesFollowBitDepth
 import ./laws/PngSamplesFollowColourType.bend as PngSamplesFollowColourType
 import ./laws/SignatureMatchesPngMagic.bend as SignatureMatchesPngMagic
 import ./laws/UnfilterUndoesFilter.bend as UnfilterUndoesFilter
