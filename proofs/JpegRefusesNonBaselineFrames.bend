@@ -88,25 +88,27 @@ def dht.inv(
                 case 1n+pp:
                   match pp:
                     case 0n:
-                      dht.inv(rest, True{}, True{}, U32.to_nat(Jpeg.decode.sum.counts(List.reverse(&2, U32,
-                        bb <> counts), 0)), cls, id, List.reverse(&2, U32, bb <> counts), [], frame, scan, tabs, ent,
-                        ri, kind, bad)
+                      +cs = List.reverse(&2, U32, bb <> counts)
+                      dht.inv(rest, Jpeg.decode.huff.counts.ok(cs), True{}, U32.to_nat(Jpeg.decode.sum.counts(cs, 0)),
+                        cls, id, cs, [], frame, scan, tabs, ent, ri, kind, bad)
                     case 1n+qq:
                       dht.inv(rest, True{}, False{}, 1n+qq, cls, id, bb <> counts, [], frame, scan, tabs, ent, ri, kind,
                         bad)
             case True{}:
               match phase:
                 case 0n:
-                  {==}
+                  dht.inv(rest, Bool.and(U32.is_le(U32.shrn(bb, 4n), 1), U32.is_le(U32.and(bb, 15), 3)), False{}, 16n,
+                    U32.shrn(bb, 4n), U32.and(bb, 15), [], [], frame, scan, Jpeg.decode.huff.put(tabs, cls, id,
+                    Jpeg.decode.canon(272n, 0n, counts, [], 0, 0, [], [], [])), ent, ri, kind, bad)
                 case 1n+pp:
                   match pp:
                     case 0n:
-                      dht.inv(rest, True{}, False{}, 0n, 0, 0, [], [], frame, scan, Jpeg.decode.huff.put(tabs, cls, id,
-                        Jpeg.decode.canon(272n, 0n, counts, List.reverse(&2, U32, bb <> syms), 0, 0, [], [], [])), ent,
-                        ri, kind, bad)
+                      dht.inv(rest, Jpeg.decode.huff.sym.ok(cls, bb), False{}, 0n, 0, 0, [], [], frame, scan,
+                        Jpeg.decode.huff.put(tabs, cls, id, Jpeg.decode.canon(272n, 0n, counts, List.reverse(&2, U32,
+                        bb <> syms), 0, 0, [], [], [])), ent, ri, kind, bad)
                     case 1n+qq:
-                      dht.inv(rest, True{}, True{}, 1n+qq, cls, id, counts, bb <> syms, frame, scan, tabs, ent, ri,
-                        kind, bad)
+                      dht.inv(rest, Jpeg.decode.huff.sym.ok(cls, bb), True{}, 1n+qq, cls, id, counts, bb <> syms, frame,
+                        scan, tabs, ent, ri, kind, bad)
 
 # a DQT body leaves kind as it found it, and the walk seeking or stopped
 def dqt.inv(
@@ -114,6 +116,7 @@ def dqt.inv(
   ok: Bool,
   phase: Nat,
   +id: U32,
+  +wide: Bool,
   +acc: List<&2, U32>,
   +frame: Jpeg.Frame,
   +scan: Jpeg.Scan,
@@ -122,7 +125,7 @@ def dqt.inv(
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {M1.inv(Jpeg.decode.read.dqt(xs, ok, phase, id, acc, frame, scan, tabs, ent, ri, kind, bad))
+) -> {M1.inv(Jpeg.decode.read.dqt(xs, ok, phase, id, wide, acc, frame, scan, tabs, ent, ri, kind, bad))
   == U32.is_eq(kind, 0) : Bool}:
   match xs:
     case Nil{}:
@@ -142,15 +145,16 @@ def dqt.inv(
         case True{}:
           match phase:
             case 0n:
-              dqt.inv(rest, U32.is_eq(U32.shrn(bb, 4n), 0), 64n, U32.and(bb, 15), [], frame, scan, tabs, ent, ri, kind,
-                bad)
+              +pq = U32.shrn(bb, 4n)
+              dqt.inv(rest, Bool.and(U32.is_le(pq, 1), U32.is_le(U32.and(bb, 15), 3)), Bool.pick(Nat, U32.is_eq(pq, 1),
+                128n, 64n), U32.and(bb, 15), U32.is_eq(pq, 1), [], frame, scan, tabs, ent, ri, kind, bad)
             case 1n+pp:
               match pp:
                 case 0n:
-                  dqt.inv(rest, True{}, 0n, 0, [], frame, scan, Jpeg.decode.q.put(tabs, id, List.reverse(&2, U32,
-                    bb <> acc)), ent, ri, kind, bad)
+                  dqt.inv(rest, True{}, 0n, 0, False{}, [], frame, scan, Jpeg.decode.q.put(tabs, id,
+                    Jpeg.decode.q.vals(wide, List.reverse(&2, U32, bb <> acc))), ent, ri, kind, bad)
                 case 1n+qq:
-                  dqt.inv(rest, True{}, 1n+qq, id, bb <> acc, frame, scan, tabs, ent, ri, kind, bad)
+                  dqt.inv(rest, True{}, 1n+qq, id, wide, bb <> acc, frame, scan, tabs, ent, ri, kind, bad)
 
 # the end of an SOS header leaves kind as it found it, and the walk in the scan or stopped
 def sos.ok.inv(
@@ -183,6 +187,7 @@ def sos.ok.inv(
 def sos.cs.inv(
   left: Nat,
   xs: List<&2, U32>,
+  +tok: Bool,
   +sids: List<&2, U32>,
   +td: List<&2, U32>,
   +ta: List<&2, U32>,
@@ -193,7 +198,7 @@ def sos.cs.inv(
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {M1.inv(Jpeg.decode.read.sos.cs(left, xs, sids, td, ta, ns, frame, tabs, ent, ri, kind, bad))
+) -> {M1.inv(Jpeg.decode.read.sos.cs(left, xs, tok, sids, td, ta, ns, frame, tabs, ent, ri, kind, bad))
   == U32.is_eq(kind, 0) : Bool}:
   match left:
     case 0n:
@@ -205,8 +210,8 @@ def sos.cs.inv(
         case _ss <> _se <> Nil{}:
           {==}
         case +ss <> +se <> +ah <> _rest:
-          sos.ok.inv(U32.is_eq(ss, 0), U32.is_eq(se, 63), U32.is_eq(ah, 0), sids, td, ta, ns, frame, tabs, ent, ri,
-            kind, bad)
+          sos.ok.inv(Bool.and(tok, U32.is_eq(ss, 0)), U32.is_eq(se, 63), U32.is_eq(ah, 0), sids, td, ta, ns, frame,
+            tabs, ent, ri, kind, bad)
     case 1n+pp:
       match xs:
         case Nil{}:
@@ -214,8 +219,8 @@ def sos.cs.inv(
         case _id <> Nil{}:
           {==}
         case +id <> +tdta <> rest:
-          sos.cs.inv(pp, rest, id <> sids, U32.shrn(tdta, 4n) <> td, U32.and(tdta, 15) <> ta, ns, frame, tabs, ent, ri,
-            kind, bad)
+          sos.cs.inv(pp, rest, Bool.and(tok, Bool.and(U32.is_le(U32.shrn(tdta, 4n), 3), U32.is_le(U32.and(tdta, 15),
+            3))), id <> sids, U32.shrn(tdta, 4n) <> td, U32.and(tdta, 15) <> ta, ns, frame, tabs, ent, ri, kind, bad)
 
 # an SOS body leaves kind as it found it, and the walk in the scan or stopped
 def sos.inv(
@@ -229,7 +234,7 @@ def sos.inv(
 ) -> {M1.inv(Jpeg.decode.read.sos(xs, frame, tabs, ent, ri, kind, bad)) == U32.is_eq(kind, 0) : Bool}:
   match xs:
     case +ns <> rest:
-      sos.cs.inv(U32.to_nat(ns), rest, [], [], [], ns, frame, tabs, ent, ri, kind, bad)
+      sos.cs.inv(U32.to_nat(ns), rest, True{}, [], [], [], ns, frame, tabs, ent, ri, kind, bad)
     case Nil{}:
       {==}
 
@@ -495,7 +500,7 @@ def mk.disp(
     case Laws.MDht{}:
       dht.inv(body, True{}, False{}, 0n, 0, 0, [], [], frame, scan, tabs, ent, ri, kind, bad)
     case Laws.MDqt{}:
-      dqt.inv(body, True{}, 0n, 0, [], frame, scan, tabs, ent, ri, kind, bad)
+      dqt.inv(body, True{}, 0n, 0, False{}, [], frame, scan, tabs, ent, ri, kind, bad)
     case Laws.MSos{}:
       sos.inv(body, frame, tabs, ent, ri, kind, bad)
     case Laws.MDri{}:

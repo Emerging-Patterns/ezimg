@@ -886,6 +886,8 @@ def decode.ac.get(tabs: Tabs, +id: U32) -> Huff:
         case _:
           ac3
 
+# table Tq of a frame component: no table for Tq above 3 (T.81 B.2.2), so the component's blocks are refused as
+# for a table never defined
 def decode.q.get(tabs: Tabs, +id: U32) -> List<&2, U32>:
   match tabs:
     case Tabs{+q0, +q1, +q2, +q3, _dc0, _dc1, _dc2, _dc3, _ac0, _ac1, _ac2, _ac3}:
@@ -896,8 +898,11 @@ def decode.q.get(tabs: Tabs, +id: U32) -> List<&2, U32>:
           q1
         case 2:
           q2
-        case _:
+        case 3:
           q3
+        case _:
+          +_q = decode.drop(q3)
+          []
 
 def decode.pred.get(preds: Preds, +ii: U32) -> U32:
   match preds:
@@ -2281,11 +2286,34 @@ def decode.q.put(tabs: Tabs, +id: U32, vals: List<&2, U32>) -> Tabs:
         case _:
           Tabs{q0, q1, q2, vals, dc0, dc1, dc2, dc3, ac0, ac1, ac2, ac3}
 
+# 16-bit quantisation entries, two bytes each, high byte first
+def decode.q.wide(xs: List<&2, U32>) -> List<&2, U32>:
+  match xs:
+    case Nil{}:
+      []
+    case +hi <> rest:
+      match rest:
+        case Nil{}:
+          +_h = (hi - hi : U32)
+          []
+        case +lo <> more:
+          decode.u16(hi, lo) <> decode.q.wide(more)
+
+# a table's entries as read: one byte each for Pq = 0, two for Pq = 1 (T.81 B.2.4.1)
+def decode.q.vals(wide: Bool, xs: List<&2, U32>) -> List<&2, U32>:
+  match wide:
+    case True{}:
+      decode.q.wide(xs)
+    case False{}:
+      xs
+
+# a DQT body: each table's Pq and Tq byte (Pq 0 or 1, Tq at most 3), then its 64 entries, of 8 or 16 bits
 def decode.read.dqt(
   xs: List<&2, U32>,
   ok: Bool,
   phase: Nat,
   +id: U32,
+  +wide: Bool,
   acc: List<&2, U32>,
   frame: Frame,
   scan: Scan,
@@ -2320,15 +2348,17 @@ def decode.read.dqt(
           match phase:
             case 0n:
               +_a = decode.drop(acc)
-              decode.read.dqt(rest, U32.is_eq(U32.shrn(b, 4n), 0), 64n, U32.and(b, 15), [], frame, scan, tabs, ent,
-                ri, kind, bad)
+              +pq = U32.shrn(b, 4n)
+              decode.read.dqt(rest, Bool.and(U32.is_le(pq, 1), U32.is_le(U32.and(b, 15), 3)), Bool.pick(Nat,
+                U32.is_eq(pq, 1), 128n, 64n), U32.and(b, 15), U32.is_eq(pq, 1), [], frame, scan, tabs, ent, ri, kind,
+                bad)
             case 1n+p:
               match p:
                 case 0n:
-                  decode.read.dqt(rest, True{}, 0n, 0, [], frame, scan,
-                    decode.q.put(tabs, id, List.reverse(&2, U32, b <> acc)), ent, ri, kind, bad)
+                  decode.read.dqt(rest, True{}, 0n, 0, False{}, [], frame, scan,
+                    decode.q.put(tabs, id, decode.q.vals(wide, List.reverse(&2, U32, b <> acc))), ent, ri, kind, bad)
                 case _:
-                  decode.read.dqt(rest, True{}, p, id, b <> acc, frame, scan, tabs, ent, ri, kind, bad)
+                  decode.read.dqt(rest, True{}, p, id, wide, b <> acc, frame, scan, tabs, ent, ri, kind, bad)
 
 def decode.sum.counts(xs: List<&2, U32>, +nn: U32) -> U32:
   match xs:
@@ -2336,6 +2366,25 @@ def decode.sum.counts(xs: List<&2, U32>, +nn: U32) -> U32:
       nn
     case h <> t:
       decode.sum.counts(t, (nn + h : U32))
+
+# the canonical codes of a table's 16 counts each fit their length without the all-ones code (T.81 C; libjpeg's
+# jpeg_make_d_derived_tbl): code is the next code of length si, lim 2^si
+def decode.huff.fits(cs: List<&2, U32>, +code: U32, +lim: U32, +ok: Bool) -> Bool:
+  match cs:
+    case Nil{}:
+      ok
+    case +cc <> rest:
+      +nx = (code + cc : U32)
+      decode.huff.fits(rest, (nx * 2 : U32), (lim * 2 : U32), Bool.and(ok, U32.is_lt(nx, lim)))
+
+# a table's counts: at most 256 symbols, and codes that fit
+def decode.huff.counts.ok(+cs: List<&2, U32>) -> Bool:
+  Bool.and(U32.is_le(decode.sum.counts(cs, 0), 256), decode.huff.fits(cs, 0, 2, True{}))
+
+# a symbol a table may hold: a DC table's (class 0) are difference categories, 0 to 11 for 8-bit samples (T.81
+# F.1.2.1); an AC table's are any byte
+def decode.huff.sym.ok(+cls: U32, +sym: U32) -> Bool:
+  Bool.or(Bool.not(U32.is_eq(cls, 0)), U32.is_le(sym, 11))
 
 def decode.huff.put.dc(
   +id: U32,
@@ -2464,9 +2513,9 @@ def decode.read.dht(
                 case 1n+p:
                   match p:
                     case 0n:
-                      decode.read.dht(rest, True{}, True{}, U32.to_nat(decode.sum.counts(List.reverse(&2, U32,
-                        b <> counts), 0)), cls, id, List.reverse(&2, U32, b <> counts), [], frame, scan, tabs, ent, ri,
-                        kind, bad)
+                      +cs = List.reverse(&2, U32, b <> counts)
+                      decode.read.dht(rest, decode.huff.counts.ok(cs), True{}, U32.to_nat(decode.sum.counts(cs, 0)),
+                        cls, id, cs, [], frame, scan, tabs, ent, ri, kind, bad)
                     case _:
                       +_s = decode.drop(syms)
                       decode.read.dht(rest, True{}, False{}, p, cls, id, b <> counts, [], frame, scan, tabs, ent, ri,
@@ -2474,20 +2523,19 @@ def decode.read.dht(
             case True{}:
               match phase:
                 case 0n:
-                  +_n = decode.drop(rest)
-                  +_b = (b - b : U32)
                   +_s = decode.drop(syms)
-                  St{Seek{}, frame, scan, decode.huff.put(tabs, cls, id, decode.canon(272n, 0n, counts, [], 0, 0, [],
-                    [], [])), ent, ri, kind, bad}
+                  decode.read.dht(rest, Bool.and(U32.is_le(U32.shrn(b, 4n), 1), U32.is_le(U32.and(b, 15), 3)),
+                    False{}, 16n, U32.shrn(b, 4n), U32.and(b, 15), [], [], frame, scan, decode.huff.put(tabs, cls, id,
+                    decode.canon(272n, 0n, counts, [], 0, 0, [], [], [])), ent, ri, kind, bad)
                 case 1n+p:
                   match p:
                     case 0n:
-                      decode.read.dht(rest, True{}, False{}, 0n, 0, 0, [], [], frame, scan, decode.huff.put(tabs, cls,
-                        id, decode.canon(272n, 0n, counts, List.reverse(&2, U32, b <> syms), 0, 0, [], [], [])), ent,
-                        ri, kind, bad)
+                      decode.read.dht(rest, decode.huff.sym.ok(cls, b), False{}, 0n, 0, 0, [], [], frame, scan,
+                        decode.huff.put(tabs, cls, id, decode.canon(272n, 0n, counts, List.reverse(&2, U32, b <> syms),
+                        0, 0, [], [], [])), ent, ri, kind, bad)
                     case _:
-                      decode.read.dht(rest, True{}, True{}, p, cls, id, counts, b <> syms, frame, scan, tabs, ent, ri,
-                        kind, bad)
+                      decode.read.dht(rest, decode.huff.sym.ok(cls, b), True{}, p, cls, id, counts, b <> syms, frame,
+                        scan, tabs, ent, ri, kind, bad)
 
 def decode.scan.rev(sids: List<&2, U32>, td: List<&2, U32>, ta: List<&2, U32>, +ns: U32) -> Scan:
   Scan{ns, List.reverse(&2, U32, sids), List.reverse(&2, U32, td), List.reverse(&2, U32, ta), 0, 63, 0}
@@ -2523,6 +2571,7 @@ def decode.read.sos.ok(
 
 def decode.read.sos.end(
   xs: List<&2, U32>,
+  +tok: Bool,
   sids: List<&2, U32>,
   td: List<&2, U32>,
   ta: List<&2, U32>,
@@ -2536,14 +2585,15 @@ def decode.read.sos.end(
 ) -> St:
   match xs:
     case ss <> se <> ah <> _rest:
-      decode.read.sos.ok(U32.is_eq(ss, 0), U32.is_eq(se, 63), U32.is_eq(ah, 0), sids, td, ta, ns, frame, tabs, ent,
-        ri, kind, bad)
+      decode.read.sos.ok(Bool.and(tok, U32.is_eq(ss, 0)), U32.is_eq(se, 63), U32.is_eq(ah, 0), sids, td, ta, ns, frame,
+        tabs, ent, ri, kind, bad)
     case _:
       St{Stop{}, frame, decode.scan0(), tabs, ent, ri, kind, 1}
 
 def decode.read.sos.cs(
   left: Nat,
   xs: List<&2, U32>,
+  +tok: Bool,
   sids: List<&2, U32>,
   td: List<&2, U32>,
   ta: List<&2, U32>,
@@ -2557,12 +2607,13 @@ def decode.read.sos.cs(
 ) -> St:
   match left:
     case 0n:
-      decode.read.sos.end(xs, sids, td, ta, ns, frame, tabs, ent, ri, kind, bad)
+      decode.read.sos.end(xs, tok, sids, td, ta, ns, frame, tabs, ent, ri, kind, bad)
     case 1n+p:
       match xs:
         case id <> +tdta <> rest:
-          decode.read.sos.cs(p, rest, id <> sids, U32.shrn(tdta, 4n) <> td, U32.and(tdta, 15) <> ta, ns, frame, tabs,
-            ent, ri, kind, bad)
+          decode.read.sos.cs(p, rest, Bool.and(tok, Bool.and(U32.is_le(U32.shrn(tdta, 4n), 3), U32.is_le(U32.and(tdta,
+            15), 3))), id <> sids, U32.shrn(tdta, 4n) <> td, U32.and(tdta, 15) <> ta, ns, frame, tabs, ent, ri, kind,
+            bad)
         case _:
           St{Stop{}, frame, decode.scan0(), tabs, ent, ri, kind, 1}
 
@@ -2577,7 +2628,7 @@ def decode.read.sos(
 ) -> St:
   match xs:
     case +ns <> rest:
-      decode.read.sos.cs(U32.to_nat(ns), rest, [], [], [], ns, frame, tabs, ent, ri, kind, bad)
+      decode.read.sos.cs(U32.to_nat(ns), rest, True{}, [], [], [], ns, frame, tabs, ent, ri, kind, bad)
     case _:
       St{Stop{}, frame, decode.scan0(), tabs, ent, ri, kind, 1}
 
@@ -2617,7 +2668,7 @@ def decode.dispatch(
     case 218:
       decode.read.sos(xs, frame, tabs, ent, ri, kind, bad)
     case 219:
-      decode.read.dqt(xs, True{}, 0n, 0, [], frame, scan, tabs, ent, ri, kind, bad)
+      decode.read.dqt(xs, True{}, 0n, 0, False{}, [], frame, scan, tabs, ent, ri, kind, bad)
     case 221:
       decode.read.dri(xs, frame, scan, tabs, ent, kind, bad)
     case _:
