@@ -1,5 +1,7 @@
 # src/jpeg_enc: baseline JPEG encode. Sequential 8-bit Huffman (SOF0) and JFIF APP0.
-# Colour is 4:4:4 YCbCr, no subsampling: one 8 by 8 block per component per MCU.
+# Colour is YCbCr, 4:4:4 (one 8 by 8 block per component per MCU) or 4:2:0 (a 16 by 16 MCU: four Y blocks, then
+# one Cb and one Cr block, each chrominance sample the mean of 2 by 2 samples, rounded with libjpeg's alternating
+# bias of 1 and 2, the edge samples repeated past the raster as libjpeg repeats them).
 # A raster whose every sample has red, green and blue the same is one gray
 # component (Y only, the luminance tables only), as libjpeg writes a grayscale
 # image: its samples are the luminance, exactly.
@@ -49,10 +51,17 @@ type Oct is Data:
 type Planes is Type:
   Planes{src: Array<U32>, dst: Array<U32>, at: U32}
 
-# the frame the encoder writes: three components, Cb and Cr sampled as Y (4:4:4), or one gray component
+# the frame the encoder writes: three components, Cb and Cr sampled as Y (4:4:4), or one gray component, or
+# three components with Cb and Cr sampled at half Y's rate each way (4:2:0)
 type Layout is Data:
   K444{}
   KGray{}
+  K420{}
+
+# a 4:2:0 quad's four samples: packed pixels, the level plane, whether it is the neutral level, and the
+# chrominance sums so far
+type Quad is Type:
+  Quad{pix: Array<U32>, ys: Array<U32>, fy: Bool, sb: U32, sr: U32}
 
 # one gray MCU: packed pixels, the level plane, and whether it is the neutral level
 type GTile is Type:
@@ -159,17 +168,22 @@ def encode.dqtbody(+kd: Layout, +qq: U32) -> List<&2, U32>:
       0 <> encode.join(encode.qz(encode.lumq(), qq), 1 <> encode.qz(encode.chrq(), qq))
     case KGray{}:
       0 <> encode.qz(encode.lumq(), qq)
+    case K420{}:
+      0 <> encode.join(encode.qz(encode.lumq(), qq), 1 <> encode.qz(encode.chrq(), qq))
 
 def encode.dqt(+kd: Layout, +qq: U32) -> List<&2, U32>:
   encode.seg(219, encode.dqtbody(kd, qq))
 
-# the SOF0 components: Y sampled 1 by 1 with table 0, Cb and Cr 1 by 1 with table 1; or Y alone
+# the SOF0 components: Y sampled 1 by 1 with table 0, Cb and Cr 1 by 1 with table 1; or Y alone; or Y sampled
+# 2 by 2, Cb and Cr 1 by 1
 def encode.sofcomps(+kd: Layout) -> List<&2, U32>:
   match kd:
     case K444{}:
       [3, 1, 17, 0, 2, 17, 1, 3, 17, 1]
     case KGray{}:
       [1, 1, 17, 0]
+    case K420{}:
+      [3, 1, 34, 0, 2, 17, 1, 3, 17, 1]
 
 def encode.sofbody(+kd: Layout, +ww: U32, +hh: U32) -> List<&2, U32>:
   8 <> (U32.shrn(hh, 8n) <> (U32.and(hh, 255) <> (U32.shrn(ww, 8n) <> (U32.and(ww, 255) <>
@@ -234,6 +248,9 @@ def encode.dcbody(+kd: Layout) -> List<&2, U32>:
         encode.dcsyms()))
     case KGray{}:
       0 <> encode.join(encode.dccounts(), encode.dcsyms())
+    case K420{}:
+      0 <> encode.join(encode.join(encode.dccounts(), encode.dcsyms()), 1 <> encode.join(encode.cdccounts(),
+        encode.dcsyms()))
 
 # the AC DHT body: both AC tables; a gray frame's luminance table alone
 def encode.acbody(+kd: Layout) -> List<&2, U32>:
@@ -243,6 +260,9 @@ def encode.acbody(+kd: Layout) -> List<&2, U32>:
         encode.cacsyms()))
     case KGray{}:
       16 <> encode.join(encode.accounts(), encode.acsyms())
+    case K420{}:
+      16 <> encode.join(encode.join(encode.accounts(), encode.acsyms()), 17 <> encode.join(encode.caccounts(),
+        encode.cacsyms()))
 
 # the SOS body: Y with Huffman tables 0, Cb and Cr with tables 1; or Y alone
 def encode.sosbody(+kd: Layout) -> List<&2, U32>:
@@ -251,6 +271,8 @@ def encode.sosbody(+kd: Layout) -> List<&2, U32>:
       [3, 1, 0, 2, 17, 3, 17, 0, 63, 0]
     case KGray{}:
       [1, 1, 0, 0, 63, 0]
+    case K420{}:
+      [3, 1, 0, 2, 17, 3, 17, 0, 63, 0]
 
 def encode.header(+ww: U32, +hh: U32, +qq: U32, +kd: Layout) -> List<&2, U32>:
   encode.join(Jpeg.soi(), encode.join(encode.app0(), encode.join(encode.dqt(kd, qq), encode.join(encode.sof(kd, ww,
@@ -1592,6 +1614,350 @@ def encode.mcus(
       encode.mcus(nleft, encode.step.y(a, lb, cb, bit, py, pb, pr, x, y, ww, hh, ctx), encode.nx(more, mx),
         encode.ny(more, my), mw, ww, hh, ctx)
 
+# one sample of a 4:2:0 quad: its luminance at ii, its chrominance added to the sums
+def encode.quad.store(got: Array<U32> & U32, ys: Array<U32>, fy: Bool, +sb: U32, +sr: U32, +ii: U32) -> Quad:
+  (pix, +p) = got
+  +r = U32.and(U32.shrn(p, 16n), 255)
+  +g = U32.and(U32.shrn(p, 8n), 255)
+  +b = U32.and(p, 255)
+  +y8 = encode.ych(r, g, b)
+  Quad{pix, Array.set(U32, ys, ii, (y8 - 128 : U32)), encode.flat.both(U32.is_eq(y8, 128), fy),
+    (sb + encode.cbch(r, g, b) : U32), (sr + encode.crch(r, g, b) : U32)}
+
+def encode.quad.pix(qd: Quad, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ii: U32) -> Quad:
+  match qd:
+    case Quad{pix, ys, fy, +sb, +sr}:
+      encode.quad.store(encode.pix.at(pix, ww, hh, xx, yy), ys, fy, sb, sr, ii)
+
+# a quad's chrominance: the four samples' mean, rounded with the bias, stored at ci
+def encode.quad.put(qd: Quad, bs: Array<U32>, rs: Array<U32>, fb: Bool, fr: Bool, +ci: U32) -> Tile:
+  match qd:
+    case Quad{pix, ys, fy, +sb, +sr}:
+      +b8 = U32.shrn(sb, 2n)
+      +r8 = U32.shrn(sr, 2n)
+      Tile{pix, ys, Array.set(U32, bs, ci, (b8 - 128 : U32)), Array.set(U32, rs, ci, (r8 - 128 : U32)), fy,
+        encode.flat.both(U32.is_eq(b8, 128), fb), encode.flat.both(U32.is_eq(r8, 128), fr)}
+
+# the 2 by 2 samples at x, y: luminance at ii, ii + 1, ii + 8 and ii + 9, and one chrominance sample at ci, their
+# mean plus the bias (1, or 2 at an odd chrominance column, as libjpeg's h2v2 downsampling rounds) over 4
+def encode.quad(tt: Tile, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ii: U32, +ci: U32, +bias: U32) -> Tile:
+  match tt:
+    case Tile{pix, ys, bs, rs, fy, fb, fr}:
+      +x1 = (xx + 1 : U32)
+      +y1 = (yy + 1 : U32)
+      encode.quad.put(encode.quad.pix(encode.quad.pix(encode.quad.pix(encode.quad.pix(Quad{pix, ys, fy, bias, bias},
+        ww, hh, xx, yy, ii), ww, hh, x1, yy, (ii + 1 : U32)), ww, hh, xx, y1, (ii + 8 : U32)), ww, hh, x1, y1,
+        (ii + 9 : U32)), bs, rs, fb, fr, ci)
+
+def encode.quad.row(
+  left: Nat,
+  tt: Tile,
+  +ww: U32,
+  +hh: U32,
+  +xx: U32,
+  +yy: U32,
+  +ii: U32,
+  +ci: U32,
+  +bias: U32
+) -> Tile:
+  match left:
+    case 0n:
+      +_u = (ww + hh + xx + yy + ii + ci + bias : U32)
+      tt
+    case 1n+k:
+      encode.quad.row(k, encode.quad(tt, ww, hh, xx, yy, ii, ci, bias), ww, hh, (xx + 2 : U32), yy, (ii + 2 : U32),
+        (ci + 1 : U32), (3 - bias : U32))
+
+def encode.quad.rows(left: Nat, tt: Tile, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ii: U32, +ci: U32) -> Tile:
+  match left:
+    case 0n:
+      +_u = (ww + hh + xx + yy + ii + ci : U32)
+      tt
+    case 1n+k:
+      encode.quad.rows(k, encode.quad.row(4n, tt, ww, hh, xx, yy, ii, ci, 1), ww, hh, xx, (yy + 2 : U32),
+        (ii + 16 : U32), (ci + 8 : U32))
+
+# one 8 by 8 luminance block of a 4:2:0 MCU at x, y, and the quarter of the chrominance planes it covers, from ci
+def encode.quad.block(tt: Tile, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ci: U32) -> Tile:
+  encode.quad.rows(4n, tt, ww, hh, xx, yy, 0, ci)
+
+# the 4:2:0 MCU's last block, Cr, and the loop's state after it
+def encode.h2.end(
+  got: Book & U32 & Put,
+  lb: Book,
+  pix: Array<U32>,
+  +py: U32,
+  +pb: U32
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (cb, +pr, bit) = got
+  (pix, lb, cb, py, pb, pr, bit)
+
+def encode.h2.cr(
+  got: Book & U32 & Put,
+  lb: Book,
+  pix: Array<U32>,
+  rs: Array<U32>,
+  fr: Bool,
+  +py: U32,
+  +pr: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (cb, +pb, bit) = got
+  encode.h2.end(encode.chan.go(fr, rs, cb, bit, pr, kern, zig, qc), lb, pix, py, pb)
+
+# the 4:2:0 MCU's Cb and Cr blocks, after its four Y blocks
+def encode.h2.cb(
+  pix: Array<U32>,
+  bs: Array<U32>,
+  rs: Array<U32>,
+  fb: Bool,
+  fr: Bool,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  encode.h2.cr(encode.chan.go(fb, bs, cb, bit, pb, kern, zig, qc), lb, pix, rs, fr, py, pr, kern, zig, qc)
+
+# after the 4:2:0 MCU's Y block 3: the chrominance blocks
+def encode.h2.n4(
+  got: Book & U32 & Put,
+  pix: Array<U32>,
+  bs: Array<U32>,
+  rs: Array<U32>,
+  fb: Bool,
+  fr: Bool,
+  cb: Book,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (lb, +py, bit) = got
+  +_u = (xx + yy + ww + hh : U32)
+  +_q = encode.qdrop(ql)
+  encode.h2.cb(pix, bs, rs, fb, fr, lb, cb, bit, py, pb, pr, kern, zig, qc)
+
+# the 4:2:0 MCU's Y block 3 (of 0 to 3, left to right, top to bottom), then the rest
+def encode.h2.y3(
+  tt: Tile,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  match tt:
+    case Tile{pix, ys, bs, rs, fy, fb, fr}:
+      encode.h2.n4(encode.chan.go(fy, ys, lb, bit, py, kern, zig, ql), pix, bs, rs, fb, fr, cb, pb, pr, xx, yy, ww,
+        hh, kern, zig, ql, qc)
+
+# after the 4:2:0 MCU's Y block 2: the next Y block and its quarter of the chrominance
+def encode.h2.n3(
+  got: Book & U32 & Put,
+  pix: Array<U32>,
+  bs: Array<U32>,
+  rs: Array<U32>,
+  fb: Bool,
+  fr: Bool,
+  cb: Book,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (lb, +py, bit) = got
+  encode.h2.y3(encode.quad.block(Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh, (xx + 8 : U32),
+    (yy + 8 : U32),
+    36), lb, cb, bit, py, pb, pr, xx, yy, ww, hh, kern, zig, ql, qc)
+
+# the 4:2:0 MCU's Y block 2 (of 0 to 3, left to right, top to bottom), then the rest
+def encode.h2.y2(
+  tt: Tile,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  match tt:
+    case Tile{pix, ys, bs, rs, fy, fb, fr}:
+      encode.h2.n3(encode.chan.go(fy, ys, lb, bit, py, kern, zig, ql), pix, bs, rs, fb, fr, cb, pb, pr, xx, yy, ww,
+        hh, kern, zig, ql, qc)
+
+# after the 4:2:0 MCU's Y block 1: the next Y block and its quarter of the chrominance
+def encode.h2.n2(
+  got: Book & U32 & Put,
+  pix: Array<U32>,
+  bs: Array<U32>,
+  rs: Array<U32>,
+  fb: Bool,
+  fr: Bool,
+  cb: Book,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (lb, +py, bit) = got
+  encode.h2.y2(encode.quad.block(Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh, xx, (yy + 8 : U32),
+    32), lb, cb, bit, py, pb, pr, xx, yy, ww, hh, kern, zig, ql, qc)
+
+# the 4:2:0 MCU's Y block 1 (of 0 to 3, left to right, top to bottom), then the rest
+def encode.h2.y1(
+  tt: Tile,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  match tt:
+    case Tile{pix, ys, bs, rs, fy, fb, fr}:
+      encode.h2.n2(encode.chan.go(fy, ys, lb, bit, py, kern, zig, ql), pix, bs, rs, fb, fr, cb, pb, pr, xx, yy, ww,
+        hh, kern, zig, ql, qc)
+
+# after the 4:2:0 MCU's Y block 0: the next Y block and its quarter of the chrominance
+def encode.h2.n1(
+  got: Book & U32 & Put,
+  pix: Array<U32>,
+  bs: Array<U32>,
+  rs: Array<U32>,
+  fb: Bool,
+  fr: Bool,
+  cb: Book,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (lb, +py, bit) = got
+  encode.h2.y1(encode.quad.block(Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh, (xx + 8 : U32), yy,
+    4), lb, cb, bit, py, pb, pr, xx, yy, ww, hh, kern, zig, ql, qc)
+
+# the 4:2:0 MCU's Y block 0 (of 0 to 3, left to right, top to bottom), then the rest
+def encode.h2.y0(
+  tt: Tile,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  match tt:
+    case Tile{pix, ys, bs, rs, fy, fb, fr}:
+      encode.h2.n1(encode.chan.go(fy, ys, lb, bit, py, kern, zig, ql), pix, bs, rs, fb, fr, cb, pb, pr, xx, yy, ww,
+        hh, kern, zig, ql, qc)
+
+# one 4:2:0 MCU at x, y: four Y blocks with the luminance book and table, each walked with its quarter of the
+# chrominance planes, then Cb and Cr with the chrominance book and table
+def encode.h2.step(
+  aa: Array<U32>,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +ctx: Ctx
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  match ctx:
+    case Ctx{+kern, +zig, +ql, +qc}:
+      encode.h2.y0(encode.quad.block(Tile{aa, Jpeg.decode.plane(64), Jpeg.decode.plane(64), Jpeg.decode.plane(64),
+        True{}, True{}, True{}}, ww, hh, xx, yy, 0), lb, cb, bit, py, pb, pr, xx, yy, ww, hh, kern, zig, ql, qc)
+
+def encode.h2.mcus(
+  left: Nat,
+  got: Array<U32> & Book & Book & U32 & U32 & U32 & Put,
+  +mx: U32,
+  +my: U32,
+  +mw: U32,
+  +ww: U32,
+  +hh: U32,
+  +ctx: Ctx
+) -> Put:
+  match left:
+    case 0n:
+      encode.mcus.done(got)
+    case 1n+nleft:
+      (a, lb, cb, py, pb, pr, bit) = got
+      +x = (mx * 16 : U32)
+      +y = (my * 16 : U32)
+      +more = U32.is_lt((mx + 1 : U32), mw)
+      encode.h2.mcus(nleft, encode.h2.step(a, lb, cb, bit, py, pb, pr, x, y, ww, hh, ctx), encode.nx(more, mx),
+        encode.ny(more, my), mw, ww, hh, ctx)
+
 # the entropy-coded bytes of an accepted size at a quality, three components, MCU by MCU
 def encode.arm3(+ww: U32, +hh: U32, +qq: U32, px: List<&2, U32>) -> List<&2, U32>:
   +mw = U32.div((ww + 7 : U32), 8)
@@ -1609,6 +1975,15 @@ def encode.armg(+ww: U32, +hh: U32, +qq: U32, px: List<&2, U32>) -> List<&2, U32
   encode.pad(encode.gmcus(U32.to_nat((mw * mh : U32)), (encode.pix.load(U32.to_nat(area), px,
     Jpeg.decode.plane(area), 0), encode.bookof(False{}), 1024, encode.put0()), 0, 0, mw, ww, hh, encode.ctx(qq)))
 
+# the entropy-coded bytes of an accepted size at a quality, 4:2:0, MCU by MCU: 16 by 16 samples each
+def encode.arm2(+ww: U32, +hh: U32, +qq: U32, px: List<&2, U32>) -> List<&2, U32>:
+  +mw = Jpeg.decode.ceil(ww, 16)
+  +mh = Jpeg.decode.ceil(hh, 16)
+  +area = (ww * hh : U32)
+  encode.pad(encode.h2.mcus(U32.to_nat((mw * mh : U32)), (encode.pix.load(U32.to_nat(area), px,
+    Jpeg.decode.plane(area), 0), encode.bookof(False{}), encode.bookof(True{}), 1024, 1024, 1024, encode.put0()), 0,
+    0, mw, ww, hh, encode.ctx(qq)))
+
 # the entropy-coded bytes of an accepted size at a quality, in the frame of kind kd
 def encode.arm(+ww: U32, +hh: U32, +qq: U32, +kd: Layout, px: List<&2, U32>) -> List<&2, U32>:
   match kd:
@@ -1616,6 +1991,8 @@ def encode.arm(+ww: U32, +hh: U32, +qq: U32, +kd: Layout, px: List<&2, U32>) -> 
       encode.arm3(ww, hh, qq, px)
     case KGray{}:
       encode.armg(ww, hh, qq, px)
+    case K420{}:
+      encode.arm2(ww, hh, qq, px)
 
 # one sample is gray: its red, green and blue the same
 def encode.gray.one(+pp: U32) -> Bool:
@@ -1636,16 +2013,26 @@ def encode.gray.all(xs: List<&2, U32>, ok: Bool) -> Bool:
           +_p = pp
           False{}
 
-# the kind of frame for the samples: one gray component when every sample is gray, else 4:4:4
-def encode.kind.pick(gray: Bool) -> Layout:
-  match gray:
+# a colour frame: 4:2:0 when sub is set, else 4:4:4
+def encode.kind.sub(sub: Bool) -> Layout:
+  match sub:
     case True{}:
-      KGray{}
+      K420{}
     case False{}:
       K444{}
 
-def encode.kindof(+px: List<&2, U32>) -> Layout:
-  encode.kind.pick(encode.gray.all(px, True{}))
+# the kind of frame for the samples: one gray component when every sample is gray, else 4:2:0 when sub is set,
+# else 4:4:4
+def encode.kind.pick(gray: Bool, +sub: Bool) -> Layout:
+  match gray:
+    case True{}:
+      +_s = sub
+      KGray{}
+    case False{}:
+      encode.kind.sub(sub)
+
+def encode.kindof(+sub: Bool, +px: List<&2, U32>) -> Layout:
+  encode.kind.pick(encode.gray.all(px, True{}), sub)
 
 def encode.finish(+ww: U32, +hh: U32, +qq: U32, +kd: Layout, ent: List<&2, U32>) -> List<&2, U32>:
   encode.join(encode.header(ww, hh, qq, kd), encode.join(ent, Jpeg.eoi()))
@@ -1660,7 +2047,8 @@ def encode.pick(bad: Bool, +ww: U32, +hh: U32, +qq: U32, +kd: Layout, px: List<&
     case False{}:
       encode.finish(ww, hh, qq, kd, encode.arm(ww, hh, qq, kd, px))
 
-# baseline sequential 4:4:4 JPEG bytes for packed RGB samples at a quality of 1 to 100 (a quality outside it is the
-# nearest end), or SOI EOI when the size is rejected
-def encode(+ww: U32, +hh: U32, +qq: U32, +px: List<&2, U32>) -> List<&2, U32>:
-  encode.pick(encode.bad(ww, hh), ww, hh, qq, encode.kindof(px), px)
+# baseline sequential JPEG bytes for packed RGB samples at a quality of 1 to 100 (a quality outside it is the
+# nearest end), 4:2:0 when sub is set, else 4:4:4, one gray component when every sample is gray; or SOI EOI when
+# the size is rejected
+def encode(+ww: U32, +hh: U32, +qq: U32, +sub: Bool, +px: List<&2, U32>) -> List<&2, U32>:
+  encode.pick(encode.bad(ww, hh), ww, hh, qq, encode.kindof(sub, px), px)

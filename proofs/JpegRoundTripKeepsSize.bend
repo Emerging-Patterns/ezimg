@@ -3879,8 +3879,8 @@ def gray_cr(
   M1.huf.false_true(Equal.trans(Bool, U32.is_eq(0, 1), U32.is_eq(ti, 1), True{}, Equal.cong(U32, Bool, xx =>
     U32.is_eq(xx, 1), 0, ti, Equal.sym(U32, ti, 0, at0(cc))), hl))
 
-# a block of a class, at a scan component of the encoder's frame of either layout whose tables are the class's, is
-# read with the class's tables
+# a block of a class, at a scan component of the encoder's frame of any layout whose tables are the class's, is
+# read with the class's tables (4:2:0's tables and places are 4:4:4's)
 def selok(
   +kd: Jenc.Layout,
   +cls: Bool,
@@ -3906,6 +3906,8 @@ def selok(
             Laws.jpg.enc.scan(Jenc.KGray{}), Laws.jpg.enc.tabs(Jenc.KGray{}, qq)) == Jpeg.decode.block.go(bits,
             Jpeg.decode.pred.get(preds, cc), dctab(True{}), actab(True{}), qof(True{}, qq)) : Jpeg.Blk}, gray_cr(cc,
             ww, hh, hc))
+    case Jenc.K420{}:
+      selok3(cls, cc, bits, preds, ww, hh, qq, hc)
 
 # the place of the decoder's walk: its scan component and data unit
 def cpos(ctrl: Jpeg.Ctrl) -> U32 & U32:
@@ -4292,6 +4294,8 @@ def fl.nil(
       {==}
     case Jenc.KGray{}:
       {==}
+    case Jenc.K420{}:
+      {==}
 
 # the decoder's block loop over blocks that each read whole, each of the class its place's tables hold, returns a
 # picture
@@ -4614,6 +4618,26 @@ def run_ok(
         sm), hz, M3.and_tt(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb), sm, hl, {==})) :
         {Jpeg.decode.fits(ww, hh, nbu, ent, 1, [1], sc) == True{} : Bool}}
       sf = Equal.sym(Bool, Jpeg.decode.fits(ww, hh, nbu, ent, 1, [1], sc), True{}, hf)
+      %s1 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(_, U32.is_eq(hh, 0)), ww, hh, fr, sc, tb, ent, 0, False{})) ==
+        st : Bool}
+      %s2 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(False{}, _), ww, hh, fr, sc, tb, ent, 0, False{})) == st : Bool}
+      %sf : {Laws.jpg.psome(Jpeg.decode.run.fit(_, nbu, ww, hh, fr, sc, tb, ent, 0, False{})) == st : Bool}
+      {==}
+    case Jenc.K420{}:
+      +eb = Jpeg.decode.ent.bits(ent)
+      s1 = Equal.sym(Bool, U32.is_eq(ww, 0), False{}, hw0)
+      s2 = Equal.sym(Bool, U32.is_eq(hh, 0), False{}, hh0)
+      +fr = Laws.jpg.enc.frame(Jenc.K420{}, ww, hh)
+      +sc = Laws.jpg.enc.scan(Jenc.K420{})
+      +nbu = Laws.jpg.blocks(fr)
+      +st = Laws.jpg.psome(Jpeg.decode.start(U32.to_nat(nbu), Jpeg.Bits{0, 1, 0, ent}, fr, sc, tb, 0, False{},
+        Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)),
+        Jpeg.decode.plane((ww * hh : U32))))
+      +sm = Jpeg.decode.scan.match(3, 3, [1, 2, 3], [1, 2, 3])
+      +hf = {M3.and_tt(Jpeg.decode.area.ok(ww, hh), Bool.and(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb),
+        sm), hz, M3.and_tt(Nat.is_le(Jpeg.decode.need.bits(U32.to_nat(nbu)), eb), sm, hl, {==})) :
+        {Jpeg.decode.fits(ww, hh, nbu, ent, 3, [1, 2, 3], sc) == True{} : Bool}}
+      sf = Equal.sym(Bool, Jpeg.decode.fits(ww, hh, nbu, ent, 3, [1, 2, 3], sc), True{}, hf)
       %s1 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(_, U32.is_eq(hh, 0)), ww, hh, fr, sc, tb, ent, 0, False{})) ==
         st : Bool}
       %s2 : {Laws.jpg.psome(Jpeg.decode.run.n(Bool.or(False{}, _), ww, hh, fr, sc, tb, ent, 0, False{})) == st : Bool}
@@ -5090,6 +5114,204 @@ def udiv8(
   match xx:
     case U32{+xw}:
       udiv8.fin(xw, divinv(32n, xw))
+
+# a long division by 16 of a word of m bits: the word is the remainder and sixteen times the quotient, the remainder
+# below 16
+def DivInv16(+mm: Nat, -aa: Word(mm)) -> Type:
+  &_e: {Word.to_nat(mm, aa) == Nat.add(U32.to_nat(jenc.dr(mm, U32.divmod.go(mm, aa, 16))), M1.sixteen(Word.to_nat(mm,
+      jenc.dq(mm,
+    U32.divmod.go(mm, aa, 16))))) : Nat} -> {U32.is_lt(jenc.dr(mm, U32.divmod.go(mm, aa, 16)), 16) == True{} : Bool}
+
+# the type of divg16's parameter eh
+def divg16.eh.ty(+_pp: Nat, +_a0: Bool, +_hi: Word(_pp), +_qq: Word(_pp), +_rn: Nat) -> Type:
+  {Word.to_nat(1n+_pp, WCon{_a0, _hi}) == Nat.add(Nat.add(M1.bit(_a0), Nat.double(_rn)),
+    Nat.double(M1.sixteen(Word.to_nat(_pp, _qq)))) : Nat}
+
+# the long division's shifted remainder, the new quotient bit decided by g
+def divg16(
+  gg: Bool,
+  +pp: Nat,
+  +a0: Bool,
+  -hi: Word(pp),
+  +qq: Word(pp),
+  +ss: Word(32n),
+  +rn: Nat,
+  +hg: {U32.is_ge(U32{ss}, 16) == gg : Bool},
+  +es: {Word.to_nat(32n, ss) == Nat.add(M1.bit(a0), Nat.double(rn)) : Nat},
+  eh0: divg16.eh.ty(pp, a0, hi, qq, rn),
+  +hr: {Nat.is_lt(rn, 16n) == True{} : Bool}
+) -> &_e: {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(U32.to_nat(jenc.dr(1n+pp, U32.divmod.go.fin(pp, qq, U32{ss}, 16,
+  gg))), M1.sixteen(Word.to_nat(1n+pp, jenc.dq(1n+pp, U32.divmod.go.fin(pp, qq, U32{ss}, 16,
+  gg))))) : Nat} -> {U32.is_lt(jenc.dr(1n+pp, U32.divmod.go.fin(pp, qq, U32{ss}, 16, gg)), 16) == True{} : Bool}:
+  match gg:
+    case False{}:
+      +eh = {eh0 : {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)),
+        Nat.double(M1.sixteen(Word.to_nat(pp, qq)))) : Nat}}
+      +sn = Word.to_nat(32n, ss)
+      (Equal.trans(Nat, Word.to_nat(1n+pp, WCon{a0, hi}), Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)),
+          Nat.double(M1.sixteen(
+        Word.to_nat(pp, qq)))), Nat.add(sn, Nat.double(M1.sixteen(Word.to_nat(pp, qq)))), eh, Equal.cong(Nat, Nat, xx =>
+        Nat.add(xx, Nat.double(M1.sixteen(Word.to_nat(pp, qq)))), Nat.add(M1.bit(a0), Nat.double(rn)), sn,
+          Equal.sym(Nat,
+            sn,
+        Nat.add(M1.bit(a0), Nat.double(rn)), es))), nge_lt(U32.cmp(U32{ss}, 16), hg))
+    case True{}:
+      +eh = {eh0 : {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)),
+        Nat.double(M1.sixteen(Word.to_nat(pp, qq)))) : Nat}}
+      +sn = Word.to_nat(32n, ss)
+      +dd = Nat.double(M1.sixteen(Word.to_nat(pp, qq)))
+      +h8 = {Equal.trans(Bool, Nat.is_le(16n, sn), Cmp.is_ge(Nat.cmp(sn, 16n)), True{}, Equal.sym(Bool,
+        Cmp.is_ge(Nat.cmp(sn,
+        16n)), Nat.is_le(16n, sn), M3.ge_le(sn, 16n)), Equal.trans(Bool, Cmp.is_ge(Nat.cmp(sn, 16n)),
+          U32.is_ge(U32{ss}, 16),
+        True{}, Equal.cong(Cmp, Bool, cc => Cmp.is_ge(cc), Nat.cmp(sn, 16n), U32.cmp(U32{ss}, 16), Equal.sym(Cmp,
+        U32.cmp(U32{ss}, 16), Nat.cmp(sn, 16n), M3.jenc.u_cmp(U32{ss}, 16))), hg)) : {Nat.is_le(16n,
+          sn) == True{} : Bool}}
+      +er = {M6.ras.u32_sub_nat(U32{ss}, 16, h8) : {U32.to_nat((U32{ss} - 16 : U32)) == Nat.sub(sn, 16n) : Nat}}
+      +h16 = {Equal.trans(Bool, Nat.is_lt(sn, 32n), Nat.is_lt(Nat.add(M1.bit(a0), Nat.double(rn)), 32n), True{},
+        Equal.cong(Nat, Bool, xx => Nat.is_lt(xx, 32n), sn, Nat.add(M1.bit(a0), Nat.double(rn)), es), jenc.lt_dbl(a0,
+            rn, 16n,
+        hr)) : {Nat.is_lt(sn, 32n) == True{} : Bool}}
+      (Equal.trans(Nat, Word.to_nat(1n+pp, WCon{a0, hi}), Nat.add(sn, dd), Nat.add(U32.to_nat((U32{ss} - 16 : U32)),
+        16n+dd), Equal.trans(Nat, Word.to_nat(1n+pp, WCon{a0, hi}), Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)), dd),
+        Nat.add(sn, dd), eh, Equal.cong(Nat, Nat, xx => Nat.add(xx, dd), Nat.add(M1.bit(a0), Nat.double(rn)), sn,
+        Equal.sym(Nat, sn, Nat.add(M1.bit(a0), Nat.double(rn)), es))), Equal.sym(Nat, Nat.add(U32.to_nat((U32{ss} - 16 :
+        U32)), 16n+dd), Nat.add(sn, dd), Equal.trans(Nat, Nat.add(U32.to_nat((U32{ss} - 16 : U32)), 16n+dd), Nat.add(
+        Nat.sub(sn, 16n), 16n+dd), Nat.add(sn, dd), Equal.cong(Nat, Nat, xx => Nat.add(xx, 16n+dd),
+          U32.to_nat((U32{ss} - 16
+        : U32)), Nat.sub(sn, 16n), er), Equal.trans(Nat, Nat.add(Nat.sub(sn, 16n), Nat.add(16n, dd)), Nat.add(16n,
+          Nat.add(
+        Nat.sub(sn, 16n), dd)), Nat.add(sn, dd), M1.add_swap(Nat.sub(sn, 16n), 16n, dd), Equal.trans(Nat, Nat.add(16n,
+        Nat.add(Nat.sub(sn, 16n), dd)), Nat.add(Nat.add(16n, Nat.sub(sn, 16n)), dd), Nat.add(sn, dd), Equal.sym(Nat,
+        Nat.add(Nat.add(16n, Nat.sub(sn, 16n)), dd), Nat.add(16n, Nat.add(Nat.sub(sn, 16n), dd)), M1.ras.add_assoc(16n,
+        Nat.sub(sn, 16n), dd)), Equal.cong(Nat, Nat, xx => Nat.add(xx, dd), Nat.add(16n, Nat.sub(sn, 16n)), sn,
+          M6.add_sub(16n,
+        sn, h8))))))), M3.n_ult((U32{ss} - 16 : U32), 16, Equal.trans(Bool, Nat.is_lt(U32.to_nat((U32{ss} - 16 : U32)),
+            16n),
+        Nat.is_lt(Nat.sub(sn, 16n), 16n), True{}, Equal.cong(Nat, Bool, xx => Nat.is_lt(xx, 16n),
+          U32.to_nat((U32{ss} - 16 :
+        U32)), Nat.sub(sn, 16n), er), M6.sub_lt(16n, sn, 16n, h8, h16))))
+
+# the division by 16 invariant for a long division's result x of a word of p + 1 bits
+def DivR16(+pp: Nat, -aa: Word(1n+pp), xx: Word(1n+pp) & U32) -> Type:
+  &_e: {Word.to_nat(1n+pp, aa) == Nat.add(U32.to_nat(jenc.dr(1n+pp, xx)), M1.sixteen(Word.to_nat(1n+pp, jenc.dq(1n+pp,
+      xx)))) : Nat} ->
+    {U32.is_lt(jenc.dr(1n+pp, xx), 16) == True{} : Bool}
+
+# the invariant moved along an equality of results
+def divr16_tr(
+  +pp: Nat,
+  -aa: Word(1n+pp),
+  xx: Word(1n+pp) & U32,
+  yy: Word(1n+pp) & U32,
+  ee: {xx == yy : Word(1n+pp) & U32},
+  hh: DivR16(pp, aa, yy)
+) -> DivR16(pp, aa, xx):
+  es = Equal.sym(Word(1n+pp) & U32, xx, yy, ee)
+  %es : DivR16(pp, aa, _)
+  hh
+
+# one step of the long division by 16, the remainder a word
+def divstep16.r(
+  +pp: Nat,
+  +a0: Bool,
+  -hi: Word(pp),
+  +qq: Word(pp),
+  +rw: Word(32n),
+  ee: {Word.to_nat(pp, hi) == Nat.add(Word.to_nat(32n, rw), M1.sixteen(Word.to_nat(pp, qq))) : Nat},
+  +hl: {U32.is_lt(U32{rw}, 16) == True{} : Bool}
+) -> DivR16(pp, WCon{a0, hi}, U32.divmod.go.rec(pp, a0, 16, (qq, U32{rw}))):
+  +ss = snd.bw(32n, Word.shl.out(32n, a0, rw))
+  +rn = Word.to_nat(32n, rw)
+  +qn = Word.to_nat(pp, qq)
+  +ht = {M3.ngt_top(31n, rw, M3.uw(16), {==}, M3.lt_ngt(Word.cmp(32n, rw, M3.uw(16)), hl)) : {M3.wtop(31n,
+      rw) == False{} :
+    Bool}}
+  +hf = {Equal.trans(Bool, fst.bw(32n, Word.shl.out(32n, a0, rw)), M3.wtop(31n, rw), False{}, shl_top(31n, a0, rw),
+    ht) : {fst.bw(32n, Word.shl.out(32n, a0, rw)) ==
+    False{} : Bool}}
+  +es = {jenc.shl_nat(31n, a0, rw, ht) : {Word.to_nat(32n, ss) == Nat.add(M1.bit(a0), Nat.double(rn)) : Nat}}
+  +eh = {Equal.trans(Nat, Word.to_nat(1n+pp, WCon{a0, hi}), Nat.add(M1.bit(a0), Nat.double(Word.to_nat(pp, hi))),
+    Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)), Nat.double(M1.sixteen(qn))), M1.to_nat_con(pp, a0, hi),
+    Equal.trans(Nat,
+    Nat.add(M1.bit(a0), Nat.double(Word.to_nat(pp, hi))), Nat.add(M1.bit(a0), Nat.double(Nat.add(rn, M1.sixteen(qn)))),
+    Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)), Nat.double(M1.sixteen(qn))), Equal.cong(Nat, Nat,
+        xx => Nat.add(M1.bit(a0),
+    Nat.double(xx)), Word.to_nat(pp, hi), Nat.add(rn, M1.sixteen(qn)), ee), Equal.trans(Nat, Nat.add(M1.bit(a0),
+    Nat.double(Nat.add(rn, M1.sixteen(qn)))), Nat.add(M1.bit(a0), Nat.add(Nat.double(rn), Nat.double(M1.sixteen(qn)))),
+    Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)), Nat.double(M1.sixteen(qn))), Equal.cong(Nat, Nat,
+        xx => Nat.add(M1.bit(a0),
+    xx), Nat.double(Nat.add(rn, M1.sixteen(qn))), Nat.add(Nat.double(rn), Nat.double(M1.sixteen(qn))),
+      M1.double_dist(rn,
+    M1.sixteen(qn))), Equal.sym(Nat, Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)), Nat.double(M1.sixteen(qn))),
+        Nat.add(M1.bit(a0),
+    Nat.add(Nat.double(rn), Nat.double(M1.sixteen(qn)))), M1.ras.add_assoc(M1.bit(a0), Nat.double(rn),
+        Nat.double(M1.sixteen(qn))))))) :
+    {Word.to_nat(1n+pp, WCon{a0, hi}) == Nat.add(Nat.add(M1.bit(a0), Nat.double(rn)),
+      Nat.double(M1.sixteen(qn))) : Nat}}
+  +gg = U32.is_ge(U32{ss}, 16)
+  divr16_tr(pp, WCon{a0, hi}, U32.divmod.go.rec(pp, a0, 16, (qq, U32{rw})), U32.divmod.go.fin(pp, qq, U32{ss}, 16, gg),
+    Equal.trans(Word(1n+pp) & U32, U32.divmod.go.shl(pp, qq, 16, Word.shl.out(32n, a0, rw)), U32.divmod.go.shl(pp, qq,
+      16, (fst.bw(32n, Word.shl.out(32n, a0, rw)), ss)),
+    U32.divmod.go.fin(pp, qq, U32{ss}, 16, gg), Equal.cong(Bool & Word(32n), Word(1n+pp) & U32, tt =>
+    U32.divmod.go.shl(pp, qq, 16, tt), Word.shl.out(32n, a0, rw), (fst.bw(32n, Word.shl.out(32n, a0, rw)), ss),
+      bw_eta(32n, Word.shl.out(32n, a0, rw))), Equal.cong(Bool, Word(1n+pp) & U32,
+    bb => U32.divmod.go.fin(pp, qq, U32{ss}, 16, Bool.or(bb, gg)), fst.bw(32n, Word.shl.out(32n, a0, rw)), False{},
+      hf)), divg16(gg, pp, a0, hi,
+    qq, ss, rn, {==}, es, eh, M3.ult_n(U32{rw}, 16, hl)))
+
+# the type of divstep16's parameter inv
+def divstep16.inv.ty(+_pp: Nat, +_hi: Word(_pp), _qr: Word(_pp) & U32) -> Type:
+  &_e: {Word.to_nat(_pp, _hi) == Nat.add(U32.to_nat(jenc.dr(_pp, _qr)), M1.sixteen(Word.to_nat(_pp, jenc.dq(_pp,
+    _qr)))) : Nat} -> {U32.is_lt(jenc.dr(_pp, _qr), 16) == True{} : Bool}
+
+# one step of the long division by 16, whatever the division of the higher bits returned
+def divstep16(
+  +pp: Nat,
+  +a0: Bool,
+  -hi: Word(pp),
+  qr: Word(pp) & U32,
+  inv: divstep16.inv.ty(pp, hi, qr)
+) -> DivR16(pp, WCon{a0, hi}, U32.divmod.go.rec(pp, a0, 16, qr)):
+  match qr:
+    case (+qq, rr):
+      match rr:
+        case U32{+rw}:
+          (e, hl) = inv
+          divstep16.r(pp, a0, hi, qq, rw, e, hl)
+
+# the long division by 16: the word is the remainder and sixteen times the quotient, the remainder below 16
+def divinv16(mm: Nat, aa: Word(mm)) -> DivInv16(mm, aa):
+  match mm aa:
+    case 0n WNil{}:
+      ({==}, {==})
+    case 1n+ +pp WCon{+a0, +hi}:
+      divstep16(pp, a0, hi, U32.divmod.go(pp, hi, 16), divinv16(pp, hi))
+
+# the division of a word by 16, its invariant named
+def udiv16.fin(
+  +xw: Word(32n),
+  inv: DivInv16(32n, xw)
+) -> &rr: U32 -> &_e: {U32.to_nat(U32{xw}) == Nat.add(U32.to_nat(rr), M1.sixteen(U32.to_nat(U32.div(U32{xw},
+  16)))) : Nat} -> {U32.is_lt(rr, 16) == True{} : Bool}:
+  (e, hl) = inv
+  (jenc.dr(32n, U32.divmod.go(32n, xw, 16)), Equal.trans(Nat, Word.to_nat(32n, xw), Nat.add(U32.to_nat(jenc.dr(32n,
+    U32.divmod.go(32n, xw, 16))), M1.sixteen(Word.to_nat(32n, jenc.dq(32n,
+    U32.divmod.go(32n, xw, 16))))), Nat.add(U32.to_nat(jenc.dr(32n, U32.divmod.go(32n, xw, 16))),
+      M1.sixteen(U32.to_nat(U32.div(U32{xw}, 16)))), e, Equal.cong(U32, Nat, uu =>
+    Nat.add(U32.to_nat(jenc.dr(32n, U32.divmod.go(32n, xw, 16))), M1.sixteen(U32.to_nat(uu))), U32{jenc.dq(32n,
+        U32.divmod.go(32n, xw,
+      16))}, U32.div(U32{xw}, 16), Equal.sym(U32,
+    U32.div(U32{xw}, 16), U32{jenc.dq(32n, U32.divmod.go(32n, xw, 16))}, divfin_eta(U32.divmod.go(32n, xw, 16))))), hl)
+
+# a U32 is a remainder below 16 and sixteen times its quotient by 16
+def udiv16(
+  xx: U32
+) -> &rr: U32 -> &_e: {U32.to_nat(xx) == Nat.add(U32.to_nat(rr), M1.sixteen(U32.to_nat(U32.div(xx,
+  16)))) : Nat} -> {U32.is_lt(rr, 16) == True{} : Bool}:
+  match xx:
+    case U32{+xw}:
+      udiv16.fin(xw, divinv16(32n, xw))
 
 # the multiplier, when the product is below 2^n, is the product
 def word_mul_pow(
@@ -5699,8 +5921,8 @@ def ceil_eq(
 # the encoder's MCU count and the decoder's block count of a layout's frame, for sides of 1 to 65535: as many blocks
 # per MCU as the layout has, at least one MCU
 def CountOut(+kd: Jenc.Layout, +ww: U32, +hh: U32) -> Type:
-  &_n: {U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh))) == M2.kcnt(kd, U32.to_nat(M2.mcun(ww, hh))) :
-    Nat} -> {Nat.is_lt(0n, U32.to_nat(M2.mcun(ww, hh))) == True{} : Bool}
+  &_n: {U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh))) == M2.kcnt(kd, U32.to_nat(M2.mcunk(kd, ww,
+    hh))) : Nat} -> {Nat.is_lt(0n, U32.to_nat(M2.mcunk(kd, ww, hh))) == True{} : Bool}
 
 # a product of two numbers above 0 is above 0
 def pos_mul(
@@ -5791,31 +6013,192 @@ def count_fin.g(
     Equal.trans(Nat, U32.to_nat((mm * 1 : U32)), Nat.mul(pn, 1n), mn, e1, Equal.trans(Nat, Nat.mul(pn, 1n), pn, mn,
     M1.mul_one(pn), Equal.sym(Nat, mn, pn, em)))), hp)
 
-# the counts, each side's MCU count named
-def count_mw(
-  +kd: Jenc.Layout,
+# the 4:4:4 counts, each side's MCU count named
+def count_mw3(
   +ww: U32,
   +hh: U32,
   +hwl: {U32.is_le(ww, 65535) == True{} : Bool},
   +hhl: {U32.is_le(hh, 65535) == True{} : Bool},
   ow: MwOut(ww),
   oh: MwOut(hh)
-) -> CountOut(kd, ww, hh):
-  match kd:
-    case Jenc.K444{}:
-      (e7w, fw, pw) = ow
-      (e7h, fh, ph) = oh
-      +mw = U32.div((ww + 7 : U32), 8)
-      +mh = U32.div((hh + 7 : U32), 8)
-      count_fin(ww, hh, ceil_eq(ww, hwl, e7w), ceil_eq(hh, hhl, e7h), pw, ph, u32_triple(mw, mh, 3, fw, fh, (wof(2n,
-        3n), {==})))
-    case Jenc.KGray{}:
-      (e7w, fw, pw) = ow
-      (e7h, fh, ph) = oh
-      +mw = U32.div((ww + 7 : U32), 8)
-      +mh = U32.div((hh + 7 : U32), 8)
-      count_fin.g(ww, hh, ceil_eq(ww, hwl, e7w), ceil_eq(hh, hhl, e7h), pw, ph, u32_triple(mw, mh, 1, fw, fh,
-        (wof(2n, 1n), {==})))
+) -> CountOut(Jenc.K444{}, ww, hh):
+  (e7w, fw, pw) = ow
+  (e7h, fh, ph) = oh
+  +mw = U32.div((ww + 7 : U32), 8)
+  +mh = U32.div((hh + 7 : U32), 8)
+  count_fin(ww, hh, ceil_eq(ww, hwl, e7w), ceil_eq(hh, hhl, e7h), pw, ph, u32_triple(mw, mh, 3, fw, fh, (wof(2n, 3n),
+    {==})))
+
+# the gray counts, each side's MCU count named
+def count_mwg(
+  +ww: U32,
+  +hh: U32,
+  +hwl: {U32.is_le(ww, 65535) == True{} : Bool},
+  +hhl: {U32.is_le(hh, 65535) == True{} : Bool},
+  ow: MwOut(ww),
+  oh: MwOut(hh)
+) -> CountOut(Jenc.KGray{}, ww, hh):
+  (e7w, fw, pw) = ow
+  (e7h, fh, ph) = oh
+  +mw = U32.div((ww + 7 : U32), 8)
+  +mh = U32.div((hh + 7 : U32), 8)
+  count_fin.g(ww, hh, ceil_eq(ww, hwl, e7w), ceil_eq(hh, hhl, e7h), pw, ph, u32_triple(mw, mh, 1, fw, fh, (wof(2n,
+    1n), {==})))
+
+# two to 4 + k is sixteen times two to k
+def pow4(+kk: Nat) -> {Nat.pow(2n, 4n+kk) == M1.sixteen(Nat.pow(2n, kk)) : Nat}:
+  +p0 = Nat.pow(2n, kk)
+  Equal.trans(Nat, Nat.pow(2n, 4n+kk), Nat.double(Nat.pow(2n, 3n+kk)), M1.sixteen(p0), M1.pow2_succ(3n+kk),
+    Equal.cong(Nat, Nat, xx => Nat.double(xx), Nat.pow(2n, 3n+kk), M1.eight(p0), pow3(kk)))
+
+# sixteen times numbers keep their order
+def sixteen_iff(+aa: Nat, +bb: Nat) -> {Nat.is_lt(M1.sixteen(aa), M1.sixteen(bb)) == Nat.is_lt(aa, bb) : Bool}:
+  Equal.trans(Bool, Nat.is_lt(M1.sixteen(aa), M1.sixteen(bb)), Nat.is_lt(M1.eight(aa), M1.eight(bb)), Nat.is_lt(aa,
+    bb), dbl_iff(M1.eight(aa), M1.eight(bb)), eight_iff(aa, bb))
+
+# a quotient by 16 of a number of k + 4 bits fits k bits
+def qfits16(
+  +kk: Nat,
+  +xx: Nat,
+  +rr: Nat,
+  +qq: Nat,
+  ee: {xx == Nat.add(rr, M1.sixteen(qq)) : Nat},
+  ff: Fits(4n+kk, xx)
+) -> Fits(kk, qq):
+  +pk = Nat.pow(2n, kk)
+  +hx = {fits_lt(4n+kk, xx, ff) : {Nat.is_lt(xx, Nat.pow(2n, 4n+kk)) == True{} : Bool}}
+  +h16 = {M1.le_lt_trans(M1.sixteen(qq), xx, M1.sixteen(pk), M1.le_rw_r(M1.sixteen(qq), Nat.add(rr, M1.sixteen(qq)),
+    xx, Equal.sym(Nat, xx, Nat.add(rr, M1.sixteen(qq)), ee), M3.le_add_left(rr, M1.sixteen(qq))), M1.lt_rw_r(xx,
+    Nat.pow(2n, 4n+kk), M1.sixteen(pk), pow4(kk), hx)) : {Nat.is_lt(M1.sixteen(qq), M1.sixteen(pk)) == True{} : Bool}}
+  mkfits(kk, qq, Equal.trans(Bool, Nat.is_lt(qq, pk), Nat.is_lt(M1.sixteen(qq), M1.sixteen(pk)), True{},
+    Equal.sym(Bool, Nat.is_lt(M1.sixteen(qq), M1.sixteen(pk)), Nat.is_lt(qq, pk), sixteen_iff(qq, pk)), h16))
+
+# a quotient by 16 of a number at least 16 is above 0
+def q_pos16(
+  qq: Nat,
+  +xx: Nat,
+  +rr: Nat,
+  ee: {xx == Nat.add(rr, M1.sixteen(qq)) : Nat},
+  hr: {Nat.is_lt(rr, 16n) == True{} : Bool},
+  hx: {Nat.is_le(16n, xx) == True{} : Bool}
+) -> {Nat.is_lt(0n, qq) == True{} : Bool}:
+  match qq:
+    case 0n:
+      Empty.absurd({Nat.is_lt(0n, 0n) == True{} : Bool}, M3.jenc.true_false(Equal.trans(Bool, True{}, Nat.is_le(16n,
+        rr), False{}, Equal.sym(Bool, Nat.is_le(16n, rr), True{}, Equal.trans(Bool, Nat.is_le(16n, rr), Nat.is_le(16n,
+        xx), True{}, Equal.cong(Nat, Bool, nn => Nat.is_le(16n, nn), rr, xx, Equal.sym(Nat, xx, rr, Equal.trans(Nat, xx,
+        Nat.add(rr, 0n), rr, ee, M1.ras.add_zero(rr)))), hx)), M3.lt_nle(rr, 16n, hr))))
+    case 1n+_p:
+      {==}
+
+# a side at most 65535, plus 16, less 1, as the decoder rounds it up by 16, is the side plus 15
+def e15(
+  +ww: U32,
+  +hl: {U32.is_le(ww, 65535) == True{} : Bool}
+) -> {U32.to_nat(((ww + 16 : U32) - 1 : U32)) == Nat.add(U32.to_nat(ww), 15n) : Nat}:
+  +wn = U32.to_nat(ww)
+  +e16 = {uadd_fits(ww, 16, fits_up(17n, 15n, Nat.add(wn, 16n), fits_add(16n, wn, 16n, fits16(ww, hl), (wof(16n,
+    16n), {==})))) : {U32.to_nat((ww + 16 : U32)) == Nat.add(wn, 16n) : Nat}}
+  +h1 = {M1.le_rw_r(1n, Nat.add(wn, 16n), U32.to_nat((ww + 16 : U32)), Equal.sym(Nat, U32.to_nat((ww + 16 : U32)),
+    Nat.add(wn, 16n), e16), M1.le_trans(1n, 16n, Nat.add(wn, 16n), {==}, M3.le_add_left(wn, 16n))) : {Nat.is_le(1n,
+    U32.to_nat((ww + 16 : U32))) == True{} : Bool}}
+  Equal.trans(Nat, U32.to_nat(((ww + 16 : U32) - 1 : U32)), Nat.sub(U32.to_nat((ww + 16 : U32)), 1n), Nat.add(wn,
+    15n), M6.ras.u32_sub_nat((ww + 16 : U32), 1, h1), Equal.trans(Nat, Nat.sub(U32.to_nat((ww + 16 : U32)), 1n),
+    Nat.sub(1n+Nat.add(wn, 15n), 1n), Nat.add(wn, 15n), Equal.cong(Nat, Nat, nn => Nat.sub(nn, 1n), U32.to_nat((ww +
+    16 : U32)), 1n+Nat.add(wn, 15n), Equal.trans(Nat, U32.to_nat((ww + 16 : U32)), Nat.add(wn, 16n), 1n+Nat.add(wn,
+    15n), e16, M1.ras.add_succ(wn, 15n))), M6.sub_zero(Nat.add(wn, 15n))))
+
+# a side's 4:2:0 MCU count, its side rounded up by 16: fits 13 bits and is at least 1
+def Mw16Out(+ww: U32) -> Type:
+  &_f: Fits(13n, U32.to_nat(Jpeg.decode.ceil(ww, 16))) -> {Nat.is_lt(0n, U32.to_nat(Jpeg.decode.ceil(ww, 16))) ==
+    True{} : Bool}
+
+# the type of mw16_fin's parameter dv
+def mw16_fin.dv.ty(+_ww: U32) -> Type:
+  &rr: U32 -> &_e: {U32.to_nat(((_ww + 16 : U32) - 1 : U32)) == Nat.add(U32.to_nat(rr),
+    M1.sixteen(U32.to_nat(Jpeg.decode.ceil(_ww, 16)))) : Nat} -> {U32.is_lt(rr, 16) == True{} : Bool}
+
+# a side's 4:2:0 MCU count, its division named
+def mw16_fin(
+  +ww: U32,
+  +hl: {U32.is_le(ww, 65535) == True{} : Bool},
+  +h16: {Nat.is_le(16n, Nat.add(U32.to_nat(ww), 15n)) == True{} : Bool},
+  dv: mw16_fin.dv.ty(ww)
+) -> Mw16Out(ww):
+  (+rr, +ed, hr) = dv
+  +wn = U32.to_nat(ww)
+  +xx = U32.to_nat(((ww + 16 : U32) - 1 : U32))
+  +qn = U32.to_nat(Jpeg.decode.ceil(ww, 16))
+  +ex = {e15(ww, hl) : {xx == Nat.add(wn, 15n) : Nat}}
+  (qfits16(13n, xx, U32.to_nat(rr), qn, ed, fits_tr(17n, Nat.add(wn, 15n), xx, Equal.sym(Nat, xx, Nat.add(wn, 15n),
+    ex), fits_add(16n, wn, 15n, fits16(ww, hl), (wof(16n, 15n), {==})))), q_pos16(qn, xx, U32.to_nat(rr), ed,
+    M3.ult_n(rr, 16, hr), M1.le_rw_r(16n, Nat.add(wn, 15n), xx, Equal.sym(Nat, xx, Nat.add(wn, 15n), ex), h16)))
+
+# a nonzero side at most 65535: its 4:2:0 MCU count fits 13 bits and is at least 1
+def mw16_ok(
+  +ww: U32,
+  h0: {U32.is_eq(ww, 0) == False{} : Bool},
+  +hl: {U32.is_le(ww, 65535) == True{} : Bool}
+) -> Mw16Out(ww):
+  +wn = U32.to_nat(ww)
+  +hw = {M3.nle_lt(wn, 0n, Equal.trans(Bool, Nat.is_le(wn, 0n), Nat.is_eq(wn, 0n), False{}, ngt_le0(wn),
+    Equal.trans(Bool, Nat.is_eq(wn, 0n), U32.is_eq(ww, 0), False{}, Equal.sym(Bool, U32.is_eq(ww, 0), Nat.is_eq(wn,
+    0n), M1.u32_eq(ww, 0)), h0))) : {Nat.is_lt(0n, wn) == True{} : Bool}}
+  mw16_fin(ww, hl, M3.le_addr(1n, wn, 15n, Equal.trans(Bool, Nat.is_le(1n, wn), Nat.is_lt(0n, wn), True{},
+    Equal.sym(Bool, Nat.is_lt(0n, wn), Nat.is_le(1n, wn), M1.lt_le_succ(0n, wn)), hw)), udiv16(((ww + 16 : U32) - 1 :
+    U32)))
+
+# the 4:2:0 MCU counts' product, and it times 6, never wrap
+def u32_six(
+  +au: U32,
+  +bu: U32,
+  fa: Fits(13n, U32.to_nat(au)),
+  fb: Fits(13n, U32.to_nat(bu))
+) -> &_p: {U32.to_nat((au * bu : U32)) == Nat.mul(U32.to_nat(au), U32.to_nat(bu)) : Nat} -> {U32.to_nat(((au * bu :
+  U32) * 6 : U32)) == Nat.mul(Nat.mul(U32.to_nat(au), U32.to_nat(bu)), 6n) : Nat}:
+  match au bu:
+    case U32{+aw} U32{+bw}:
+      word_triple(32n, 13n, 13n, 3n, aw, bw, M3.uw(6), fa, fb, (wof(3n, 6n), {==}), {==})
+
+# six for each is six times
+def six_mul(nn: Nat) -> {M2.six(nn) == Nat.mul(nn, 6n) : Nat}:
+  match nn:
+    case 0n:
+      {==}
+    case 1n+ +pp:
+      Equal.cong(Nat, Nat, xx => 6n+xx, M2.six(pp), Nat.mul(pp, 6n), six_mul(pp))
+
+# the type of count_h2's parameter pr: the 4:2:0 MCU count and 6 times it, without U32 wrap
+def count_h2.pr.ty(+_ww: U32, +_hh: U32) -> Type:
+  &_p: {U32.to_nat(M2.mcun2(_ww, _hh)) == Nat.mul(U32.to_nat(Jpeg.decode.ceil(_ww, 16)),
+    U32.to_nat(Jpeg.decode.ceil(_hh, 16))) : Nat} -> {U32.to_nat((M2.mcun2(_ww, _hh) * 6 : U32)) ==
+    Nat.mul(Nat.mul(U32.to_nat(Jpeg.decode.ceil(_ww, 16)), U32.to_nat(Jpeg.decode.ceil(_hh, 16))), 6n) : Nat}
+
+# the 4:2:0 counts, the products named: six blocks per MCU
+def count_h2.fin(
+  +ww: U32,
+  +hh: U32,
+  +pw: {Nat.is_lt(0n, U32.to_nat(Jpeg.decode.ceil(ww, 16))) == True{} : Bool},
+  +ph: {Nat.is_lt(0n, U32.to_nat(Jpeg.decode.ceil(hh, 16))) == True{} : Bool},
+  pr: count_h2.pr.ty(ww, hh)
+) -> CountOut(Jenc.K420{}, ww, hh):
+  (em0, e60) = pr
+  +mm = M2.mcun2(ww, hh)
+  +mn = U32.to_nat(mm)
+  +pn = Nat.mul(U32.to_nat(Jpeg.decode.ceil(ww, 16)), U32.to_nat(Jpeg.decode.ceil(hh, 16)))
+  +em = {em0 : {mn == pn : Nat}}
+  +e6 = {e60 : {U32.to_nat((mm * 6 : U32)) == Nat.mul(pn, 6n) : Nat}}
+  +hp = {M1.lt_rw_r(0n, pn, mn, Equal.sym(Nat, mn, pn, em), pos_mul(U32.to_nat(Jpeg.decode.ceil(ww, 16)),
+    U32.to_nat(Jpeg.decode.ceil(hh, 16)), pw, ph)) : {Nat.is_lt(0n, mn) == True{} : Bool}}
+  (Equal.trans(Nat, U32.to_nat((mm * 6 : U32)), Nat.mul(pn, 6n), M2.six(mn), e6, Equal.trans(Nat, Nat.mul(pn, 6n),
+    Nat.mul(mn, 6n), M2.six(mn), Equal.cong(Nat, Nat, xx => Nat.mul(xx, 6n), pn, mn, Equal.sym(Nat, mn, pn, em)),
+    Equal.sym(Nat, M2.six(mn), Nat.mul(mn, 6n), six_mul(mn)))), hp)
+
+# the 4:2:0 counts, each side's MCU count named
+def count_h2(+ww: U32, +hh: U32, ow: Mw16Out(ww), oh: Mw16Out(hh)) -> CountOut(Jenc.K420{}, ww, hh):
+  (fw, pw) = ow
+  (fh, ph) = oh
+  count_h2.fin(ww, hh, pw, ph, u32_six(Jpeg.decode.ceil(ww, 16), Jpeg.decode.ceil(hh, 16), fw, fh))
 
 # the counts, for sides of 1 to 65535
 def count_ok(
@@ -5827,7 +6210,13 @@ def count_ok(
   +hwl: {U32.is_le(ww, 65535) == True{} : Bool},
   +hhl: {U32.is_le(hh, 65535) == True{} : Bool}
 ) -> CountOut(kd, ww, hh):
-  count_mw(kd, ww, hh, hwl, hhl, mw_ok(ww, hw0, hwl), mw_ok(hh, hh0, hhl))
+  match kd:
+    case Jenc.K444{}:
+      count_mw3(ww, hh, hwl, hhl, mw_ok(ww, hw0, hwl), mw_ok(hh, hh0, hhl))
+    case Jenc.KGray{}:
+      count_mwg(ww, hh, hwl, hhl, mw_ok(ww, hw0, hwl), mw_ok(hh, hh0, hhl))
+    case Jenc.K420{}:
+      count_h2(ww, hh, mw16_ok(ww, hw0, hwl), mw16_ok(hh, hh0, hhl))
 
 # a number above 0 is not 0
 def ne0(nn: Nat, hh: {Nat.is_lt(0n, nn) == True{} : Bool}) -> {Nat.is_eq(nn, 0n) == False{} : Bool}:
@@ -5872,6 +6261,14 @@ def one_pos(nn: Nat, hp: {Nat.is_lt(0n, nn) == True{} : Bool}, ee: {0n == nn : N
     case 1n+pp:
       M3.zero_ne(pp, ee)
 
+# six per MCU, at least one MCU, is not no blocks
+def six_pos(nn: Nat, hp: {Nat.is_lt(0n, nn) == True{} : Bool}, ee: {0n == M2.six(nn) : Nat}) -> Empty:
+  match nn:
+    case 0n:
+      M1.huf.false_true(hp)
+    case 1n+pp:
+      M3.zero_ne(1n+(1n+(1n+(1n+(1n+M2.six(pp))))), ee)
+
 # a layout's blocks per MCU, at least one MCU, is not no blocks
 def kcnt_pos(
   +kd: Jenc.Layout,
@@ -5884,6 +6281,8 @@ def kcnt_pos(
       tri_pos(nn, hp, ee)
     case Jenc.KGray{}:
       one_pos(nn, hp, ee)
+    case Jenc.K420{}:
+      six_pos(nn, hp, ee)
 
 # the type of some_ts's parameter ea
 def some_ts.ea.ty(
@@ -5939,7 +6338,8 @@ def some_ts(
 
 # the decoder's block count of the encoder's frame: as many per MCU as the layout has
 def SomeEn(+kd: Jenc.Layout, +ww: U32, +hh: U32) -> Type:
-  {U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh))) == M2.kcnt(kd, U32.to_nat(M2.mcun(ww, hh))) : Nat}
+  {U32.to_nat(Laws.jpg.blocks(Laws.jpg.enc.frame(kd, ww, hh))) == M2.kcnt(kd, U32.to_nat(M2.mcunk(kd, ww, hh))) :
+    Nat}
 
 # the entropy-coded bytes' blocks named
 def some_path(
@@ -5954,11 +6354,11 @@ def some_path(
   +hhl: {U32.is_le(hh, 65535) == True{} : Bool},
   +har: {U32.is_le((ww * hh : U32), 2147483648) == True{} : Bool},
   en: SomeEn(kd, ww, hh),
-  hp: {Nat.is_lt(0n, U32.to_nat(M2.mcun(ww, hh))) == True{} : Bool},
-  po: M2.PathOut(Jenc.encode.arm(ww, hh, qq, kd, px), U32.to_nat(M2.mcun(ww, hh)), kd, ww, hh)
+  hp: {Nat.is_lt(0n, U32.to_nat(M2.mcunk(kd, ww, hh))) == True{} : Bool},
+  po: M2.PathOut(Jenc.encode.arm(ww, hh, qq, kd, px), U32.to_nat(M2.mcunk(kd, ww, hh)), kd, ww, hh)
 ) -> SomeRun(kd, ww, hh, qq, px):
   (ts, ea, el, ew, eg) = po
-  some_ts(ts, ww, hh, qq, kd, px, hw0, hh0, hwl, hhl, har, U32.to_nat(M2.mcun(ww, hh)), ea, el, ew, eg, en, hp)
+  some_ts(ts, ww, hh, qq, kd, px, hw0, hh0, hwl, hhl, har, U32.to_nat(M2.mcunk(kd, ww, hh)), ea, el, ew, eg, en, hp)
 
 # the block counts named
 def some_cnt(
@@ -5977,37 +6377,39 @@ def some_cnt(
   (en, hp) = co
   some_path(ww, hh, qq, kd, px, hw0, hh0, hwl, hhl, har, en, hp, M2.arm_ok(ww, hh, qq, kd, px))
 
-# the scan decode of encode_jpeg_q's entropy-coded bytes, in the frame of the layout it picks
-def RunOf(+ww: U32, +hh: U32, +qq: U32, +px: List<&2, U32>) -> Maybe<&2, Jpeg.Pic>:
+# the scan decode of encode_jpeg_with's entropy-coded bytes, in the frame of the layout it picks
+def RunOf(+ww: U32, +hh: U32, +qq: U32, +sub: Bool, +px: List<&2, U32>) -> Maybe<&2, Jpeg.Pic>:
   +cp = Img.colours(px)
-  +kd = Jenc.encode.kindof(cp)
+  +kd = Jenc.encode.kindof(sub, cp)
   Jpeg.decode.run(Laws.jpg.enc.frame(kd, ww, hh), Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq),
     Jenc.encode.arm(ww, hh, qq, kd, cp), 0, False{})
 
 # the type of some_ok's parameter ers
-def some_ok.ers.ty(+_ww: U32, +_hh: U32, +_qq: U32, +_px: List<&2, U32>) -> Type:
-  {Laws.jpg.back(Img.encode_jpeg_q(Img.Raster{_ww, _hh, _px}, _qq)) == Img.decode_jpeg.out(RunOf(_ww, _hh, _qq,
-    _px)) : Maybe<&2, Img.Raster>}
+def some_ok.ers.ty(+_ww: U32, +_hh: U32, +_qq: U32, +_sub: Bool, +_px: List<&2, U32>) -> Type:
+  {Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{_ww, _hh, _px}, _qq, _sub)) == Img.decode_jpeg.out(RunOf(_ww, _hh,
+    _qq, _sub, _px)) : Maybe<&2, Img.Raster>}
 
-# decode_jpeg of encode_jpeg_q's bytes, for a well-formed raster with both sides from 1 to 65535, is some raster
+# decode_jpeg of encode_jpeg_with's bytes, for a well-formed raster with both sides from 1 to 65535, is some raster
 def some_ok(
   +ww: U32,
   +hh: U32,
   +qq: U32,
+  +sub: Bool,
   +px: List<&2, U32>,
   +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool},
-  ers: some_ok.ers.ty(ww, hh, qq, px)
-) -> {Maybe.is_some(&2, Img.Raster, Laws.jpg.back(Img.encode_jpeg_q(Img.Raster{ww, hh, px}, qq))) == True{} : Bool}:
+  ers: some_ok.ers.ty(ww, hh, qq, sub, px)
+) -> {Maybe.is_some(&2, Img.Raster, Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub))) == True{} :
+  Bool}:
   +hw0 = {gt0_ne(ww, M8.w_pos(ww, hh, px, h_good)) : {U32.is_eq(ww, 0) == False{} : Bool}}
   +hh0 = {gt0_ne(hh, M8.h_pos(ww, hh, px, h_good)) : {U32.is_eq(hh, 0) == False{} : Bool}}
   +h_w = M8.w_le(ww, hh, px, h_good)
   +h_h = M8.h_le(ww, hh, px, h_good)
   +cp = Img.colours(px)
-  +kd = Jenc.encode.kindof(cp)
-  es = Equal.sym(Maybe<&2, Img.Raster>, Laws.jpg.back(Img.encode_jpeg_q(Img.Raster{ww, hh, px}, qq)),
-    Img.decode_jpeg.out(RunOf(ww, hh, qq, px)), ers)
+  +kd = Jenc.encode.kindof(sub, cp)
+  es = Equal.sym(Maybe<&2, Img.Raster>, Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)),
+    Img.decode_jpeg.out(RunOf(ww, hh, qq, sub, px)), ers)
   %es : {Maybe.is_some(&2, Img.Raster, _) == True{} : Bool}
-  psome_some(RunOf(ww, hh, qq, px), some_cnt(ww, hh, qq, kd, cp, hw0, hh0, h_w, h_h, M8.area(ww, hh, px, h_good),
+  psome_some(RunOf(ww, hh, qq, sub, px), some_cnt(ww, hh, qq, kd, cp, hw0, hh0, h_w, h_h, M8.area(ww, hh, px, h_good),
     count_ok(kd, ww, hh, hw0, hh0, h_w, h_h)))
 
 # the opacity of decode_jpeg's samples, for any bytes
@@ -6060,6 +6462,10 @@ def Laws.jpeg_enc_stuffed(ww, hh, qq, kd, px):
         (Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px, Jpeg.decode.plane((ww * hh : U32)), 0),
         Jenc.encode.bookof(False{}), 1024, Jenc.encode.put0()), 0, 0, U32.div((ww + 7 : U32), 8), ww, hh,
         Jenc.encode.ctx(qq)))
+    case Jenc.K420{}:
+      st.pad(Jenc.encode.h2.mcus(U32.to_nat(M2.mcun2(ww, hh)), (Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px,
+        Jpeg.decode.plane((ww * hh : U32)), 0), Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), 1024, 1024,
+        1024, Jenc.encode.put0()), 0, 0, Jpeg.decode.ceil(ww, 16), ww, hh, Jenc.encode.ctx(qq)))
 
 # the decoder's state after the encoder's header, with the sizes as it reads them back
 def w10.hdr.st(+kd: Jenc.Layout, +ww: U32, +hh: U32, +qq: U32) -> Jpeg.St:
@@ -6078,6 +6484,8 @@ def w10.hdr(
     case Jenc.K444{}:
       {==}
     case Jenc.KGray{}:
+      {==}
+    case Jenc.K420{}:
       {==}
 
 def Laws.jpeg_enc_header_walk(ww, hh, qq, kd):
@@ -6109,10 +6517,12 @@ def w8.k(
       {==}
     case Jenc.KGray{}:
       {==}
+    case Jenc.K420{}:
+      {==}
 
-def Laws.jpeg_round_trip_scan(ww, hh, qq, px, h_good):
+def Laws.jpeg_round_trip_scan(ww, hh, qq, sub, px, h_good):
   +cp = Img.colours(px)
-  +kd = Jenc.encode.kindof(cp)
+  +kd = Jenc.encode.kindof(sub, cp)
   +ee = Jenc.encode.arm(ww, hh, qq, kd, cp)
   +hd = Jenc.encode.header(ww, hh, qq, kd)
   +rr = List.append(&2, U32, ee, [255, 217])
@@ -6123,9 +6533,10 @@ def Laws.jpeg_round_trip_scan(ww, hh, qq, px, h_good):
   +fx = Jpeg.decode.facts(List.append(&2, U32, hd, rr))
   +stop = {Jpeg.St{Jpeg.Stop{}, fr, sc, tb, List.reverse.go(&2, U32, ee, []), 0, 1, 0} : Jpeg.St}
   +out = Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, ee, 0, False{}))
-  Equal.trans(Maybe<&2, Img.Raster>, Laws.jpg.back(Img.encode_jpeg_q(Img.Raster{ww, hh, px}, qq)),
-    Laws.jpg.back(Img.encode_jpeg.pick(True{}, ww, hh, qq, cp)), out, Equal.cong(Bool, Maybe<&2, Img.Raster>, bb =>
-    Laws.jpg.back(Img.encode_jpeg.pick(bb, ww, hh, qq, cp)), Img.encode_jpeg.good(ww, hh, px), True{}, h_good),
+  Equal.trans(Maybe<&2, Img.Raster>, Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)),
+    Laws.jpg.back(Img.encode_jpeg.pick(True{}, ww, hh, qq, sub, cp)), out, Equal.cong(Bool, Maybe<&2, Img.Raster>, bb
+    => Laws.jpg.back(Img.encode_jpeg.pick(bb, ww, hh, qq, sub, cp)), Img.encode_jpeg.good(ww, hh, px), True{},
+    h_good),
     Equal.trans(Maybe<&2, Img.Raster>, Img.decode_jpeg(Jenc.encode.pick(Jenc.encode.bad(ww, hh), ww, hh, qq, kd,
     cp)), Img.decode_jpeg(Jenc.encode.pick(False{}, ww, hh, qq, kd, cp)), out, Equal.cong(Bool, Maybe<&2,
     Img.Raster>, bb => Img.decode_jpeg(Jenc.encode.pick(bb, ww, hh, qq, kd, cp)), Jenc.encode.bad(ww, hh), False{},
@@ -6162,15 +6573,18 @@ def sized_k(
       Laws.jpeg_run_sized(ww, hh, 3, [1, 2, 3], [1, 1, 1], [1, 1, 1], [0, 1, 1], 1, 1, sc, tb, ee, 0, False{})
     case Jenc.KGray{}:
       Laws.jpeg_run_sized(ww, hh, 1, [1], [1], [1], [0], 1, 1, sc, tb, ee, 0, False{})
+    case Jenc.K420{}:
+      Laws.jpeg_run_sized(ww, hh, 3, [1, 2, 3], [2, 1, 1], [2, 1, 1], [0, 1, 1], 2, 2, sc, tb, ee, 0, False{})
 
-def Laws.jpeg_round_trip_sized(ww, hh, qq, px, h_good):
-  +out = Img.decode_jpeg.out(RunOf(ww, hh, qq, px))
+def Laws.jpeg_round_trip_sized(ww, hh, qq, sub, px, h_good):
+  +out = Img.decode_jpeg.out(RunOf(ww, hh, qq, sub, px))
   +cp = Img.colours(px)
-  +kd = Jenc.encode.kindof(cp)
-  Equal.trans(Bool, Laws.jpg.sized(Laws.jpg.back(Img.encode_jpeg_q(Img.Raster{ww, hh, px}, qq)), ww, hh),
+  +kd = Jenc.encode.kindof(sub, cp)
+  Equal.trans(Bool, Laws.jpg.sized(Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)), ww, hh),
     Laws.jpg.sized(out, ww, hh), True{}, Equal.cong(Maybe<&2, Img.Raster>, Bool, mm => Laws.jpg.sized(mm, ww, hh),
-    Laws.jpg.back(Img.encode_jpeg_q(Img.Raster{ww, hh, px}, qq)), out, Laws.jpeg_round_trip_scan(ww, hh, qq, px,
-    h_good)), sized_k(kd, ww, hh, Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq), Jenc.encode.arm(ww, hh, qq, kd,
+    Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)), out, Laws.jpeg_round_trip_scan(ww, hh, qq,
+    sub, px, h_good)), sized_k(kd, ww, hh, Laws.jpg.enc.scan(kd), Laws.jpg.enc.tabs(kd, qq), Jenc.encode.arm(ww, hh,
+      qq, kd,
     cp)))
 
 def Laws.jpeg_unstuff(bs, ok):
@@ -6194,16 +6608,17 @@ def Laws.jpeg_huff_ac(cls, pre, h_pre, sy, h_sy, post, h_post):
 def Laws.jpeg_scan_some(tt, rest, ww, hh, qq, kd, h_w, h_h, h_wl, h_hl, h_area, h_wf, h_tag, h_n):
   scan_some(tt, rest, ww, hh, qq, kd, h_w, h_h, h_wl, h_hl, h_area, h_wf, h_tag, h_n)
 
-def Laws.jpeg_round_trip_some_q(ww, hh, qq, px, h_good):
-  some_ok(ww, hh, qq, px, h_good, Laws.jpeg_round_trip_scan(ww, hh, qq, px, h_good))
+def Laws.jpeg_round_trip_some_q(ww, hh, qq, sub, px, h_good):
+  some_ok(ww, hh, qq, sub, px, h_good, Laws.jpeg_round_trip_scan(ww, hh, qq, sub, px, h_good))
 
 def Laws.jpeg_round_trip_some(ww, hh, px, h_good):
-  Laws.jpeg_round_trip_some_q(ww, hh, Img.encode_jpeg.quality(), px, h_good)
+  Laws.jpeg_round_trip_some_q(ww, hh, Img.encode_jpeg.quality(), True{}, px, h_good)
 
-def Laws.jpeg_round_trip_q(ww, hh, qq, px, h_good):
-  round_ok(Laws.jpg.back(Img.encode_jpeg_q(Img.Raster{ww, hh, px}, qq)), ww, hh, Laws.jpeg_round_trip_some_q(ww, hh,
-    qq, px, h_good), Laws.jpeg_round_trip_sized(ww, hh, qq, px, h_good), opq_back(Img.encode_jpeg_q(Img.Raster{ww,
-    hh, px}, qq), bb => ii => ee => L1.jpeg_decode_opaque(bb, ii, ee)))
+def Laws.jpeg_round_trip_q(ww, hh, qq, sub, px, h_good):
+  round_ok(Laws.jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)), ww, hh,
+    Laws.jpeg_round_trip_some_q(ww, hh, qq, sub, px, h_good), Laws.jpeg_round_trip_sized(ww, hh, qq, sub, px, h_good),
+    opq_back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub), bb => ii => ee => L1.jpeg_decode_opaque(bb, ii,
+    ee)))
 
 def Laws.jpeg_round_trip(ww, hh, px, h_good):
-  Laws.jpeg_round_trip_q(ww, hh, Img.encode_jpeg.quality(), px, h_good)
+  Laws.jpeg_round_trip_q(ww, hh, Img.encode_jpeg.quality(), True{}, px, h_good)

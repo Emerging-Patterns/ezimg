@@ -29,6 +29,10 @@ def lay.kd(
       ([1, 1, 0, 0, 1, 0, 1, 0, 0], (Jenc.encode.dqtbody(Jenc.KGray{}, qq), (Jenc.encode.sofcomps(Jenc.KGray{}),
         (Jenc.encode.dcbody(Jenc.KGray{}), (Jenc.encode.acbody(Jenc.KGray{}), (Jenc.encode.sosbody(Jenc.KGray{}),
         (Jenc.encode.arm(ww, hh, qq, Jenc.KGray{}, cp), {==})))))))
+    case Jenc.K420{}:
+      ([1, 1, 0, 0, 1, 0, 1, 0, 0], (Jenc.encode.dqtbody(Jenc.K420{}, qq), (Jenc.encode.sofcomps(Jenc.K420{}),
+        (Jenc.encode.dcbody(Jenc.K420{}), (Jenc.encode.acbody(Jenc.K420{}), (Jenc.encode.sosbody(Jenc.K420{}),
+        (Jenc.encode.arm(ww, hh, qq, Jenc.K420{}, cp), {==})))))))
 
 # an accepted raster's encoding is the header, the entropy-coded bytes and EOI
 def lay.pick(
@@ -36,16 +40,18 @@ def lay.pick(
   +ww: U32,
   +hh: U32,
   +qq: U32,
+  +sub: Bool,
   +px: List<&2, U32>,
   e_ok: {Img.encode_jpeg.good(ww, hh, px) == ok : Bool},
-  h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg.pick(ok, ww, hh, qq, Img.colours(px))) == True{} : Bool}
-) -> lay.Ty(Img.encode_jpeg.pick(ok, ww, hh, qq, Img.colours(px)), ww, hh):
+  h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg.pick(ok, ww, hh, qq, sub, Img.colours(px))) == True{} :
+    Bool}
+) -> lay.Ty(Img.encode_jpeg.pick(ok, ww, hh, qq, sub, Img.colours(px)), ww, hh):
   match ok:
     case False{}:
       Empty.absurd(lay.Ty(None{}, ww, hh), M1.false_true(h_some))
     case True{}:
       +cp = Img.colours(px)
-      +kd = Jenc.encode.kindof(cp)
+      +kd = Jenc.encode.kindof(sub, cp)
       eb = Equal.cong(Bool, Maybe<&2, List<&2, U32>>, bb => Some{Jenc.encode.pick(bb, ww, hh, qq, kd, cp)},
         Jenc.encode.bad(ww, hh), False{}, M2.bad(ww, hh, px, e_ok))
       es = Equal.sym(Maybe<&2, List<&2, U32>>, Some{Jenc.encode.pick(Jenc.encode.bad(ww, hh), ww, hh, qq, kd, cp)},
@@ -53,13 +59,13 @@ def lay.pick(
       %es : lay.Ty(_, ww, hh)
       lay.kd(kd, ww, hh, qq, cp)
 
-def Laws.jpeg_enc_layout_q(img, qq, h_some):
+def Laws.jpeg_enc_layout_q(img, qq, sub, h_some):
   match img:
     case Img.Raster{+ww, +hh, +px}:
-      lay.pick(Img.encode_jpeg.good(ww, hh, px), ww, hh, qq, px, {==}, h_some)
+      lay.pick(Img.encode_jpeg.good(ww, hh, px), ww, hh, qq, sub, px, {==}, h_some)
 
 def Laws.jpeg_enc_layout(img, h_some):
-  Laws.jpeg_enc_layout_q(img, Img.encode_jpeg.quality(), h_some)
+  Laws.jpeg_enc_layout_q(img, Img.encode_jpeg.quality(), True{}, h_some)
 
 # what jpeg_enc_ends says of an encoding mm
 def ends.Ty(mm: Maybe<&2, List<&2, U32>>) -> Type:
@@ -87,6 +93,12 @@ def ends.kd(
         Jenc.encode.dcbody(Jenc.KGray{})), Jenc.encode.join(Jenc.encode.seg(196, Jenc.encode.acbody(Jenc.KGray{})),
         Jenc.encode.seg(218, Jenc.encode.sosbody(Jenc.KGray{}))))))), Jenc.encode.arm(ww, hh, qq, Jenc.KGray{}, cp)),
         {==})
+    case Jenc.K420{}:
+      (List.append(&2, U32, Jenc.encode.join(Jenc.encode.app0(), Jenc.encode.join(Jenc.encode.dqt(Jenc.K420{}, qq),
+        Jenc.encode.join(Jenc.encode.sof(Jenc.K420{}, ww, hh), Jenc.encode.join(Jenc.encode.seg(196,
+        Jenc.encode.dcbody(Jenc.K420{})), Jenc.encode.join(Jenc.encode.seg(196, Jenc.encode.acbody(Jenc.K420{})),
+        Jenc.encode.seg(218, Jenc.encode.sosbody(Jenc.K420{}))))))), Jenc.encode.arm(ww, hh, qq, Jenc.K420{}, cp)),
+        {==})
 
 # the encoder's output opens with SOI and closes with EOI, whichever way its size test goes
 def ends.bad(
@@ -109,19 +121,20 @@ def ends.pick(
   +ww: U32,
   +hh: U32,
   +qq: U32,
+  +sub: Bool,
   +cp: List<&2, U32>,
-  h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg.pick(ok, ww, hh, qq, cp)) == True{} : Bool}
-) -> ends.Ty(Img.encode_jpeg.pick(ok, ww, hh, qq, cp)):
+  h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg.pick(ok, ww, hh, qq, sub, cp)) == True{} : Bool}
+) -> ends.Ty(Img.encode_jpeg.pick(ok, ww, hh, qq, sub, cp)):
   match ok:
     case False{}:
       Empty.absurd(ends.Ty(None{}), M1.false_true(h_some))
     case True{}:
-      ends.bad(Jenc.encode.bad(ww, hh), ww, hh, qq, Jenc.encode.kindof(cp), cp)
+      ends.bad(Jenc.encode.bad(ww, hh), ww, hh, qq, Jenc.encode.kindof(sub, cp), cp)
 
-def Laws.jpeg_enc_ends_q(img, qq, h_some):
+def Laws.jpeg_enc_ends_q(img, qq, sub, h_some):
   match img:
     case Img.Raster{+ww, +hh, +px}:
-      ends.pick(Img.encode_jpeg.good(ww, hh, px), ww, hh, qq, Img.colours(px), h_some)
+      ends.pick(Img.encode_jpeg.good(ww, hh, px), ww, hh, qq, sub, Img.colours(px), h_some)
 
 def Laws.jpeg_enc_ends(img, h_some):
-  Laws.jpeg_enc_ends_q(img, Img.encode_jpeg.quality(), h_some)
+  Laws.jpeg_enc_ends_q(img, Img.encode_jpeg.quality(), True{}, h_some)

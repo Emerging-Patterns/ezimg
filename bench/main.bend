@@ -222,6 +222,11 @@ def cmd.jpeg.enc.q(src: String, dst: String, +qq: U32) -> IO(Unit):
     img : Img.Raster <- load.ezr(src)
     write.jpeg(dst, Img.encode_jpeg_q(img, qq))
 
+def cmd.jpeg.enc.full(src: String, dst: String, +qq: U32) -> IO(Unit):
+  do IO<Unit>:
+    img : Img.Raster <- load.ezr(src)
+    write.jpeg(dst, Img.encode_jpeg_with(img, qq, False{}))
+
 def cmd.jpeg.rt.go(dst: String, mm: Maybe<&2, List<&2, U32>>) -> IO(Unit):
   match mm:
     case None{}:
@@ -372,12 +377,22 @@ def run.m.at(zz: Bool, +cmd: String, _a: String, _b: String, _c: String) -> IO(U
 def run.m(+cmd: String, +aa: String, +bb: String, +cc: String) -> IO(Unit):
   run.m.at(String.eq(cmd, "ping"), cmd, aa, bb, cc)
 
+def run.o.at(zz: Bool, +cmd: String, +aa: String, +bb: String, +cc: String) -> IO(Unit):
+  match zz:
+    case True{}:
+      cmd.jpeg.enc.full(aa, bb, u32.arg(cc))
+    case False{}:
+      run.m(cmd, aa, bb, cc)
+
+def run.o(+cmd: String, +aa: String, +bb: String, +cc: String) -> IO(Unit):
+  run.o.at(String.eq(cmd, "jpeg-enc-444"), cmd, aa, bb, cc)
+
 def run.n.at(zz: Bool, +cmd: String, +aa: String, +bb: String, +cc: String) -> IO(Unit):
   match zz:
     case True{}:
       cmd.jpeg.enc.q(aa, bb, u32.arg(cc))
     case False{}:
-      run.m(cmd, aa, bb, cc)
+      run.o(cmd, aa, bb, cc)
 
 def run.n(+cmd: String, +aa: String, +bb: String, +cc: String) -> IO(Unit):
   run.n.at(String.eq(cmd, "jpeg-enc-q"), cmd, aa, bb, cc)

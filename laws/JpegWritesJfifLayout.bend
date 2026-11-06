@@ -1,7 +1,8 @@
-# When `encode_jpeg_q(r, q)` is some, at any quality, it begins with SOI and
-# ends with EOI, and it is SOI, APP0 with the JFIF identifier, DQT, SOF0
-# carrying `r`'s width and height, two DHT, SOS, the entropy-coded data and
-# EOI; so is `encode_jpeg(r)`, encode_jpeg_q at quality 75.
+# When `encode_jpeg_with(r, q, s)` is some, at any quality and either
+# subsampling, it begins with SOI and ends with EOI, and it is SOI, APP0 with
+# the JFIF identifier, DQT, SOF0 carrying `r`'s width and height, two DHT,
+# SOS, the entropy-coded data and EOI; so is `encode_jpeg(r)`,
+# encode_jpeg_with at quality 75 and 4:2:0.
 import Base
 import ../main.bend as Img
 
@@ -44,12 +45,13 @@ law jpeg_enc_layout:
   {Img.encode_jpeg(img) == Some{jfif.file(Img.width(img), Img.height(img), app, dq, sof, dc, ac, sos, ent)}
     : Maybe<&2, List<&2, U32>>}
 
-# LAW: when encode_jpeg_q(r, q) is some, at any quality, it is SOI, APP0 with the JFIF identifier, DQT, SOF0
-# carrying r's width and height, DHT, SOS, the entropy-coded bytes and EOI
+# LAW: when encode_jpeg_with(r, q, s) is some, at any quality and either subsampling, it is SOI, APP0 with the JFIF
+# identifier, DQT, SOF0 carrying r's width and height, DHT, SOS, the entropy-coded bytes and EOI
 law jpeg_enc_layout_q:
   for +img: Img.Raster
   for +qq: U32
-  for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg_q(img, qq)) == True{} : Bool}
+  for +sub: Bool
+  for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg_with(img, qq, sub)) == True{} : Bool}
   exs app: List<&2, U32>
   exs dq: List<&2, U32>
   exs sof: List<&2, U32>
@@ -57,16 +59,18 @@ law jpeg_enc_layout_q:
   exs ac: List<&2, U32>
   exs sos: List<&2, U32>
   exs ent: List<&2, U32>
-  {Img.encode_jpeg_q(img, qq) == Some{jfif.file(Img.width(img), Img.height(img), app, dq, sof, dc, ac, sos, ent)}
-    : Maybe<&2, List<&2, U32>>}
+  {Img.encode_jpeg_with(img, qq, sub) == Some{jfif.file(Img.width(img), Img.height(img), app, dq, sof, dc, ac, sos,
+    ent)} : Maybe<&2, List<&2, U32>>}
 
-# LAW: when encode_jpeg_q(r, q) is some, at any quality, it begins with SOI and ends with EOI
+# LAW: when encode_jpeg_with(r, q, s) is some, at any quality and either subsampling, it begins with SOI and ends
+# with EOI
 law jpeg_enc_ends_q:
   for +img: Img.Raster
   for +qq: U32
-  for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg_q(img, qq)) == True{} : Bool}
+  for +sub: Bool
+  for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg_with(img, qq, sub)) == True{} : Bool}
   exs mid: List<&2, U32>
-  {Img.encode_jpeg_q(img, qq) == Some{List.append(&2, U32, [255, 216], List.append(&2, U32, mid, [255, 217]))}
+  {Img.encode_jpeg_with(img, qq, sub) == Some{List.append(&2, U32, [255, 216], List.append(&2, U32, mid, [255, 217]))}
     : Maybe<&2, List<&2, U32>>}
 
 # LAW: when encode_jpeg(r) is some, it begins with SOI and ends with EOI

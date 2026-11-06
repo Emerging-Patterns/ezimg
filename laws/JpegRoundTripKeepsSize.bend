@@ -1,8 +1,9 @@
 # For every raster `r` encode_jpeg writes (encode_jpeg.good: both sides from 1
-# to 65535, at most 2^31 points, and w * h samples), and every quality,
-# `decode_jpeg(encode_jpeg_q(r, q))` is some raster of `r`'s size with alpha
-# 255, and so is `decode_jpeg(encode_jpeg(r))`, whether the encoder writes
-# three components or, for a gray raster, one.
+# to 65535, at most 2^31 points, and w * h samples), every quality and either
+# subsampling, `decode_jpeg(encode_jpeg_with(r, q, s))` is some raster of
+# `r`'s size with alpha 255, and so is `decode_jpeg(encode_jpeg(r))`, whether
+# the encoder writes three components at 4:4:4 or 4:2:0 or, for a gray
+# raster, one.
 import Base
 import ../main.bend as Img
 import ../src/jpeg.bend as Jpeg
@@ -52,11 +53,15 @@ def jpg.actab(+cls: Bool) -> Jpeg.Huff:
 
 # the tables the decoder holds after reading encode_jpeg's DQT and two DHT segments at quality qq: Annex K's
 # tables K.1 and K.2 at that quality, in zigzag order, as quantisation tables 0 and 1, and the Annex K luminance
-# and chrominance Huffman tables as tables 0 and 1 of each class; for a gray frame, K.1 and the luminance tables
-# alone, as table 0
+# and chrominance Huffman tables as tables 0 and 1 of each class, in either colour layout; for a gray frame, K.1
+# and the luminance tables alone, as table 0
 def jpg.enc.tabs(+kd: Jenc.Layout, +qq: U32) -> Jpeg.Tabs:
   match kd:
     case Jenc.K444{}:
+      Jpeg.Tabs{Jenc.encode.qz(Jenc.encode.lumq(), qq), Jenc.encode.qz(Jenc.encode.chrq(), qq), [], [],
+        jpg.dctab(False{}), jpg.dctab(True{}), Jpeg.decode.huff0(), Jpeg.decode.huff0(), jpg.actab(False{}),
+        jpg.actab(True{}), Jpeg.decode.huff0(), Jpeg.decode.huff0()}
+    case Jenc.K420{}:
       Jpeg.Tabs{Jenc.encode.qz(Jenc.encode.lumq(), qq), Jenc.encode.qz(Jenc.encode.chrq(), qq), [], [],
         jpg.dctab(False{}), jpg.dctab(True{}), Jpeg.decode.huff0(), Jpeg.decode.huff0(), jpg.actab(False{}),
         jpg.actab(True{}), Jpeg.decode.huff0(), Jpeg.decode.huff0()}
@@ -66,19 +71,24 @@ def jpg.enc.tabs(+kd: Jenc.Layout, +qq: U32) -> Jpeg.Tabs:
         Jpeg.decode.huff0()}
 
 # the frame encode_jpeg's SOF0 carries: its width and height, three components 1, 2 and 3, each sampled
-# 1 by 1, Y with quantisation table 0, Cb and Cr with table 1; or one gray component 1 with table 0
+# 1 by 1, Y with quantisation table 0, Cb and Cr with table 1; or one gray component 1 with table 0; or for 4:2:0
+# the three components with Y sampled 2 by 2 and Cb and Cr 1 by 1
 def jpg.enc.frame(+kd: Jenc.Layout, +ww: U32, +hh: U32) -> Jpeg.Frame:
   match kd:
     case Jenc.K444{}:
       Jpeg.Frame{ww, hh, 3, [1, 2, 3], [1, 1, 1], [1, 1, 1], [0, 1, 1], 1, 1}
     case Jenc.KGray{}:
       Jpeg.Frame{ww, hh, 1, [1], [1], [1], [0], 1, 1}
+    case Jenc.K420{}:
+      Jpeg.Frame{ww, hh, 3, [1, 2, 3], [2, 1, 1], [2, 1, 1], [0, 1, 1], 2, 2}
 
 # the scan encode_jpeg's SOS opens: components 1, 2 and 3, Y with Huffman tables 0, Cb and Cr with tables 1, all
-# of 0 to 63; or component 1 alone with tables 0
+# of 0 to 63, in either colour layout; or component 1 alone with tables 0
 def jpg.enc.scan(+kd: Jenc.Layout) -> Jpeg.Scan:
   match kd:
     case Jenc.K444{}:
+      Jpeg.Scan{3, [1, 2, 3], [0, 1, 1], [0, 1, 1], 0, 63, 0}
+    case Jenc.K420{}:
       Jpeg.Scan{3, [1, 2, 3], [0, 1, 1], [0, 1, 1], 0, 63, 0}
     case Jenc.KGray{}:
       Jpeg.Scan{1, [1], [0], [0], 0, 63, 0}
@@ -124,21 +134,23 @@ def jpg.back(mm: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Img.Raster>:
     case Some{bytes}:
       Img.decode_jpeg(bytes)
 
-# LAW: for every raster encode_jpeg writes and every quality, decode_jpeg of encode_jpeg_q's bytes is the decoder's
-# scan decode of encode_jpeg_q's own entropy-coded bytes, in the frame of the raster's width and height and the
-# layout the encoder picks for its samples (one gray component when every sample, flattened onto white, has red,
-# green and blue the same, else 4:4:4), with the encoder's scan and its tables at that quality, as YCbCr (its
-# JFIF APP0 says so): the marker walk, the unstuffing and the frame size are done
+# LAW: for every raster encode_jpeg writes, every quality and either subsampling, decode_jpeg of
+# encode_jpeg_with's bytes is the decoder's scan decode of encode_jpeg_with's own entropy-coded bytes, in the frame
+# of the raster's width and height and the layout the encoder picks for its samples (one gray component when every
+# sample, flattened onto white, has red, green and blue the same, else 4:2:0 when sub is set, else 4:4:4), with the
+# encoder's scan and its tables at that quality, as YCbCr (its JFIF APP0 says so): the marker walk, the unstuffing
+# and the frame size are done
 law jpeg_round_trip_scan:
   for +ww: U32
   for +hh: U32
   for +qq: U32
+  for +sub: Bool
   for +px: List<&2, U32>
   for +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool}
-  {jpg.back(Img.encode_jpeg_q(Img.Raster{ww, hh, px}, qq)) ==
-    Img.decode_jpeg.out(Jpeg.decode.run(jpg.enc.frame(Jenc.encode.kindof(Img.colours(px)), ww, hh),
-    jpg.enc.scan(Jenc.encode.kindof(Img.colours(px))), jpg.enc.tabs(Jenc.encode.kindof(Img.colours(px)), qq),
-    Jenc.encode.arm(ww, hh, qq, Jenc.encode.kindof(Img.colours(px)), Img.colours(px)), 0, False{})) :
+  {jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)) ==
+    Img.decode_jpeg.out(Jpeg.decode.run(jpg.enc.frame(Jenc.encode.kindof(sub, Img.colours(px)), ww, hh),
+    jpg.enc.scan(Jenc.encode.kindof(sub, Img.colours(px))), jpg.enc.tabs(Jenc.encode.kindof(sub, Img.colours(px)),
+    qq), Jenc.encode.arm(ww, hh, qq, Jenc.encode.kindof(sub, Img.colours(px)), Img.colours(px)), 0, False{})) :
     Maybe<&2, Img.Raster>}
 
 # a decoded raster, if any, has width ww and height hh
@@ -169,15 +181,17 @@ law jpeg_run_sized:
   {jpg.sized(Img.decode_jpeg.out(Jpeg.decode.run(Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent,
     ri, rgb)), ww, hh) == True{} : Bool}
 
-# LAW: for every raster encode_jpeg writes and every quality, decode_jpeg of encode_jpeg_q's bytes is none or a
-# raster of the raster's width and height; every sample of one has alpha 255 (jpeg_decode_opaque)
+# LAW: for every raster encode_jpeg writes, every quality and either subsampling, decode_jpeg of encode_jpeg_with's
+# bytes is none or a raster of the raster's width and height; every sample of one has alpha 255
+# (jpeg_decode_opaque)
 law jpeg_round_trip_sized:
   for +ww: U32
   for +hh: U32
   for +qq: U32
+  for +sub: Bool
   for +px: List<&2, U32>
   for +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool}
-  {jpg.sized(jpg.back(Img.encode_jpeg_q(Img.Raster{ww, hh, px}, qq)), ww, hh) == True{} : Bool}
+  {jpg.sized(jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)), ww, hh) == True{} : Bool}
 
 # one byte as its eight bits, the lowest first
 type JByte is Data:
@@ -644,7 +658,7 @@ def jpg.inorder(ts: List<&2, JBlkTok>, +fr: Jpeg.Frame, +sc: Jpeg.Scan) -> Bool:
 # magnitude bits) that fill or end the block, each block of the class (luminance or chrominance) whose tables the
 # decoder holds at its place in the scan. Write as many of them as the encoder's frame has blocks, each symbol as
 # the code the encoder's book for its class (encode.dcof, encode.acof) holds for it, with the encoder's bit writer
-# (encode.bit, then encode.pad). decode.run, in the encoder's frame of either layout, sides 1 to 65535 and at most
+# (encode.bit, then encode.pad). decode.run, in the encoder's frame of any layout, sides 1 to 65535 and at most
 # 2^31 points, its scan and its tables at any quality, decodes those bytes to a picture: each block takes at least
 # two bits, so the bytes are enough for the blocks
 law jpeg_scan_some:
@@ -666,23 +680,24 @@ law jpeg_scan_some:
     Jenc.encode.pad(jpg.feed(
     jpg.tbits(tt <> rest), Jenc.encode.put0())), 0, False{})) == True{} : Bool}
 
-# LAW: for every raster encode_jpeg writes and every quality, decode_jpeg of encode_jpeg_q's bytes is some raster.
-# encode.arm writes, through the encoder's bit writer, three blocks per MCU, Y with the luminance books and Cb and
-# Cr with the chrominance books, or for a gray raster one Y block per MCU, that the decoder reads whole (each DC
-# clipped to T.81's 8-bit range, so its difference has at most 11 bits), and the MCU count times the blocks per
-# MCU is decode.nblocks of the encoder's frame with no U32 wrap, so jpeg_scan_some applies. With
-# jpeg_round_trip_sized (a raster of r's size) and jpeg_decode_opaque (alpha 255) this is
-# laws/JpegRoundTripKeepsSize.bend
+# LAW: for every raster encode_jpeg writes, every quality and either subsampling, decode_jpeg of
+# encode_jpeg_with's bytes is some raster. encode.arm writes, through the encoder's bit writer, three blocks per
+# MCU, Y with the luminance books and Cb and Cr with the chrominance books, or for 4:2:0 four Y blocks then Cb and
+# Cr per 16 by 16 MCU, or for a gray raster one Y block per MCU, that the decoder reads whole (each DC clipped to
+# T.81's 8-bit range, so its difference has at most 11 bits), and the MCU count times the blocks per MCU is
+# decode.nblocks of the encoder's frame with no U32 wrap, so jpeg_scan_some applies. With jpeg_round_trip_sized (a
+# raster of r's size) and jpeg_decode_opaque (alpha 255) this is laws/JpegRoundTripKeepsSize.bend
 law jpeg_round_trip_some_q:
   for +ww: U32
   for +hh: U32
   for +qq: U32
+  for +sub: Bool
   for +px: List<&2, U32>
   for +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool}
-  {Maybe.is_some(&2, Img.Raster, jpg.back(Img.encode_jpeg_q(Img.Raster{ww, hh, px}, qq))) == True{} : Bool}
+  {Maybe.is_some(&2, Img.Raster, jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub))) == True{} : Bool}
 
 # LAW: for every raster encode_jpeg writes, decode_jpeg of encode_jpeg's bytes is some raster: encode_jpeg is
-# encode_jpeg_q at quality 75
+# encode_jpeg_with at quality 75 and 4:2:0
 law jpeg_round_trip_some:
   for +ww: U32
   for +hh: U32
@@ -702,17 +717,18 @@ def jpg.opq(mm: Maybe<&2, Img.Raster>) -> Bool:
 def jpg.round(+mm: Maybe<&2, Img.Raster>, +ww: U32, +hh: U32) -> Bool:
   Bool.and(Bool.and(Maybe.is_some(&2, Img.Raster, mm), jpg.sized(mm, ww, hh)), jpg.opq(mm))
 
-# LAW: for every raster r encode_jpeg writes and every quality q, decode_jpeg(encode_jpeg_q(r, q)) is some raster
-# of r's width and height, every sample of it with alpha 255: jpeg_round_trip_some_q, jpeg_round_trip_sized and
-# jpeg_decode_opaque together. It needs no bound on the samples: sides of at most 65535 keep the MCU count's
-# product, times 3, below 2^32
+# LAW: for every raster r encode_jpeg writes, every quality q and either subsampling s,
+# decode_jpeg(encode_jpeg_with(r, q, s)) is some raster of r's width and height, every sample of it with alpha 255:
+# jpeg_round_trip_some_q, jpeg_round_trip_sized and jpeg_decode_opaque together. It needs no bound on the samples:
+# sides of at most 65535 keep the MCU count's product, times the blocks per MCU, below 2^32
 law jpeg_round_trip_q:
   for +ww: U32
   for +hh: U32
   for +qq: U32
+  for +sub: Bool
   for +px: List<&2, U32>
   for +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool}
-  {jpg.round(jpg.back(Img.encode_jpeg_q(Img.Raster{ww, hh, px}, qq)), ww, hh) == True{} : Bool}
+  {jpg.round(jpg.back(Img.encode_jpeg_with(Img.Raster{ww, hh, px}, qq, sub)), ww, hh) == True{} : Bool}
 
 # LAW: for every raster r encode_jpeg writes, decode_jpeg(encode_jpeg(r)) is some raster of r's width and height,
 # every sample of it with alpha 255
