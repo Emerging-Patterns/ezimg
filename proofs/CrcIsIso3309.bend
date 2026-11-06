@@ -18,7 +18,7 @@ law judge_bad:
   for +data: List<&2, U32>
   for +pg: Png.Pg
   for +rest: List<&2, U32>
-  {Png.png.crc(Png.png.judge.at(zz, typ, data, pg), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [],
+  {Png.png.crc(Png.png.judge.at(zz, typ, data, pg), _u => Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [],
     Png.png.pgof(Png.png.judge.at(zz, typ, data, pg)))) == None{} : Maybe<&2, Png.Pic>}
 
 # the proof of judge_bad
@@ -27,7 +27,7 @@ def judge_bad(zz, got, want, ee, h_ne, typ, data, pg, rest):
     case False{}:
       {==}
     case True{}:
-      Empty.absurd({Png.png.crc(Png.png.judge.at(True{}, typ, data, pg), Png.png.go(rest, Png.ZLen{}, False{}, 0,
+      Empty.absurd({Png.png.crc(Png.png.judge.at(True{}, typ, data, pg), _u => Png.png.go(rest, Png.ZLen{}, False{}, 0,
         0, [], [], Png.png.pgof(Png.png.judge.at(True{}, typ, data, pg)))) == None{} : Maybe<&2, Png.Pic>},
         h_ne(M1.ueq(got, want, ee)))
 
@@ -77,7 +77,7 @@ law judge_more:
   for +ne: {nx.ends(nx) == False{} : Bool}
   for +rest: List<&2, U32>
   for ih: {Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(nx)) == None{} : Maybe<&2, Png.Pic>}
-  {Png.png.crc(nx, Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(nx)))
+  {Png.png.crc(nx, _u => Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(nx)))
     == None{} : Maybe<&2, Png.Pic>}
 
 # the proof of judge_more
@@ -86,7 +86,7 @@ def judge_more(nx, ne, rest, ih):
     case Png.NBad{}:
       {==}
     case Png.NEnd{+pg}:
-      Empty.absurd({Png.png.crc(Png.NEnd{pg}, Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [],
+      Empty.absurd({Png.png.crc(Png.NEnd{pg}, _u => Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [],
         Png.png.pgof(Png.NEnd{pg}))) == None{} : Maybe<&2, Png.Pic>}, M1.true_false(ne))
     case Png.NMore{_pg}:
       ih
@@ -176,6 +176,18 @@ def open.on.plte(
       open.allow(Bool.and(Bool.not(saw_plte), Bool.and(Bool.not(saw_idat), Bool.and(Png.png.plte.ok(colour),
         Png.png.mod3(data)))), Png.pg.plte(pg, List.reverse(&2, U32, data)))
 
+# a tRNS taken or ignored does not end the image
+def open.trns.take(
+  zz: Bool,
+  +data: List<&2, U32>,
+  +pg: Png.Pg
+) -> {nx.ends(Png.png.trns.take(zz, data, pg)) == False{} : Bool}:
+  match zz:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
 # tRNS does not end the image
 def open.on.trns(
   ihdr: Bool,
@@ -190,8 +202,8 @@ def open.on.trns(
     case False{}:
       {==}
     case True{}:
-      open.allow(Bool.and(Bool.not(saw_trns), Bool.and(Bool.not(saw_idat), Png.png.trns.ok(colour, saw_plte))),
-        Png.pg.trns(pg, List.reverse(&2, U32, data)))
+      open.trns.take(Bool.and(Bool.not(saw_idat), Bool.and(Bool.not(saw_trns), Png.png.trns.ok(colour, saw_plte))),
+        data, pg)
 
 # an ancillary chunk or a refused critical one does not end the image
 def open.other.at(anc: Bool, +pg: Png.Pg) -> {nx.ends(Png.png.other.at(anc, pg)) == False{} : Bool}:

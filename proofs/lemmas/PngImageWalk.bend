@@ -223,7 +223,7 @@ def rgba.acc(
                     rgba.acc(tl, Png.px.pack(aa, rr, gg, bb) <> acc),
                     onto.cons(Png.px.pack(aa, rr, gg, bb), acc, L1.spec.rgba(tl)))
 
-def L1.png_px_rgba(xs, _plte):
+def L1.png_px_rgba(xs, _plte, _trns):
   Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.rgba(xs, []), M1.onto([], L1.spec.rgba(xs)), L1.spec.rgba(xs),
     rgba.acc(xs, []), onto.nil(L1.spec.rgba(xs)))
 

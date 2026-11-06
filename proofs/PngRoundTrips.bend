@@ -4904,7 +4904,7 @@ def rt.pix(
         rgb.back(px, hao))
     case False{}:
       Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.of(6, chans.all(False{}, px), [], []),
-        L3.spec.rgba(chans.all(False{}, px)), Some{px}, L3.png_px_rgba(chans.all(False{}, px), []),
+        L3.spec.rgba(chans.all(False{}, px)), Some{px}, L3.png_px_rgba(chans.all(False{}, px), [], []),
         rgba.back(px))
 
 # a true sample-count check keeps the raster

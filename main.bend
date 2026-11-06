@@ -1,8 +1,9 @@
 # ezimg: images for Bend 2, with PNG and baseline JPEG decode and encode
 #
-# A Raster is a width, a height, and row-major samples. PNG decode reads 8-bit
-# images. PNG encode writes colour type 2 or 6. JPEG decode reads a baseline
-# sequential frame, and encode_jpeg writes one.
+# A Raster is a width, a height, and row-major samples. PNG decode reads every
+# colour type and bit depth, interlaced or not. PNG encode writes colour type
+# 2 or 6. JPEG decode reads a baseline sequential frame, and encode_jpeg
+# writes one.
 import Base
 import ./src/png.bend as Png
 import ./src/jpeg.bend as Jpeg

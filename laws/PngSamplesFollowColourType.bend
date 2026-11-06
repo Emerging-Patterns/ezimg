@@ -1,8 +1,11 @@
-# For each colour type, each decoded sample is the packing of the unfiltered
-# bytes the PNG specification gives: gray `g` as `0xFFgggggg`, gray and alpha
-# as `0xAAgggggg`, RGB as `0xFFrrggbb`, RGBA as `0xAArrggbb`, an index as its
-# palette entry with alpha from tRNS or 255, and a colour matching a tRNS key
-# with alpha 0.
+# For each colour type at bit depth 8, each decoded sample is the packing of
+# the unfiltered bytes the PNG specification gives: gray `g` as `0xFFgggggg`,
+# gray and alpha as `0xAAgggggg`, RGB as `0xFFrrggbb`, RGBA as `0xAArrggbb`,
+# an index as its palette entry with alpha from tRNS or 255, and a colour
+# matching a tRNS key with alpha 0. Indexed samples decode exactly when every
+# index is below the palette's entry count. Gray and alpha and RGBA carry
+# their own alpha, so a tRNS there changes nothing, and a palette tRNS
+# longer than the palette is ignored (laws/PngIgnoresFaultyTrns.bend).
 #
 # also rests on: laws/PngAncillaryChunksIgnored.bend
 import Base
@@ -88,6 +91,20 @@ def spec.rgba(xs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
     case _xs:
       None{}
 
+# tRNS's alphas for a palette: all of them when tRNS has no more entries
+# than PLTE has (PNG section 11.3.2.1), none otherwise, as libpng ignores
+# such a tRNS
+def spec.alphas.keep(fits: Bool, als: List<&2, U32>) -> List<&2, U32>:
+  match fits:
+    case True{}:
+      als
+    case False{}:
+      []
+
+# the alphas of tRNS that apply to the palette PLTE holds
+def spec.alphas(+plte: List<&2, U32>, +trns: List<&2, U32>) -> List<&2, U32>:
+  spec.alphas.keep(Nat.is_le(List.length(&2, U32, trns), Nat.div(List.length(&2, U32, plte), 3n)), trns)
+
 # the palette: entry k is PLTE's triple k packed with alpha tRNS byte k, or
 # 255 past the end of tRNS
 def spec.pal(xs: List<&2, U32>, als: List<&2, U32>) -> List<&2, U32>:
@@ -126,10 +143,12 @@ law png_px_grey_key:
   for +kk: U32
   {Png.px.of(0, xs, [], [0, kk]) == Some{spec.grey.key(xs, kk)} : Maybe<&2, List<&2, U32>>}
 
-# LAW: colour type 4: each gray and alpha pair decodes to 0xAAgggggg
+# LAW: colour type 4: each gray and alpha pair decodes to 0xAAgggggg, whatever PLTE and tRNS hold
 law png_px_ga:
   for +xs: List<&2, U32>
-  {Png.px.of(4, xs, [], []) == spec.ga(xs) : Maybe<&2, List<&2, U32>>}
+  for +plte: List<&2, U32>
+  for +trns: List<&2, U32>
+  {Png.px.of(4, xs, plte, trns) == spec.ga(xs) : Maybe<&2, List<&2, U32>>}
 
 # LAW: colour type 2 without tRNS: each RGB triple decodes to 0xFFrrggbb, whatever suggested palette there is
 law png_px_rgb:
@@ -146,19 +165,20 @@ law png_px_rgb_key:
   for +kb: U32
   {Png.px.of(2, xs, plte, [0, kr, 0, kg, 0, kb]) == spec.rgb.key(xs, kr, kg, kb) : Maybe<&2, List<&2, U32>>}
 
-# LAW: colour type 6: each RGBA quadruple decodes to 0xAArrggbb, whatever suggested palette there is
+# LAW: colour type 6: each RGBA quadruple decodes to 0xAArrggbb, whatever suggested palette and tRNS there are
 law png_px_rgba:
   for +xs: List<&2, U32>
   for +plte: List<&2, U32>
-  {Png.px.of(6, xs, plte, []) == spec.rgba(xs) : Maybe<&2, List<&2, U32>>}
+  for +trns: List<&2, U32>
+  {Png.px.of(6, xs, plte, trns) == spec.rgba(xs) : Maybe<&2, List<&2, U32>>}
 
-# LAW: colour type 3: when the indices decode, each is its palette entry with alpha from tRNS or 255
+# LAW: colour type 3: the indices decode exactly when each is below the palette's entry count, each to its palette
+# entry with alpha from tRNS or 255 (none from a tRNS longer than the palette); otherwise the samples are none
 law png_px_indexed:
   for +xs: List<&2, U32>
   for +plte: List<&2, U32>
   for +trns: List<&2, U32>
-  for h_some: {Maybe.is_some(&2, List<&2, U32>, Png.px.of(3, xs, plte, trns)) == True{} : Bool}
-  {Png.px.of(3, xs, plte, trns) == spec.idx(xs, spec.pal(plte, trns)) : Maybe<&2, List<&2, U32>>}
+  {Png.px.of(3, xs, plte, trns) == spec.idx(xs, spec.pal(plte, spec.alphas(plte, trns))) : Maybe<&2, List<&2, U32>>}
 
 # a picture of those samples, when there are some
 def spec.pic(mm: Maybe<&2, List<&2, U32>>, +ww: U32, +hh: U32) -> Maybe<&2, Png.Pic>:
