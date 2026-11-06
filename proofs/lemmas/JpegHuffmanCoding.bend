@@ -1294,12 +1294,15 @@ def allq(qs: List<&2, U32>, +cs: List<&2, U32>) -> Bool:
     case +qq <> rest:
       L1.jpg.also(M1.allc(qq, cs), allq(rest, cs))
 
-# the statement of allq.ok
-def allq.ok.ty() -> Type:
-  {allq([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) == True{} : Bool}
-
-# every nibble from 0 to 15 and size from 1 to 10 has the facts
-def allq.ok() -> allq.ok.ty():
+# every nibble from 0 to 15 and size from 1 to 10 has the facts, the answer
+# bb being True. The statement is written out, not named (a named one would
+# have the checker normalize both sides where symok.of hands this proof on,
+# recomputing every fact twice); bb only lets the header span lines
+def allq.ok(
+  -bb: Bool,
+  hb: {True{} == bb : Bool}
+) -> {allq([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) == bb : Bool}:
+  %hb : {allq([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) == _ : Bool}
   {==}
 
 # the rest of the nibbles, as a nibble's membership step needs it
@@ -1353,7 +1356,7 @@ def symok.of(
   hc: {L1.jpg.memb(cc, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) == True{} : Bool}
 ) -> {M1.symok(U32.and(15, run), cc) == True{} : Bool}:
   inq([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], U32.and(15, run), cc,
-    nib16(run), hc, allq.ok())
+    nib16(run), hc, allq.ok(True{}, {==}))
 
 # a word compare not above after its low bits is not above before them
 def fin_ngt(
