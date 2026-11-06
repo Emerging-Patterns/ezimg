@@ -35,6 +35,7 @@ import ./laws/FillIsUniform.bend as FillIsUniform
 import ./laws/GetSetTouchOnePoint.bend as GetSetTouchOnePoint
 import ./laws/InflateReadsStoredBlocks.bend as InflateReadsStoredBlocks
 import ./laws/InflateUptoKeepsBudget.bend as InflateUptoKeepsBudget
+import ./laws/InflateUptoReadsStoredBlocks.bend as InflateUptoReadsStoredBlocks
 import ./laws/JpegEncodeIgnoresAlpha.bend as JpegEncodeIgnoresAlpha
 import ./laws/JpegPlacesComponentSamples.bend as JpegPlacesComponentSamples
 import ./laws/JpegRefusesNonBaselineFrames.bend as JpegRefusesNonBaselineFrames
