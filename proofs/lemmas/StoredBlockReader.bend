@@ -7,6 +7,12 @@ import ./BasicFacts.bend as M1
 
 # ---- A. the bit reader on one byte ----
 
+# the eight bits rd.step8 feeds the reader for a byte, low bit first
+def bits8(+bb: U32) -> List<&2, U32>:
+  [(1 .&. bb : U32), (1 .&. (bb >> 1n : U32) : U32), (1 .&. (bb >> 2n : U32) : U32), (1 .&. (bb >> 3n : U32) : U32),
+    (1 .&. (bb >> 4n : U32) : U32), (1 .&. (bb >> 5n : U32) : U32), (1 .&. (bb >> 6n : U32) : U32),
+    (1 .&. (bb >> 7n : U32) : U32)]
+
 # the integer the reader folds from bits, low bit first: what rd.raw
 # accumulates in `acc` while `got` counts the bits so far
 def rdv(bits: List<&2, U32>, +acc: U32, +got: U32) -> U32:
@@ -39,7 +45,7 @@ def u_or_zero(uu: U32) -> {U32.or(uu, 0) == uu : U32}:
       Equal.cong(Word(32n), U32, xx => U32{xx}, Word.or(32n, ww, Word.zero(32n)), ww, w_or_zero(32n, ww))
 
 # the eight bits of a byte, read back: the low byte, each bit or'd with zero
-def rd8.raw(+xx: U32) -> {rdv(Inf.bits.push(7n, xx, []), 0, 0) == U32.or(U32.and(255, xx), 0) : U32}:
+def rd8.raw(+xx: U32) -> {rdv(bits8(xx), 0, 0) == U32.or(U32.and(255, xx), 0) : U32}:
   match xx:
     case U32{w0}:
       match w0:
@@ -63,14 +69,14 @@ def rd8.raw(+xx: U32) -> {rdv(Inf.bits.push(7n, xx, []), 0, 0) == U32.or(U32.and
                                           {==}
 
 # the eight bits of any U32's low byte, read back, are that byte
-def rd8(+xx: U32) -> {rdv(Inf.bits.push(7n, xx, []), 0, 0) == U32.and(255, xx) : U32}:
-  Equal.trans(U32, rdv(Inf.bits.push(7n, xx, []), 0, 0), U32.or(U32.and(255, xx), 0), U32.and(255, xx), rd8.raw(xx),
+def rd8(+xx: U32) -> {rdv(bits8(xx), 0, 0) == U32.and(255, xx) : U32}:
+  Equal.trans(U32, rdv(bits8(xx), 0, 0), U32.or(U32.and(255, xx), 0), U32.and(255, xx), rd8.raw(xx),
     u_or_zero(U32.and(255, xx)))
 
 # the sixteen bits of LEN, low byte first, read back: the low 16 bits
 def rd16.raw(
   +cc: U32
-) -> {rdv(List.append(&2, U32, Inf.bits.push(7n, Png.enc.byte(cc), []), Inf.bits.push(7n, Png.enc.hi(cc), [])), 0, 0) ==
+) -> {rdv(List.append(&2, U32, bits8(Png.enc.byte(cc)), bits8(Png.enc.hi(cc))), 0, 0) ==
   U32.or(U32.and(65535, cc), 0) : U32}:
   match cc:
     case U32{w0}:
@@ -97,11 +103,10 @@ def rd16.raw(
 # the sixteen bits the encoder writes for a U32, read back, are its low 16 bits
 def rd16(
   +cc: U32
-) -> {rdv(List.append(&2, U32, Inf.bits.push(7n, Png.enc.byte(cc), []), Inf.bits.push(7n, Png.enc.hi(cc), [])), 0, 0) ==
+) -> {rdv(List.append(&2, U32, bits8(Png.enc.byte(cc)), bits8(Png.enc.hi(cc))), 0, 0) ==
   U32.and(65535, cc) : U32}:
-  Equal.trans(U32, rdv(List.append(&2, U32, Inf.bits.push(7n, Png.enc.byte(cc), []), Inf.bits.push(7n,
-    Png.enc.hi(cc), [])), 0, 0), U32.or(U32.and(65535, cc), 0), U32.and(65535, cc), rd16.raw(cc),
-    u_or_zero(U32.and(65535, cc)))
+  Equal.trans(U32, rdv(List.append(&2, U32, bits8(Png.enc.byte(cc)), bits8(Png.enc.hi(cc))), 0, 0),
+    U32.or(U32.and(65535, cc), 0), U32.and(65535, cc), rd16.raw(cc), u_or_zero(U32.and(65535, cc)))
 
 # the low 16 bits of the complement are the complement of the low 16 bits
 def nlen_mask(+cc: U32) -> {U32.and(65535, U32.xor(cc, 65535)) == U32.xor(U32.and(65535, cc), 65535) : U32}:
@@ -204,24 +209,37 @@ def mask8(+xx: U32, h_le: {U32.is_le(xx, 255) == True{} : Bool}) -> {U32.and(255
 
 # ---- B. the inflate reader over stored blocks ----
 
+# the reader's context in a stream of stored blocks: BFINAL, the count `left`,
+# the bytes so far (newest first), the stored bytes owed to the window `pend`,
+# and `run`, CMF until the Adler field
+def cx.at(fin: Bool, +left: U32, out: List<&2, U32>, +pend: U32, +run: U32) -> Inf.Cx:
+  Inf.Cx{fin, left, 0, out, Inf.TNone{}, 0, pend, run, Inf.hs.none()}
+
 # the reader where a block header starts: three bits for BFINAL and BTYPE,
 # after the zlib header or a stored block that was not the last. `left` is
 # what the last block's count ran down to, `out` the bytes so far, newest first
-def st.blk(+left: U32, out: List<&2, U32>) -> Inf.St:
-  Inf.st.make(Inf.PByte{}, Inf.MBlk{}, Inf.WLit{}, 0, 0, 3, False{}, left, 0, out, [], [], [], [], 0, 0, 120, 0, 0, 0,
-    0, 0, 0, 0, 0)
+def st.blk(+left: U32, out: List<&2, U32>, +pend: U32) -> Inf.St:
+  Inf.st.byte(Inf.MBlk{}, 3, 0, cx.at(False{}, left, out, pend, 120))
 
-# the reader on the bits of some bytes
+# the reader on some bytes
 def run.bytes(xs: List<&2, U32>, st: Inf.St) -> Maybe<&2, List<&2, U32>>:
-  Inf.inflate.go(Inf.bits.of(xs), st)
+  Inf.inflate.go(xs, st)
 
 # the sixteen-bit field the encoder writes for a U32, as the reader folds it
 def t16(+cc: U32) -> U32:
-  rdv(List.append(&2, U32, Inf.bits.push(7n, Png.enc.byte(cc), []), Inf.bits.push(7n, Png.enc.hi(cc), [])), 0, 0)
+  rdv(List.append(&2, U32, bits8(Png.enc.byte(cc)), bits8(Png.enc.hi(cc))), 0, 0)
+
+# the reader after LEN and NLEN, the zero test of LEN named `zz`
+def st.nlen.at(zz: Bool, fin: Bool, +left: U32, out: List<&2, U32>, +pend: U32) -> Inf.St:
+  Inf.rd.nlen.ok(zz, 0, cx.at(fin, left, out, pend, 120))
 
 # the reader after LEN and NLEN: data bytes next, or the block's end when LEN is 0
-def st.nlen(fin: Bool, +left: U32, out: List<&2, U32>) -> Inf.St:
-  Inf.rd.nlen.ok(U32.is_zero(left), Inf.WLit{}, fin, left, 0, out, [], [], [], [], 0, 0, 120, 0, 0, 0, 0, 0, 0)
+def st.nlen(fin: Bool, +left: U32, out: List<&2, U32>, +pend: U32) -> Inf.St:
+  st.nlen.at(U32.is_zero(left), fin, left, out, pend)
+
+# the reader with NLEN read, `zz` its check
+def st.chk(zz: Bool, fin: Bool, +left: U32, out: List<&2, U32>, +pend: U32) -> Inf.St:
+  Inf.rd.nlen.chk(zz, 0, cx.at(fin, left, out, pend, 120))
 
 # a stored block's five header bytes, as the reader first folds them: the
 # NLEN check still open
@@ -231,10 +249,11 @@ def bhead.raw(
   +nl: U32,
   rest: List<&2, U32>,
   +left: U32,
-  out: List<&2, U32>
-) -> {run.bytes(List.append(&2, U32, Png.enc.head(fin, cc, nl), rest), st.blk(left, out)) ==
-  Inf.inflate.go(Inf.bits.of(rest), Inf.st.gate(U32.is_eq(t16(nl), U32.xor(t16(cc), 65535)), st.nlen(fin, t16(cc),
-  out), Inf.st.fail())) : Maybe<&2, List<&2, U32>>}:
+  out: List<&2, U32>,
+  +pend: U32
+) -> {run.bytes(List.append(&2, U32, Png.enc.head(fin, cc, nl), rest), st.blk(left, out, pend)) ==
+  run.bytes(rest, st.chk(U32.is_eq(t16(nl), U32.xor(t16(cc), 65535)), fin, t16(cc), out, (pend + t16(cc) : U32))) :
+  Maybe<&2, List<&2, U32>>}:
   match fin:
     case True{}:
       {==}
@@ -252,31 +271,32 @@ def nlen_pass(+cc: U32) -> {U32.is_eq(t16(U32.xor(cc, 65535)), U32.xor(t16(cc), 
   M1.u32_eq_refl(U32.xor(U32.and(65535, cc), 65535))
 
 # a stored block's five header bytes, LEN then its complement, leave the reader
-# at the data with LEN's low 16 bits to count
+# at the data with LEN's low 16 bits to count, and owed to the window
 def bhead(
   +fin: Bool,
   +cc: U32,
   +rest: List<&2, U32>,
   +left: U32,
-  +out: List<&2, U32>
-) -> {run.bytes(List.append(&2, U32, Png.enc.head(fin, cc, U32.xor(cc, 65535)), rest), st.blk(left, out)) ==
-  Inf.inflate.go(Inf.bits.of(rest), st.nlen(fin, U32.and(65535, cc), out)) : Maybe<&2, List<&2, U32>>}:
+  +out: List<&2, U32>,
+  +pend: U32
+) -> {run.bytes(List.append(&2, U32, Png.enc.head(fin, cc, U32.xor(cc, 65535)), rest), st.blk(left, out, pend)) ==
+  run.bytes(rest, st.nlen(fin, U32.and(65535, cc), out, (pend + U32.and(65535, cc) : U32))) : Maybe<&2, List<&2,
+    U32>>}:
   +mm = U32.and(65535, cc)
-  +lhs = run.bytes(List.append(&2, U32, Png.enc.head(fin, cc, U32.xor(cc, 65535)), rest), st.blk(left, out))
+  +tt = t16(cc)
+  +lhs = run.bytes(List.append(&2, U32, Png.enc.head(fin, cc, U32.xor(cc, 65535)), rest), st.blk(left, out, pend))
+  +ck = U32.is_eq(t16(U32.xor(cc, 65535)), U32.xor(tt, 65535))
   Equal.trans(Maybe<&2, List<&2, U32>>, lhs,
-    Inf.inflate.go(Inf.bits.of(rest), Inf.st.gate(U32.is_eq(t16(U32.xor(cc, 65535)), U32.xor(t16(cc), 65535)),
-      st.nlen(fin, t16(cc), out), Inf.st.fail())),
-    Inf.inflate.go(Inf.bits.of(rest), st.nlen(fin, mm, out)),
-    bhead.raw(fin, cc, U32.xor(cc, 65535), rest, left, out),
+    run.bytes(rest, st.chk(ck, fin, tt, out, (pend + tt : U32))),
+    run.bytes(rest, st.nlen(fin, mm, out, (pend + mm : U32))),
+    bhead.raw(fin, cc, U32.xor(cc, 65535), rest, left, out, pend),
     Equal.trans(Maybe<&2, List<&2, U32>>,
-      Inf.inflate.go(Inf.bits.of(rest), Inf.st.gate(U32.is_eq(t16(U32.xor(cc, 65535)), U32.xor(t16(cc), 65535)),
-        st.nlen(fin, t16(cc), out), Inf.st.fail())),
-      Inf.inflate.go(Inf.bits.of(rest), st.nlen(fin, t16(cc), out)),
-      Inf.inflate.go(Inf.bits.of(rest), st.nlen(fin, mm, out)),
-      Equal.cong(Bool, Maybe<&2, List<&2, U32>>, bb => Inf.inflate.go(Inf.bits.of(rest), Inf.st.gate(bb, st.nlen(fin,
-        t16(cc), out), Inf.st.fail())), U32.is_eq(t16(U32.xor(cc, 65535)), U32.xor(t16(cc), 65535)), True{},
-        nlen_pass(cc)),
-      Equal.cong(U32, Maybe<&2, List<&2, U32>>, vv => Inf.inflate.go(Inf.bits.of(rest), st.nlen(fin, vv, out)), t16(cc),
+      run.bytes(rest, st.chk(ck, fin, tt, out, (pend + tt : U32))),
+      run.bytes(rest, st.nlen(fin, tt, out, (pend + tt : U32))),
+      run.bytes(rest, st.nlen(fin, mm, out, (pend + mm : U32))),
+      Equal.cong(Bool, Maybe<&2, List<&2, U32>>, bb => run.bytes(rest, st.chk(bb, fin, tt, out, (pend + tt : U32))),
+        ck, True{}, nlen_pass(cc)),
+      Equal.cong(U32, Maybe<&2, List<&2, U32>>, vv => run.bytes(rest, st.nlen(fin, vv, out, (pend + vv : U32))), tt,
         mm, rd16(cc))))
 
 # the answer bytes.go started from was true
@@ -314,12 +334,12 @@ def cnt(xs: List<&2, U32>, zz: Bool, +nn: U32) -> Bool:
 
 # the reader when a stored block's count `left` was just tested: `zz` says it
 # is zero
-def st.dz(zz: Bool, fin: Bool, +left: U32, out: List<&2, U32>) -> Inf.St:
-  Inf.rd.data.z(zz, Inf.WLit{}, fin, left, 0, out, [], [], [], [], 0, 0, 120, 0, 0, 0, 0, 0, 0)
+def st.dz(zz: Bool, fin: Bool, +left: U32, out: List<&2, U32>, +pend: U32) -> Inf.St:
+  Inf.rd.data.z(zz, 0, cx.at(fin, left, out, pend, 120))
 
 # the reader at a stored block's end
-def st.after(fin: Bool, +left: U32, out: List<&2, U32>) -> Inf.St:
-  Inf.rd.after(fin, Inf.WLit{}, left, 0, out, [], [], [], [], 0, 0, 120, 0, 0, 0, 0, 0, 0)
+def st.after(fin: Bool, +left: U32, out: List<&2, U32>, +pend: U32) -> Inf.St:
+  Inf.rd.after(0, cx.at(fin, left, out, pend, 120))
 
 # a stored block's data bytes: the reader copies each one and counts down to the block's end
 def dl(
@@ -329,33 +349,32 @@ def dl(
   +fin: Bool,
   +out: List<&2, U32>,
   +rest: List<&2, U32>,
+  +pend: U32,
   h_cnt: {cnt(xs, zz, left) == True{} : Bool},
   +h_by: {D1.bytes.go(xs, True{}) == True{} : Bool}
-) -> {run.bytes(List.append(&2, U32, xs, rest), st.dz(zz, fin, left, out)) == run.bytes(rest, st.after(fin, M1.cd(xs,
-  left), List.reverse.go(&2, U32, xs, out))) : Maybe<&2, List<&2, U32>>}:
+) -> {run.bytes(List.append(&2, U32, xs, rest), st.dz(zz, fin, left, out, pend)) == run.bytes(rest, st.after(fin,
+  M1.cd(xs, left), List.reverse.go(&2, U32, xs, out), pend)) : Maybe<&2, List<&2, U32>>}:
   match xs zz:
     case Nil{} True{}:
       {==}
     case Nil{} False{}:
-      Empty.absurd({run.bytes(rest, st.dz(False{}, fin, left, out)) == run.bytes(rest, st.after(fin, left, out)) :
-        Maybe<&2, List<&2, U32>>}, M1.false_true(h_cnt))
+      Empty.absurd({run.bytes(rest, st.dz(False{}, fin, left, out, pend)) == run.bytes(rest, st.after(fin, left, out,
+        pend)) : Maybe<&2, List<&2, U32>>}, M1.false_true(h_cnt))
     case +hd <> +tl True{}:
-      Empty.absurd({run.bytes(List.append(&2, U32, hd <> tl, rest), st.dz(True{}, fin, left, out)) == run.bytes(rest,
-        st.after(fin, M1.cd(tl, (left - 1 : U32)), List.reverse.go(&2, U32, tl, hd <> out))) : Maybe<&2, List<&2,
-            U32>>},
-        M1.false_true(h_cnt))
+      Empty.absurd({run.bytes(List.append(&2, U32, hd <> tl, rest), st.dz(True{}, fin, left, out, pend)) ==
+        run.bytes(rest, st.after(fin, M1.cd(tl, (left - 1 : U32)), List.reverse.go(&2, U32, tl, hd <> out), pend)) :
+        Maybe<&2, List<&2, U32>>}, M1.false_true(h_cnt))
     case +hd <> +tl False{}:
       +l2 = (left - 1 : U32)
-      +eh = Equal.trans(U32, rdv(Inf.bits.push(7n, hd, []), 0, 0), U32.and(255, hd), hd, rd8(hd), mask8(hd,
+      +eh = Equal.trans(U32, rdv(bits8(hd), 0, 0), U32.and(255, hd), hd, rd8(hd), mask8(hd,
         bytes.ok(tl, U32.is_le(hd, 255), h_by)))
       Equal.trans(Maybe<&2, List<&2, U32>>,
-        run.bytes(List.append(&2, U32, tl, rest), st.dz(U32.is_zero(l2), fin, l2, rdv(Inf.bits.push(7n, hd, []), 0, 0)
-          <> out)),
-        run.bytes(List.append(&2, U32, tl, rest), st.dz(U32.is_zero(l2), fin, l2, hd <> out)),
-        run.bytes(rest, st.after(fin, M1.cd(tl, l2), List.reverse.go(&2, U32, tl, hd <> out))),
+        run.bytes(List.append(&2, U32, tl, rest), st.dz(U32.is_zero(l2), fin, l2, rdv(bits8(hd), 0, 0) <> out, pend)),
+        run.bytes(List.append(&2, U32, tl, rest), st.dz(U32.is_zero(l2), fin, l2, hd <> out, pend)),
+        run.bytes(rest, st.after(fin, M1.cd(tl, l2), List.reverse.go(&2, U32, tl, hd <> out), pend)),
         Equal.cong(U32, Maybe<&2, List<&2, U32>>, vv => run.bytes(List.append(&2, U32, tl, rest), st.dz(U32.is_zero(l2),
-          fin, l2, vv <> out)), rdv(Inf.bits.push(7n, hd, []), 0, 0), hd, eh),
-        dl(tl, U32.is_zero(l2), l2, fin, hd <> out, rest, h_cnt, bytes.tail(tl, U32.is_le(hd, 255), h_by)))
+          fin, l2, vv <> out, pend)), rdv(bits8(hd), 0, 0), hd, eh),
+        dl(tl, U32.is_zero(l2), l2, fin, hd <> out, rest, pend, h_cnt, bytes.tail(tl, U32.is_le(hd, 255), h_by)))
 
 # nlen.ok and data.z branch alike on the zero test
 def nz_dz(
@@ -363,9 +382,10 @@ def nz_dz(
   +fin: Bool,
   +left: U32,
   +out: List<&2, U32>,
-  +rest: List<&2, U32>
-) -> {run.bytes(rest, Inf.rd.nlen.ok(zz, Inf.WLit{}, fin, left, 0, out, [], [], [], [], 0, 0, 120, 0, 0, 0, 0, 0, 0)) ==
-  run.bytes(rest, st.dz(zz, fin, left, out)) : Maybe<&2, List<&2, U32>>}:
+  +rest: List<&2, U32>,
+  +pend: U32
+) -> {run.bytes(rest, st.nlen.at(zz, fin, left, out, pend)) == run.bytes(rest, st.dz(zz, fin, left, out, pend)) :
+  Maybe<&2, List<&2, U32>>}:
   match zz:
     case True{}:
       {==}
@@ -373,7 +393,8 @@ def nz_dz(
       {==}
 
 # a stored block of the bytes `xs` whose LEN field is `cc`: when the low 16
-# bits of `cc` count `xs` exactly, the reader copies `xs` and ends the block
+# bits of `cc` count `xs` exactly, the reader copies `xs`, ends the block and
+# owes those bits' count to the window
 def blk.go(
   +fin: Bool,
   +cc: U32,
@@ -381,23 +402,25 @@ def blk.go(
   +rest: List<&2, U32>,
   +left: U32,
   +out: List<&2, U32>,
+  +pend: U32,
   h_cnt: {cnt(xs, U32.is_zero(U32.and(65535, cc)), U32.and(65535, cc)) == True{} : Bool},
   h_by: {D1.bytes.go(xs, True{}) == True{} : Bool}
 ) -> {run.bytes(List.append(&2, U32, Png.enc.head(fin, cc, U32.xor(cc, 65535)), List.append(&2, U32, xs, rest)),
-  st.blk(left, out)) == run.bytes(rest, st.after(fin, M1.cd(xs, U32.and(65535, cc)), List.reverse.go(&2, U32, xs, out))) :  # noqa: S002
-  Maybe<&2, List<&2, U32>>}:
+  st.blk(left, out, pend)) == run.bytes(rest, st.after(fin, M1.cd(xs, U32.and(65535, cc)), List.reverse.go(&2, U32,
+  xs, out), (pend + U32.and(65535, cc) : U32))) : Maybe<&2, List<&2, U32>>}:
   +mm = U32.and(65535, cc)
+  +p2 = (pend + mm : U32)
   +xr = List.append(&2, U32, xs, rest)
   Equal.trans(Maybe<&2, List<&2, U32>>,
-    run.bytes(List.append(&2, U32, Png.enc.head(fin, cc, U32.xor(cc, 65535)), xr), st.blk(left, out)),
-    run.bytes(xr, st.nlen(fin, mm, out)),
-    run.bytes(rest, st.after(fin, M1.cd(xs, mm), List.reverse.go(&2, U32, xs, out))),
-    bhead(fin, cc, xr, left, out),
-    Equal.trans(Maybe<&2, List<&2, U32>>, run.bytes(xr, st.nlen(fin, mm, out)),
-      run.bytes(xr, st.dz(U32.is_zero(mm), fin, mm, out)),
-      run.bytes(rest, st.after(fin, M1.cd(xs, mm), List.reverse.go(&2, U32, xs, out))),
-      nz_dz(U32.is_zero(mm), fin, mm, out, xr),
-      dl(xs, U32.is_zero(mm), mm, fin, out, rest, h_cnt, h_by)))
+    run.bytes(List.append(&2, U32, Png.enc.head(fin, cc, U32.xor(cc, 65535)), xr), st.blk(left, out, pend)),
+    run.bytes(xr, st.nlen(fin, mm, out, p2)),
+    run.bytes(rest, st.after(fin, M1.cd(xs, mm), List.reverse.go(&2, U32, xs, out), p2)),
+    bhead(fin, cc, xr, left, out, pend),
+    Equal.trans(Maybe<&2, List<&2, U32>>, run.bytes(xr, st.nlen(fin, mm, out, p2)),
+      run.bytes(xr, st.dz(U32.is_zero(mm), fin, mm, out, p2)),
+      run.bytes(rest, st.after(fin, M1.cd(xs, mm), List.reverse.go(&2, U32, xs, out), p2)),
+      nz_dz(U32.is_zero(mm), fin, mm, out, xr, p2),
+      dl(xs, U32.is_zero(mm), mm, fin, out, rest, p2, h_cnt, h_by)))
 
 # the same block with its bytes appended to the header first
 def blk(
@@ -407,13 +430,14 @@ def blk(
   +rest: List<&2, U32>,
   +left: U32,
   +out: List<&2, U32>,
+  +pend: U32,
   h_cnt: {cnt(xs, U32.is_zero(U32.and(65535, cc)), U32.and(65535, cc)) == True{} : Bool},
   h_by: {D1.bytes.go(xs, True{}) == True{} : Bool}
 ) -> {run.bytes(List.append(&2, U32, List.append(&2, U32, Png.enc.head(fin, cc, U32.xor(cc, 65535)), xs), rest),
-  st.blk(left, out)) == run.bytes(rest, st.after(fin, M1.cd(xs, U32.and(65535, cc)), List.reverse.go(&2, U32, xs, out))) :  # noqa: S002
-  Maybe<&2, List<&2, U32>>}:
+  st.blk(left, out, pend)) == run.bytes(rest, st.after(fin, M1.cd(xs, U32.and(65535, cc)), List.reverse.go(&2, U32,
+  xs, out), (pend + U32.and(65535, cc) : U32))) : Maybe<&2, List<&2, U32>>}:
   match fin:
     case True{}:
-      blk.go(True{}, cc, xs, rest, left, out, h_cnt, h_by)
+      blk.go(True{}, cc, xs, rest, left, out, pend, h_cnt, h_by)
     case False{}:
-      blk.go(False{}, cc, xs, rest, left, out, h_cnt, h_by)
+      blk.go(False{}, cc, xs, rest, left, out, pend, h_cnt, h_by)
