@@ -12,7 +12,11 @@
 # the reader keeps the code so far, the first code of that length and the
 # index of that code among the symbols, so a symbol costs one step per bit and
 # one walk of a 512-leaf tree. Back-references read a 32768-byte window kept
-# as a tree by position, so a copy costs the same at any distance.
+# as a tree by position, so a copy costs the same at any distance. Code
+# lengths are checked as zlib's inflate checks them: no over-subscribed set,
+# no incomplete set but a single code of length 1 or no code at all for the
+# literal/length and distance codes, an end-of-block code, at most 286
+# literal/length and 30 distance codes.
 import Base
 
 # where the bit reader is
@@ -400,10 +404,58 @@ def hc.sorted(kk: Nat, +ll: U32, +ls: List<&2, U32>, acc: List<&2, U32>) -> List
     case 1n+p:
       hc.sorted(p, (ll + 1 : U32), ls, hc.pick(ls, ll, acc))
 
-# the canonical Huffman table of a length per symbol
-def hc.build(ls: List<&2, U32>) -> Hc:
+# the codes left unused once lengths 1 to 15 are counted (puff's `left`), or
+# none when the lengths ask for more codes than there are. `zz` is "too many".
+def hc.room(cs: List<&2, U32>, zz: Bool, +left: U32) -> Maybe<&2, U32>:
+  match cs zz:
+    case _c True{}:
+      None{}
+    case Nil{} False{}:
+      Some{left}
+    case Con{+c, t} False{}:
+      +l2 = (left << 1n : U32)
+      hc.room(t, U32.is_gt(c, l2), (l2 - c : U32))
+
+# the sum of the counts
+def hc.sum(cs: List<&2, U32>, +nn: U32) -> U32:
+  match cs:
+    case Nil{}:
+      nn
+    case Con{+c, t}:
+      hc.sum(t, (nn + c : U32))
+
+# the count of length 1
+def hc.first(cs: List<&2, U32>) -> U32:
+  match cs:
+    case Nil{}:
+      0
+    case Con{+c, _t}:
+      c
+
+# zlib's inflate_table: refuse an over-subscribed set; refuse an incomplete
+# one unless it has no code, or `single` allows one code of length 1
+def hc.valid(rr: Maybe<&2, U32>, +total: U32, +one: U32, single: Bool) -> Bool:
+  match rr:
+    case None{}:
+      False{}
+    case Some{+left}:
+      +lone = Bool.and(single, Bool.and(U32.is_eq(total, 1), U32.is_eq(one, 1)))
+      Bool.or(U32.is_zero(left), Bool.or(U32.is_zero(total), lone))
+
+# the table once its counts are checked
+def hc.build.ok(zz: Bool, cs: List<&2, U32>, +ls: List<&2, U32>) -> Maybe<&2, Hc>:
+  match zz:
+    case True{}:
+      Some{Hc{cs, tr.up(9n, tr.leaves(hc.sorted(15n, 1, ls, [])))}}
+    case False{}:
+      None{}
+
+# the canonical Huffman table of a length per symbol, if the lengths are a
+# set zlib accepts
+def hc.build(ls: List<&2, U32>, single: Bool) -> Maybe<&2, Hc>:
   +nz = List.reverse(&2, U32, hc.nz(ls, 0, []))
-  Hc{hc.cnts(15n, 1, nz), tr.up(9n, tr.leaves(hc.sorted(15n, 1, nz, [])))}
+  +cs = hc.cnts(15n, 1, nz)
+  hc.build.ok(hc.valid(hc.room(cs, False{}, 1), hc.sum(cs, 0), hc.first(cs), single), cs, nz)
 
 # `nn` symbols from `from` on, onto a list
 def seq(nn: Nat, +from: U32, acc: List<&2, U32>) -> List<&2, U32>:
@@ -814,19 +866,43 @@ def rd.data(+val: U32, +skew: U32, cx: Cx) -> St:
       +l2 = (left - 1 : U32)
       rd.data.z(U32.is_zero(l2), skew, Cx{final, l2, dist, {val <> out : List<&2, U32>}, win, wpos, pend, run, hs})
 
+# HLIT checked: at most 286 literal/length codes
+def rd.hlit.ok(zz: Bool, +val: U32, +skew: U32, +cx: Cx) -> St:
+  match zz:
+    case True{}:
+      st.byte(MHdist{}, 5, skew, cx.with(cx, hs.hlit(cx.hs(cx), val)))
+    case False{}:
+      st.fail()
+
 # HLIT, then HDIST
-def rd.hlit(+val: U32, +skew: U32, +cx: Cx) -> St:
-  st.byte(MHdist{}, 5, skew, cx.with(cx, hs.hlit(cx.hs(cx), val)))
+def rd.hlit(+val: U32, +skew: U32, cx: Cx) -> St:
+  rd.hlit.ok(U32.is_le(val, 29), val, skew, cx)
+
+# HDIST checked: at most 30 distance codes
+def rd.hdist.ok(zz: Bool, +val: U32, +skew: U32, +cx: Cx) -> St:
+  match zz:
+    case True{}:
+      st.byte(MHclen{}, 4, skew, cx.with(cx, hs.hdist(cx.hs(cx), val)))
+    case False{}:
+      st.fail()
 
 # HDIST, then HCLEN
-def rd.hdist(+val: U32, +skew: U32, +cx: Cx) -> St:
-  st.byte(MHclen{}, 4, skew, cx.with(cx, hs.hdist(cx.hs(cx), val)))
+def rd.hdist(+val: U32, +skew: U32, cx: Cx) -> St:
+  rd.hdist.ok(U32.is_le(val, 29), val, skew, cx)
 
 # HCLEN, then that many 3-bit code lengths
 def rd.hclen(+val: U32, +skew: U32, cx: Cx) -> St:
   match cx:
     case Cx{final, _l, +dist, out, win, +wpos, +pend, +run, hs}:
       st.byte(MClen{}, 3, skew, Cx{final, (val + 4 : U32), dist, out, win, wpos, pend, run, hs.clear(hs)})
+
+# the code-length table, if its lengths are complete
+def rd.clen.got(mm: Maybe<&2, Hc>, +skew: U32, +cx: Cx) -> St:
+  match mm:
+    case None{}:
+      st.fail()
+    case Some{ct}:
+      st.sym(WClen{}, skew, cx.with(cx, hs.clen(cx.hs(cx), ct)))
 
 # code lengths are in. Build the code-length table and read the rest.
 def rd.clen.z(zz: Bool, +skew: U32, +cx: Cx) -> St:
@@ -835,7 +911,7 @@ def rd.clen.z(zz: Bool, +skew: U32, +cx: Cx) -> St:
       st.byte(MClen{}, 3, skew, cx)
     case True{}:
       +placed = clen.place(clen.order(), List.reverse(&2, U32, hs.lens(cx.hs(cx))), huff.zeros(19n))
-      st.sym(WClen{}, skew, cx.with(cx, hs.clen(cx.hs(cx), hc.build(placed))))
+      rd.clen.got(hc.build(placed, False{}), skew, cx)
 
 # one 3-bit code length
 def rd.clen(+val: U32, +skew: U32, cx: Cx) -> St:
@@ -844,13 +920,37 @@ def rd.clen(+val: U32, +skew: U32, cx: Cx) -> St:
       +l2 = (left - 1 : U32)
       rd.clen.z(U32.is_zero(l2), skew, Cx{final, l2, dist, out, win, wpos, pend, run, hs.push(hs, val)})
 
+# the distance table, if its lengths are a set zlib accepts
+def rd.finish.dist(mm: Maybe<&2, Hc>, lt: Hc, +skew: U32, +cx: Cx) -> St:
+  match mm:
+    case None{}:
+      st.fail()
+    case Some{dt}:
+      st.sym(WLit{}, skew, cx.with(cx, hs.tables(cx.hs(cx), lt, dt)))
+
+# the literal/length table, if its lengths are a set zlib accepts
+def rd.finish.lit(mm: Maybe<&2, Hc>, +dists: List<&2, U32>, +skew: U32, +cx: Cx) -> St:
+  match mm:
+    case None{}:
+      st.fail()
+    case Some{lt}:
+      rd.finish.dist(hc.build(dists, True{}), lt, skew, cx)
+
+# the end-of-block code must have a length
+def rd.finish.eob(zz: Bool, +lits: List<&2, U32>, +dists: List<&2, U32>, +skew: U32, +cx: Cx) -> St:
+  match zz:
+    case True{}:
+      st.fail()
+    case False{}:
+      rd.finish.lit(hc.build(lits, True{}), dists, skew, cx)
+
 # both length lists are in
 def rd.finish.at(mm: Maybe<&2, lens.Split>, +skew: U32, +cx: Cx) -> St:
   match mm:
     case None{}:
       st.fail()
-    case Some{lens.Split{lits, dists}}:
-      st.sym(WLit{}, skew, cx.with(cx, hs.tables(cx.hs(cx), hc.build(lits), hc.build(dists))))
+    case Some{lens.Split{+lits, +dists}}:
+      rd.finish.eob(U32.is_zero(tab.at(lits, False{}, 256)), lits, dists, skew, cx)
 
 # split the length list into literal and distance tables
 def rd.finish(+skew: U32, +cx: Cx) -> St:
