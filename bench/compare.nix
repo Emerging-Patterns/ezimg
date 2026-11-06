@@ -165,6 +165,69 @@ def correct_png():
     ok = got is not None and got[2] == exp
     add_case("A pillow→ezimg png", "2x2 RGB + tEXt", "PASS" if ok else "FAIL", f"{len(raw)}B")
 
+# Real-size PNGs written by Pillow, decoded by ezimg and compared sample for
+# sample, each against a time budget. Pillow picks a filter per row, so the
+# files hold every filter type, and fixed and dynamic Huffman blocks.
+REAL_SIZES = [(320, 260), (800, 400)]
+# Each save's budget is a floor plus microseconds per sample, about three
+# times what the decoder takes today. zlib level 1's greedy matcher leaves
+# many matches far back, and ezimg's back-reference walk costs its distance
+# per byte (copy.nth in src/inflate.bend), so level 1 has the larger rate:
+# an 800x400 photo-like RGB file at level 1 takes about 125 s today, the same
+# picture at level 6 about 3 s.
+REAL_FLOOR_S = 10.0
+REAL_SAVES = [("zlib 1", {"compress_level": 1}, 1500.0), ("zlib 6", {"compress_level": 6}, 200.0),
+              ("zlib 9", {"compress_level": 9}, 200.0), ("optimize", {"optimize": True}, 200.0)]
+
+def real_budget(w, h, rate):
+    return REAL_FLOOR_S + rate * w * h / 1e6
+
+def real_photo(w, h, mode, seed):
+    # smooth gradients and waves with a little grain, like a photograph
+    rng = random.Random(seed)
+    buf = bytearray()
+    for y in range(h):
+        for x in range(w):
+            r = 127 + 60 * math.sin(x / 23.0) + 50 * math.cos(y / 31.0) + rng.randrange(-6, 7)
+            g = 127 + 70 * math.sin((x + y) / 41.0) + rng.randrange(-6, 7)
+            b = 127 + 80 * math.cos((x - y) / 37.0) + rng.randrange(-6, 7)
+            buf += bytes(max(0, min(255, int(v))) for v in (r, g, b))
+            if mode == "RGBA":
+                buf.append(max(0, min(255, int(200 + 55 * math.sin(x * y / 900.0)))))
+    return Image.frombytes(mode, (w, h), bytes(buf))
+
+def real_noise(w, h, mode, seed):
+    rng = random.Random(seed)
+    return Image.frombytes(mode, (w, h), bytes(rng.getrandbits(8) for _ in range(w * h * len(mode))))
+
+def correct_png_real():
+    log("\n== PNG correctness, real sizes ==")
+    log(f"budget per file: {REAL_FLOOR_S:.0f} s + a rate per sample (wall: process, decode and EZR write)")
+    for w, h in REAL_SIZES:
+        for kind, make in (("photo", real_photo), ("noise", real_noise)):
+            for mode in ("RGB", "RGBA"):
+                im = make(w, h, mode, w * 31 + h)
+                want = as_rgba_words(im)
+                for label, kw, rate in REAL_SAVES:
+                    budget = real_budget(w, h, rate)
+                    name = f"{w}x{h} {kind} {mode} {label}"
+                    buf = io.BytesIO(); im.save(buf, format="PNG", **kw); data = buf.getvalue()
+                    path = os.path.join(WORK, "real_" + name.replace(" ", "_") + ".png")
+                    open(path, "wb").write(data)
+                    r, got = run_decode("png-dec", path, budget * 2 + 30)
+                    if got is None:
+                        add_case("F pillow→ezimg png real", name, "FAIL",
+                                 f"{len(data)}B decode rc={r['rc']} timeout={r['timeout']} wall={r['wall']:.2f}s "
+                                 f"err={r['err'][:200]}")
+                        continue
+                    gw, gh, pix = got
+                    bad = sum(1 for a, b in zip(pix, want) if a != b)
+                    same = (gw, gh) == (w, h) and len(pix) == len(want) and bad == 0
+                    fast = r["wall"] <= budget
+                    add_case("F pillow→ezimg png real", name, "PASS" if same and fast else "FAIL",
+                             f"{len(data)}B {gw}x{gh} differing={bad} wall={r['wall']:.2f}s budget={budget:.0f}s"
+                             + ("" if fast else " OVER BUDGET"))
+
 def correct_jpeg():
     log("\n== JPEG correctness ==")
     for w, h in [(1, 1), (2, 2), (8, 8), (7, 5)]:
@@ -391,7 +454,7 @@ def main():
     log("driver ping ok (native ELF)")
     try:
         if MODE in ("correctness", "all"):
-            correct_png(); correct_jpeg()
+            correct_png(); correct_png_real(); correct_jpeg()
         if MODE in ("speed", "all"):
             speed()
     except Exception:
