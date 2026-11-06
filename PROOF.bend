@@ -10,9 +10,9 @@ import ./proofs/FillIsUniform.bend as PFillIsUniform
 import ./proofs/GetSetTouchOnePoint.bend as PGetSetTouchOnePoint
 import ./proofs/InflateReadsStoredBlocks.bend as PInflateReadsStoredBlocks
 import ./proofs/JpegEncodeIgnoresAlpha.bend as PJpegEncodeIgnoresAlpha
+import ./proofs/JpegEncodeRefusesBadRasters.bend as PJpegEncodeRefusesBadRasters
 import ./proofs/JpegPlacesComponentSamples.bend as PJpegPlacesComponentSamples
 import ./proofs/JpegRefusesNonBaselineFrames.bend as PJpegRefusesNonBaselineFrames
-import ./proofs/JpegRefusesWhatPngRefuses.bend as PJpegRefusesWhatPngRefuses
 import ./proofs/JpegRoundTripKeepsSize.bend as PJpegRoundTripKeepsSize
 import ./proofs/JpegWritesJfifLayout.bend as PJpegWritesJfifLayout
 import ./proofs/MapAppliesPerSample.bend as PMapAppliesPerSample

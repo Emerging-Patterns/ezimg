@@ -1,9 +1,8 @@
-# For every well-formed raster `r` with both sides nonzero and at most 65535
-# and at most 2^31 samples, `decode_jpeg(encode_jpeg(r))` is some raster of
-# `r`'s size with alpha 255.
+# For every raster `r` encode_jpeg writes (encode_jpeg.good: both sides from 1
+# to 65535, at most 2^31 points, and w * h samples),
+# `decode_jpeg(encode_jpeg(r))` is some raster of `r`'s size with alpha 255.
 import Base
 import ../main.bend as Img
-import ../src/png.bend as Png
 import ../src/jpeg.bend as Jpeg
 import ../src/jpeg_enc.bend as Jenc
 import ./defs/PngSpecification.bend as D1
@@ -80,16 +79,14 @@ def jpg.back(mm: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Img.Raster>:
     case Some{bytes}:
       Img.decode_jpeg(bytes)
 
-# LAW: for every well-formed raster with both sides from 1 to 65535, decode_jpeg of encode_jpeg's bytes is
+# LAW: for every raster encode_jpeg writes, decode_jpeg of encode_jpeg's bytes is
 # the decoder's scan decode of encode_jpeg's own entropy-coded bytes, in the frame of the raster's width and
 # height, with the encoder's scan and tables: the marker walk, the unstuffing and the frame size are done
 law jpeg_round_trip_scan:
   for +ww: U32
   for +hh: U32
   for +px: List<&2, U32>
-  for +h_good: {Png.enc.good(ww, hh, px) == True{} : Bool}
-  for h_w: {U32.is_le(ww, 65535) == True{} : Bool}
-  for h_h: {U32.is_le(hh, 65535) == True{} : Bool}
+  for +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool}
   {jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})) == Img.decode_jpeg.out(Jpeg.decode.run(jpg.enc.frame(ww,
     hh), jpg.enc.scan(), jpg.enc.tabs(), Jenc.encode.arm(ww, hh, Img.colours(px)), 0)) : Maybe<&2, Img.Raster>}
 
@@ -120,15 +117,13 @@ law jpeg_run_sized:
   {jpg.sized(Img.decode_jpeg.out(Jpeg.decode.run(Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent,
     ri)), ww, hh) == True{} : Bool}
 
-# LAW: for every well-formed raster with both sides from 1 to 65535, decode_jpeg of encode_jpeg's bytes is
+# LAW: for every raster encode_jpeg writes, decode_jpeg of encode_jpeg's bytes is
 # none or a raster of the raster's width and height; every sample of one has alpha 255 (jpeg_decode_opaque)
 law jpeg_round_trip_sized:
   for +ww: U32
   for +hh: U32
   for +px: List<&2, U32>
-  for +h_good: {Png.enc.good(ww, hh, px) == True{} : Bool}
-  for h_w: {U32.is_le(ww, 65535) == True{} : Bool}
-  for h_h: {U32.is_le(hh, 65535) == True{} : Bool}
+  for +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool}
   {jpg.sized(jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), ww, hh) == True{} : Bool}
 
 # one byte as its eight bits, the lowest first
@@ -540,7 +535,7 @@ law jpeg_scan_some:
   {jpg.psome(Jpeg.decode.run(jpg.enc.frame(ww, hh), jpg.enc.scan(), jpg.enc.tabs(), Jenc.encode.pad(jpg.feed(
     jpg.tbits(tt <> rest), Jenc.encode.put0())), 0)) == True{} : Bool}
 
-# LAW: for every well-formed raster with both sides from 1 to 65535, decode_jpeg of encode_jpeg's bytes is some
+# LAW: for every raster encode_jpeg writes, decode_jpeg of encode_jpeg's bytes is some
 # raster. Every path of encode.arm (neutral, solid, encode.go) writes, through the encoder's bit writer, three blocks
 # per MCU that the decoder reads whole (each DC clipped to T.81's 8-bit range, so its difference has at most 11
 # bits), and the MCU count times 3 is decode.nblocks of the encoder's frame with no U32 wrap, so jpeg_scan_some
@@ -550,9 +545,7 @@ law jpeg_round_trip_some:
   for +ww: U32
   for +hh: U32
   for +px: List<&2, U32>
-  for +h_good: {Png.enc.good(ww, hh, px) == True{} : Bool}
-  for +h_w: {U32.is_le(ww, 65535) == True{} : Bool}
-  for +h_h: {U32.is_le(hh, 65535) == True{} : Bool}
+  for +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool}
   {Maybe.is_some(&2, Img.Raster, jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px}))) == True{} : Bool}
 
 # a decode's samples, when it returned a raster, all have alpha 255
@@ -567,7 +560,7 @@ def jpg.opq(mm: Maybe<&2, Img.Raster>) -> Bool:
 def jpg.round(+mm: Maybe<&2, Img.Raster>, +ww: U32, +hh: U32) -> Bool:
   Bool.and(Bool.and(Maybe.is_some(&2, Img.Raster, mm), jpg.sized(mm, ww, hh)), jpg.opq(mm))
 
-# LAW: for every well-formed raster r with both sides from 1 to 65535, decode_jpeg(encode_jpeg(r)) is some raster
+# LAW: for every raster r encode_jpeg writes, decode_jpeg(encode_jpeg(r)) is some raster
 # of r's width and height, every sample of it with alpha 255: jpeg_round_trip_some, jpeg_round_trip_sized and
 # jpeg_decode_opaque together. It needs no bound on the samples: sides of at most 65535 keep the MCU count's
 # product, times 3, below 2^32
@@ -575,7 +568,5 @@ law jpeg_round_trip:
   for +ww: U32
   for +hh: U32
   for +px: List<&2, U32>
-  for +h_good: {Png.enc.good(ww, hh, px) == True{} : Bool}
-  for +h_w: {U32.is_le(ww, 65535) == True{} : Bool}
-  for +h_h: {U32.is_le(hh, 65535) == True{} : Bool}
+  for +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool}
   {jpg.round(jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), ww, hh) == True{} : Bool}

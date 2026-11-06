@@ -1608,23 +1608,6 @@ def bad_no(
     case False{} False{} False{} True{}:
       Empty.absurd({True{} == False{} : Bool}, jst.true_false(gh))
 
-# a size encode_png accepts and whose sides are at most 65535 passes the JPEG encoder's size test
-def bad_of_good(
-  +ww: U32,
-  +hh: U32,
-  +px: List<&2, U32>,
-  e_good: {Png.enc.good(ww, hh, px) == True{} : Bool},
-  h_w: {U32.is_le(ww, 65535) == True{} : Bool},
-  h_h: {U32.is_le(hh, 65535) == True{} : Bool}
-) -> {Jenc.encode.bad(ww, hh) == False{} : Bool}:
-  +e_gt = {and_left(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)),
-    Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(Png.enc.len(px, 0), ww), ww, hh, Png.enc.len(px, 0)), e_good)
-    : {Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)) == True{} : Bool}}
-  bad_no(U32.is_eq(ww, 0), U32.is_eq(hh, 0), U32.is_gt(ww, 65535), U32.is_gt(hh, 65535),
-    gt_ne(U32.cmp(ww, 0), and_left(U32.is_gt(ww, 0), U32.is_gt(hh, 0), e_gt)),
-    gt_ne(U32.cmp(hh, 0), and_right(U32.is_gt(ww, 0), U32.is_gt(hh, 0), e_gt)),
-    le_ngt(U32.cmp(ww, 65535), h_w), le_ngt(U32.cmp(hh, 65535), h_h))
-
 # ---- the marker walk (laws/JpegRefusesNonBaselineFrames.bend) ----
 
 # the phases the walk may be in between two segments: seeking a marker, inside a scan, or stopped

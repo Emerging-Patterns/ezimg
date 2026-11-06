@@ -33,9 +33,9 @@ import ./laws/FillIsUniform.bend as FillIsUniform
 import ./laws/GetSetTouchOnePoint.bend as GetSetTouchOnePoint
 import ./laws/InflateReadsStoredBlocks.bend as InflateReadsStoredBlocks
 import ./laws/JpegEncodeIgnoresAlpha.bend as JpegEncodeIgnoresAlpha
+import ./laws/JpegEncodeRefusesBadRasters.bend as JpegEncodeRefusesBadRasters
 import ./laws/JpegPlacesComponentSamples.bend as JpegPlacesComponentSamples
 import ./laws/JpegRefusesNonBaselineFrames.bend as JpegRefusesNonBaselineFrames
-import ./laws/JpegRefusesWhatPngRefuses.bend as JpegRefusesWhatPngRefuses
 import ./laws/JpegRoundTripKeepsSize.bend as JpegRoundTripKeepsSize
 import ./laws/JpegWritesJfifLayout.bend as JpegWritesJfifLayout
 import ./laws/MapAppliesPerSample.bend as MapAppliesPerSample

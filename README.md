@@ -33,7 +33,8 @@ A picture is a `Raster`: a width, a height, and row-major samples. Bend's own
 signature when the bytes open with it, and none otherwise. `decode_png` returns a raster for an 8-bit PNG. `decode_jpeg` returns a
 raster for a baseline sequential JPEG, and none when the bytes are not one.
 `encode_jpeg` writes a baseline sequential 4:4:4 JPEG of the samples' colour,
-dropping alpha, and returns none for exactly the rasters `encode_png` refuses. Every sample is one `U32` packed `0xAARRGGBB`, whichever
+dropping alpha, and returns none exactly when a side is 0 or past 65535 (a JPEG frame's 16 bits), the
+raster has more than 2^31 points, or its sample count is not the area. Every sample is one `U32` packed `0xAARRGGBB`, whichever
 decoder returned it: a JPEG sample has alpha 255, and a gray JPEG sample
 repeats its level in R, G and B.
 `width`,

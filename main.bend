@@ -410,19 +410,30 @@ def encode_jpeg.pick(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&
     case True{}:
       Some{Jenc.encode(ww, hh, px)}
 
+# a side a JPEG frame holds: 1 to 65535, the 16 bits T.81 B.2.2 gives X and Y
+def encode_jpeg.side(+nn: U32) -> Bool:
+  Bool.and(U32.is_gt(nn, 0), U32.is_le(nn, 65535))
+
+# the rasters encode_jpeg writes: both sides from 1 to 65535, at most 2^31
+# points, and exactly w * h samples, counted as natural numbers. For sides of
+# at most 65535, w * h is below 2^32, so its U32 product is exact. These are
+# encode_jpeg's own limits, not encode_png's: a JPEG frame cannot hold a side
+# past 65535, and the decoder refuses a frame of more than 2^31 points.
+def encode_jpeg.good(+ww: U32, +hh: U32, px: List<&2, U32>) -> Bool:
+  Bool.and(Bool.and(encode_jpeg.side(ww), encode_jpeg.side(hh)), Bool.and(U32.is_le((ww * hh : U32), 2147483648),
+    Nat.is_eq(List.length(&2, U32, px), Nat.mul(U32.to_nat(ww), U32.to_nat(hh)))))
+
 # a baseline sequential 4:4:4 JPEG of the samples' colour: alpha is cleared
-# before the encoder sees a sample. None exactly when encode_png is none: a
-# side is zero, the area passes 2^32, or the sample count is not the area.
-# Both ask the same guard, Png.enc.good.
+# before the encoder sees a sample. None exactly when encode_jpeg.good says the
+# raster is not one it writes (laws/JpegEncodeRefusesBadRasters.bend).
 #
-# Trusted, not proved: for every well-formed raster with both sides nonzero
-# and at most 65535 and at most 2^31 samples, every colour channel of
-# decode_jpeg(encode_jpeg(r)) is within 8 of r's. Measured, not proved: the
-# largest error over about 15,000 rasters (random, gradients, saturated
-# colours, checkerboards, sizes 1 to 64) is 7; libjpeg with the same settings
-# (all-ones quantisation, 4:4:4) reaches 4. A proof needs error bounds on the
-# fixed-point DCT and IDCT.
+# Trusted, not proved: for every raster encode_jpeg writes, every colour
+# channel of decode_jpeg(encode_jpeg(r)) is within 8 of r's. Measured, not
+# proved: the largest error over about 15,000 rasters (random, gradients,
+# saturated colours, checkerboards, sizes 1 to 64) is 7; libjpeg with the same
+# settings (all-ones quantisation, 4:4:4) reaches 4. A proof needs error
+# bounds on the fixed-point DCT and IDCT.
 def encode_jpeg(img: Raster) -> Maybe<&2, List<&2, U32>>:
   match img:
     case Raster{+w, +h, +px}:
-      encode_jpeg.pick(Png.enc.good(w, h, px), w, h, colours(px))
+      encode_jpeg.pick(encode_jpeg.good(w, h, px), w, h, colours(px))

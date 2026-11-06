@@ -1,7 +1,6 @@
 # proofs of laws/JpegRoundTripKeepsSize.bend
 import Base
 import ../main.bend as Img
-import ../src/png.bend as Png
 import ../src/jpeg.bend as Jpeg
 import ../src/jpeg_enc.bend as Jenc
 import ../laws/DecodedSamplesPackArgb.bend as L1
@@ -15,6 +14,7 @@ import ./lemmas/JpegSamplesPacked.bend as M4
 import ./lemmas/RowMajorIndex.bend as M5
 import ./lemmas/SubtractionAndHuffmanWalk.bend as M6
 import ./lemmas/WordAddition.bend as M7
+import ./lemmas/JpegEncoderGuard.bend as M8
 
 # ---- words and bytes ----
 
@@ -5145,17 +5145,13 @@ def some_ok(
   +ww: U32,
   +hh: U32,
   +px: List<&2, U32>,
-  +h_good: {Png.enc.good(ww, hh, px) == True{} : Bool},
-  +h_w: {U32.is_le(ww, 65535) == True{} : Bool},
-  +h_h: {U32.is_le(hh, 65535) == True{} : Bool},
+  +h_good: {Img.encode_jpeg.good(ww, hh, px) == True{} : Bool},
   ers: some_ok.ers.ty(ww, hh, px)
 ) -> {Maybe.is_some(&2, Img.Raster, Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px}))) == True{} : Bool}:
-  +gw = U32.is_gt(ww, 0)
-  +gh = U32.is_gt(hh, 0)
-  +rw = Png.enc.rows(px, U32.is_zero(hh), U32.is_lt(Png.enc.len(px, 0), ww), ww, hh, Png.enc.len(px, 0))
-  +hg = {M3.and_l(Bool.and(gw, gh), rw, h_good) : {Bool.and(gw, gh) == True{} : Bool}}
-  +hw0 = {gt0_ne(ww, M3.and_l(gw, gh, hg)) : {U32.is_eq(ww, 0) == False{} : Bool}}
-  +hh0 = {gt0_ne(hh, M3.and_r(gw, gh, hg)) : {U32.is_eq(hh, 0) == False{} : Bool}}
+  +hw0 = {gt0_ne(ww, M8.w_pos(ww, hh, px, h_good)) : {U32.is_eq(ww, 0) == False{} : Bool}}
+  +hh0 = {gt0_ne(hh, M8.h_pos(ww, hh, px, h_good)) : {U32.is_eq(hh, 0) == False{} : Bool}}
+  +h_w = M8.w_le(ww, hh, px, h_good)
+  +h_h = M8.h_le(ww, hh, px, h_good)
   +cp = Img.colours(px)
   es = Equal.sym(Maybe<&2, Img.Raster>, Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), Img.decode_jpeg.out(
     Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(), Jenc.encode.arm(ww, hh, cp),
@@ -5223,7 +5219,7 @@ def Laws.jpeg_enc_header_walk(ww, hh):
 def Laws.jpeg_ent_walk(xs, h_stuffed, frame, scan, tabs, ent, ri, kind, bad):
   ent.go(xs, False{}, frame, scan, tabs, ent, ri, kind, bad, h_stuffed)
 
-def Laws.jpeg_round_trip_scan(ww, hh, px, h_good, h_w, h_h):
+def Laws.jpeg_round_trip_scan(ww, hh, px, h_good):
   +cp = Img.colours(px)
   +ee = Jenc.encode.arm(ww, hh, cp)
   +hd = Jenc.encode.header(ww, hh, Jenc.encode.dccounts(), Jenc.encode.dcsyms(), Jenc.encode.accounts(),
@@ -5237,11 +5233,11 @@ def Laws.jpeg_round_trip_scan(ww, hh, px, h_good, h_w, h_h):
   Equal.trans(Maybe<&2, Img.Raster>, Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})),
     Laws.jpg.back(Img.encode_jpeg.pick(True{}, ww, hh, cp)), Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, ee, 0)),
     Equal.cong(Bool, Maybe<&2, Img.Raster>, bb => Laws.jpg.back(Img.encode_jpeg.pick(bb, ww, hh, cp)),
-    Png.enc.good(ww, hh, px), True{}, h_good),
+    Img.encode_jpeg.good(ww, hh, px), True{}, h_good),
     Equal.trans(Maybe<&2, Img.Raster>, Img.decode_jpeg(Jenc.encode.pick(Jenc.encode.bad(ww, hh), ww, hh, cp)),
     Img.decode_jpeg(Jenc.encode.pick(False{}, ww, hh, cp)), Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, ee, 0)),
     Equal.cong(Bool, Maybe<&2, Img.Raster>, bb => Img.decode_jpeg(Jenc.encode.pick(bb, ww, hh, cp)),
-    Jenc.encode.bad(ww, hh), False{}, M1.bad_of_good(ww, hh, px, h_good, h_w, h_h)),
+    Jenc.encode.bad(ww, hh), False{}, M8.bad(ww, hh, px, h_good)),
     Equal.trans(Maybe<&2, Img.Raster>, M3.w8.out(Jpeg.decode.walk(List.append(&2, U32, hd, rr), Jpeg.decode.st0())),
     M3.w8.out(Jpeg.decode.walk(rr, Jpeg.decode.walk(hd, Jpeg.decode.st0()))),
     Img.decode_jpeg.out(Jpeg.decode.run(fr, sc, tb, ee, 0)), Equal.cong(Jpeg.St, Maybe<&2, Img.Raster>,
@@ -5261,14 +5257,14 @@ def Laws.jpeg_round_trip_scan(ww, hh, px, h_good, h_w, h_h):
 def Laws.jpeg_run_sized(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, ent, ri):
   run.sized(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, ent, ri)
 
-def Laws.jpeg_round_trip_sized(ww, hh, px, h_good, h_w, h_h):
+def Laws.jpeg_round_trip_sized(ww, hh, px, h_good):
   +ee = Jenc.encode.arm(ww, hh, Img.colours(px))
   Equal.trans(Bool, Laws.jpg.sized(Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), ww, hh),
     Laws.jpg.sized(Img.decode_jpeg.out(Jpeg.decode.run(Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(),
     Laws.jpg.enc.tabs(), ee, 0)), ww, hh), True{}, Equal.cong(Maybe<&2, Img.Raster>, Bool, mm => Laws.jpg.sized(mm, ww,
     hh), Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), Img.decode_jpeg.out(Jpeg.decode.run(
     Laws.jpg.enc.frame(ww, hh), Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(), ee, 0)), Laws.jpeg_round_trip_scan(ww, hh,
-    px, h_good, h_w, h_h)), Laws.jpeg_run_sized(ww, hh, 3, [1, 2, 3], [1, 1, 1], [1, 1, 1], [0, 0, 0], 1, 1,
+    px, h_good)), Laws.jpeg_run_sized(ww, hh, 3, [1, 2, 3], [1, 1, 1], [1, 1, 1], [0, 0, 0], 1, 1,
     Laws.jpg.enc.scan(), Laws.jpg.enc.tabs(), ee, 0))
 
 def Laws.jpeg_unstuff(bs, ok):
@@ -5292,10 +5288,10 @@ def Laws.jpeg_huff_ac(pre, h_pre, sy, h_sy, post, h_post):
 def Laws.jpeg_scan_some(tt, rest, ww, hh, h_w, h_h, h_wf, h_n):
   scan_some(tt, rest, ww, hh, h_w, h_h, h_wf, h_n)
 
-def Laws.jpeg_round_trip_some(ww, hh, px, h_good, h_w, h_h):
-  some_ok(ww, hh, px, h_good, h_w, h_h, Laws.jpeg_round_trip_scan(ww, hh, px, h_good, h_w, h_h))
+def Laws.jpeg_round_trip_some(ww, hh, px, h_good):
+  some_ok(ww, hh, px, h_good, Laws.jpeg_round_trip_scan(ww, hh, px, h_good))
 
-def Laws.jpeg_round_trip(ww, hh, px, h_good, h_w, h_h):
+def Laws.jpeg_round_trip(ww, hh, px, h_good):
   round_ok(Laws.jpg.back(Img.encode_jpeg(Img.Raster{ww, hh, px})), ww, hh, Laws.jpeg_round_trip_some(ww, hh, px,
-    h_good, h_w, h_h), Laws.jpeg_round_trip_sized(ww, hh, px, h_good, h_w, h_h), opq_back(Img.encode_jpeg(
+    h_good), Laws.jpeg_round_trip_sized(ww, hh, px, h_good), opq_back(Img.encode_jpeg(
     Img.Raster{ww, hh, px}), bb => ii => ee => L1.jpeg_decode_opaque(bb, ii, ee)))

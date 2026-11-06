@@ -1,10 +1,10 @@
 # proofs of laws/JpegWritesJfifLayout.bend
 import Base
 import ../main.bend as Img
-import ../src/png.bend as Png
 import ../src/jpeg_enc.bend as Jenc
 import ../laws/JpegWritesJfifLayout.bend as Laws
 import ./lemmas/BasicFacts.bend as M1
+import ./lemmas/JpegEncoderGuard.bend as M2
 
 # what jpeg_enc_layout says of an encoding mm of a raster of width ww and height hh
 def lay.Ty(mm: Maybe<&2, List<&2, U32>>, ww: U32, hh: U32) -> Type:
@@ -18,10 +18,8 @@ def lay.pick(
   +ww: U32,
   +hh: U32,
   +px: List<&2, U32>,
-  e_ok: {Png.enc.good(ww, hh, px) == ok : Bool},
-  h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg.pick(ok, ww, hh, Img.colours(px))) == True{} : Bool},
-  h_w: {U32.is_le(ww, 65535) == True{} : Bool},
-  h_h: {U32.is_le(hh, 65535) == True{} : Bool}
+  e_ok: {Img.encode_jpeg.good(ww, hh, px) == ok : Bool},
+  h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg.pick(ok, ww, hh, Img.colours(px))) == True{} : Bool}
 ) -> lay.Ty(Img.encode_jpeg.pick(ok, ww, hh, Img.colours(px)), ww, hh):
   match ok:
     case False{}:
@@ -33,12 +31,12 @@ def lay.pick(
         (16 <> Jenc.encode.join(Jenc.encode.accounts(), Jenc.encode.acsyms()), ([3, 1, 0, 2, 0, 3, 0, 0, 63, 0],
         (Jenc.encode.arm(ww, hh, cp),
         Equal.cong(Bool, Maybe<&2, List<&2, U32>>, bb => Some{Jenc.encode.pick(bb, ww, hh, cp)},
-          Jenc.encode.bad(ww, hh), False{}, M1.bad_of_good(ww, hh, px, e_ok, h_w, h_h)))))))))
+          Jenc.encode.bad(ww, hh), False{}, M2.bad(ww, hh, px, e_ok)))))))))
 
-def Laws.jpeg_enc_layout(img, h_some, h_w, h_h):
+def Laws.jpeg_enc_layout(img, h_some):
   match img:
     case Img.Raster{+ww, +hh, +px}:
-      lay.pick(Png.enc.good(ww, hh, px), ww, hh, px, {==}, h_some, h_w, h_h)
+      lay.pick(Img.encode_jpeg.good(ww, hh, px), ww, hh, px, {==}, h_some)
 
 # what jpeg_enc_ends says of an encoding mm
 def ends.Ty(mm: Maybe<&2, List<&2, U32>>) -> Type:
@@ -73,4 +71,4 @@ def ends.pick(
 def Laws.jpeg_enc_ends(img, h_some):
   match img:
     case Img.Raster{+ww, +hh, +px}:
-      ends.pick(Png.enc.good(ww, hh, px), ww, hh, Img.colours(px), h_some)
+      ends.pick(Img.encode_jpeg.good(ww, hh, px), ww, hh, Img.colours(px), h_some)
