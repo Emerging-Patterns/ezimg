@@ -540,8 +540,11 @@ def encode_jpeg.good(+ww: U32, +hh: U32, px: List<&2, U32>) -> Bool:
 # to 100 (IJG's scale: T.81 Annex K's tables K.1 and K.2 at 5000 / q percent
 # below 50, else 200 - 2 q percent; a quality outside 1 to 100 is the nearest
 # end), each sample flattened onto white before the encoder sees it
-# (laws/JpegEncodeFlattensAlpha.bend). None exactly when encode_jpeg.good says
-# the raster is not one it writes (laws/JpegEncodeRefusesBadRasters.bend).
+# (laws/JpegEncodeFlattensAlpha.bend). When every flattened sample has red,
+# green and blue the same, it is one gray component with the luminance tables
+# alone, as libjpeg writes a grayscale image. None exactly when
+# encode_jpeg.good says the raster is not one it writes
+# (laws/JpegEncodeRefusesBadRasters.bend).
 #
 # Trusted, not proved: for every raster r it writes, every colour channel of
 # decode_jpeg(encode_jpeg_q(r, q)) is within E(q) of r's: E is 8 at quality

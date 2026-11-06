@@ -298,7 +298,8 @@ def McusOut(
   &ts: List<&2, L1.JBlkTok> -> &_e: {Jenc.encode.mcus(nn, (aa, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}),
     py, pb, pr, bit), mx, my, mw, ww, hh, Jenc.encode.ctx(qq)) == L1.jpg.feed(L1.jpg.tbits(ts), bit) : Jenc.Put} ->
     &_l: {List.length(&2, L1.JBlkTok, ts) == tri(nn) : Nat} -> &_w: {L1.jpg.allwf(ts) == True{} : Bool} ->
-    {L1.jpg.tagok(ts, (0, 0), L1.jpg.enc.frame(ww, hh), L1.jpg.enc.scan()) == True{} : Bool}
+    {L1.jpg.tagok(ts, (0, 0), L1.jpg.enc.frame(Jenc.K444{}, ww, hh), L1.jpg.enc.scan(Jenc.K444{})) == True{} :
+    Bool}
 
 # the rest of the MCU loop, from any state
 def McusIh(+_nn: Nat, +_mw: U32, +_ww: U32, +_hh: U32, +_qq: U32) -> Type:
@@ -345,8 +346,8 @@ def tag3(
   +a3: List<&2, L1.JTok>,
   +ts: List<&2, L1.JBlkTok>
 ) -> {L1.jpg.tagok(L1.JBlkTok{False{}, s1, x1, a1} <> L1.JBlkTok{True{}, s2, x2, a2} <> L1.JBlkTok{True{}, s3, x3,
-  a3} <> ts, (0, 0), L1.jpg.enc.frame(ww, hh), L1.jpg.enc.scan()) == L1.jpg.tagok(ts, (0, 0), L1.jpg.enc.frame(ww,
-  hh), L1.jpg.enc.scan()) : Bool}:
+  a3} <> ts, (0, 0), L1.jpg.enc.frame(Jenc.K444{}, ww, hh), L1.jpg.enc.scan(Jenc.K444{})) == L1.jpg.tagok(ts, (0,
+  0), L1.jpg.enc.frame(Jenc.K444{}, ww, hh), L1.jpg.enc.scan(Jenc.K444{})) : Bool}:
   {==}
 
 # the MCU's statement for the loop's state: its tile, both books, and the context's quantisation columns
@@ -449,8 +450,8 @@ def mcus_fin(
   +mo = U32.is_lt((mx + 1 : U32), mw)
   +cx = Jenc.encode.ctx(qq)
   +p3 = M2.feed3b(t1, t2, t3, bit)
-  +fr = L1.jpg.enc.frame(ww, hh)
-  +sc = L1.jpg.enc.scan()
+  +fr = L1.jpg.enc.frame(Jenc.K444{}, ww, hh)
+  +sc = L1.jpg.enc.scan(Jenc.K444{})
   (t1 <> t2 <> t3 <> ts, Equal.trans(Jenc.Put, Jenc.encode.mcus(nn, Jenc.encode.step.y(aa, Jenc.encode.bookof(False{}),
     Jenc.encode.bookof(True{}), bit, py, pb, pr, (mx * 8 : U32), (my * 8 : U32), ww, hh, cx), Jenc.encode.nx(mo, mx),
     Jenc.encode.ny(mo, my), mw, ww, hh, cx), Jenc.encode.mcus(nn, (ar, Jenc.encode.bookof(False{}),
@@ -588,12 +589,20 @@ def tbits_app(
         List.append(&2, Bool, L1.jpg.tbits(rest), L1.jpg.tbits(ys))), M2.huf.app_assoc(L1.jpg.blkbits(tt),
         L1.jpg.tbits(rest), L1.jpg.tbits(ys))))
 
-# a path's entropy-coded bytes: blocks the decoder reads whole, three per MCU, fed to the writer and padded, each of
-# the class the decoder's tables hold at its place in the scan
-def PathOut(-bytes: List<&2, U32>, +nn: Nat, +ww: U32, +hh: U32) -> Type:
+# the blocks per MCU of a layout's frame: three, or one for a gray frame
+def kcnt(+kd: Jenc.Layout, +nn: Nat) -> Nat:
+  match kd:
+    case Jenc.K444{}:
+      tri(nn)
+    case Jenc.KGray{}:
+      nn
+
+# a path's entropy-coded bytes: blocks the decoder reads whole, as many per MCU as the layout's frame has, fed to
+# the writer and padded, each of the class the decoder's tables hold at its place in the scan
+def PathOut(-bytes: List<&2, U32>, +nn: Nat, +kd: Jenc.Layout, +ww: U32, +hh: U32) -> Type:
   &ts: List<&2, L1.JBlkTok> -> &_e: {bytes == Jenc.encode.pad(L1.jpg.feed(L1.jpg.tbits(ts),
-    Jenc.encode.put0())) : List<&2, U32>} -> &_l: {List.length(&2, L1.JBlkTok, ts) == tri(nn) : Nat} -> &_w:
-    {L1.jpg.allwf(ts) == True{} : Bool} -> {L1.jpg.inorder(ts, L1.jpg.enc.frame(ww, hh), L1.jpg.enc.scan()) ==
+    Jenc.encode.put0())) : List<&2, U32>} -> &_l: {List.length(&2, L1.JBlkTok, ts) == kcnt(kd, nn) : Nat} -> &_w:
+    {L1.jpg.allwf(ts) == True{} : Bool} -> {L1.jpg.inorder(ts, L1.jpg.enc.frame(kd, ww, hh), L1.jpg.enc.scan(kd)) ==
     True{} : Bool}
 
 # the type of go_fin's parameter rr
@@ -609,20 +618,273 @@ def go_fin(
   +qq: U32,
   +px: List<&2, U32>,
   rr: go_fin.rr.ty(ww, hh, qq, px)
-) -> PathOut(Jenc.encode.arm(ww, hh, qq, px), U32.to_nat(mcun(ww, hh)), ww, hh):
+) -> PathOut(Jenc.encode.arm3(ww, hh, qq, px), U32.to_nat(mcun(ww, hh)), Jenc.K444{}, ww, hh):
   (+ts, er, el, ew, eg) = rr
   (ts, Equal.cong(Jenc.Put, List<&2, U32>, pp => Jenc.encode.pad(pp), Jenc.encode.mcus(U32.to_nat(mcun(ww, hh)),
     (Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px, Jpeg.decode.plane((ww * hh : U32)), 0),
     Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), 1024, 1024, 1024, Jenc.encode.put0()), 0, 0, U32.div((ww +
     7 : U32), 8), ww, hh, Jenc.encode.ctx(qq)), L1.jpg.feed(L1.jpg.tbits(ts), Jenc.encode.put0()), er), el, ew, eg)
 
-# the encoder's entropy-coded bytes are blocks the decoder reads whole, three per MCU, in the order of its scan
-def arm_ok(
+# the three-component entropy-coded bytes are blocks the decoder reads whole, three per MCU, in the order of its
+# scan
+def arm3_ok(
   +ww: U32,
   +hh: U32,
   +qq: U32,
   +px: List<&2, U32>
-) -> PathOut(Jenc.encode.arm(ww, hh, qq, px), U32.to_nat(mcun(ww, hh)), ww, hh):
+) -> PathOut(Jenc.encode.arm3(ww, hh, qq, px), U32.to_nat(mcun(ww, hh)), Jenc.K444{}, ww, hh):
   go_fin(ww, hh, qq, px, mcus_ok(U32.to_nat(mcun(ww, hh)), Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px,
     Jpeg.decode.plane((ww * hh : U32)), 0), 1024, 1024, 1024, Jenc.encode.put0(), 0, 0, U32.div((ww + 7 : U32), 8), ww,
     hh, qq, {==}, {==}, {==}))
+
+# the luminance quantisation columns of a quality, as the encoder's context holds them
+def qlum(+qq: U32) -> List<&2, Jenc.Oct>:
+  Jenc.encode.qcols(Jenc.encode.qrows(Jenc.encode.lumq(), qq))
+
+# a gray MCU the encoder codes: one luminance block the decoder reads whole, fed to the writer, the book back, and
+# the next predictor below 2048
+def GStepOut(-tt: Jenc.GTile, +bit: Jenc.Put, +py: U32, +qq: U32) -> Type:
+  &s1: U32 -> &x1: List<&2, Bool> -> &a1: List<&2, L1.JTok> -> &aa: Array<U32> -> &d1: U32 -> &_e:
+    {Jenc.encode.gstep.tile(tt, Jenc.encode.bookof(False{}), bit, py, M2.kern(), Jpeg.decode.zig(), qlum(qq)) == (aa,
+    Jenc.encode.bookof(False{}), d1, L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{False{}, s1, x1, a1}), bit)) :
+    Array<U32> & Jenc.Book & U32 & Jenc.Put} -> &_h: {U32.is_lt(d1, 2048) == True{} : Bool} ->
+    {L1.jpg.blkwf(L1.JBlkTok{False{}, s1, x1, a1}) == True{} : Bool}
+
+# a gray MCU, its block's coder named
+def gstep_fin(
+  pix: Array<U32>,
+  -ys: Array<U32>,
+  +fy: Bool,
+  +bit: Jenc.Put,
+  +py: U32,
+  +qq: U32,
+  co: M2.ChOut(False{}, fy, ys, bit, py, M2.kern(), qlum(qq))
+) -> GStepOut(Jenc.GTile{pix, ys, fy}, bit, py, qq):
+  (+s1, +x1, +a1, +d1, e1, h1, w1) = co
+  (s1, x1, a1, pix, d1, Equal.cong(Jenc.Book & U32 & Jenc.Put, Array<U32> & Jenc.Book & U32 & Jenc.Put, gg =>
+    Jenc.encode.gstep.end(gg, pix), Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, M2.kern(),
+    Jpeg.decode.zig(), qlum(qq)), (Jenc.encode.bookof(False{}), d1, L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{False{},
+    s1, x1, a1}), bit)), e1), h1, w1)
+
+# the encoder's gray MCU, from a predictor below 2048
+def gstep_ok(
+  tt: Jenc.GTile,
+  +bit: Jenc.Put,
+  +py: U32,
+  +qq: U32,
+  hy: {U32.is_lt(py, 2048) == True{} : Bool}
+) -> GStepOut(tt, bit, py, qq):
+  match tt:
+    case Jenc.GTile{pix, ys, +fy}:
+      gstep_fin(pix, ys, fy, bit, py, qq, M2.chan_ok(False{}, fy, ys, bit, py, M2.kern(), qlum(qq), hy))
+
+# the encoder's gray MCU loop from a state: its blocks, fed to the writer, one per MCU, each read whole, each a
+# luminance block, which the gray frame's tables hold at every place
+def GMcusOut(
+  nn: Nat,
+  -aa: Array<U32>,
+  +py: U32,
+  +bit: Jenc.Put,
+  +mx: U32,
+  +my: U32,
+  +mw: U32,
+  +ww: U32,
+  +hh: U32,
+  +qq: U32
+) -> Type:
+  &ts: List<&2, L1.JBlkTok> -> &_e: {Jenc.encode.gmcus(nn, (aa, Jenc.encode.bookof(False{}), py, bit), mx, my, mw,
+    ww, hh, Jenc.encode.ctx(qq)) == L1.jpg.feed(L1.jpg.tbits(ts), bit) : Jenc.Put} -> &_l: {List.length(&2,
+    L1.JBlkTok, ts) == nn : Nat} -> &_w: {L1.jpg.allwf(ts) == True{} : Bool} -> {L1.jpg.tagok(ts, (0, 0),
+    L1.jpg.enc.frame(Jenc.KGray{}, ww, hh), L1.jpg.enc.scan(Jenc.KGray{})) == True{} : Bool}
+
+# the rest of the gray MCU loop, from any state
+def GMcusIh(+_nn: Nat, +_mw: U32, +_ww: U32, +_hh: U32, +_qq: U32) -> Type:
+  @a2: Array<U32> -> @q1: U32 -> @p2: Jenc.Put -> @x2: U32 -> @y2: U32 -> @h1: {U32.is_lt(q1, 2048) == True{} :
+    Bool} -> GMcusOut(_nn, a2, q1, p2, x2, y2, _mw, _ww, _hh, _qq)
+
+# a luminance block, then more, sit at the places of the gray frame from the start exactly when the more do
+def gtag1(
+  +ww: U32,
+  +hh: U32,
+  +s1: U32,
+  +x1: List<&2, Bool>,
+  +a1: List<&2, L1.JTok>,
+  +ts: List<&2, L1.JBlkTok>
+) -> {L1.jpg.tagok(L1.JBlkTok{False{}, s1, x1, a1} <> ts, (0, 0), L1.jpg.enc.frame(Jenc.KGray{}, ww, hh),
+  L1.jpg.enc.scan(Jenc.KGray{})) == L1.jpg.tagok(ts, (0, 0), L1.jpg.enc.frame(Jenc.KGray{}, ww, hh),
+  L1.jpg.enc.scan(Jenc.KGray{})) : Bool}:
+  {==}
+
+# the type of gmcus_fin's parameter rest
+def gmcus_fin.rest.ty(
+  +_nn: Nat,
+  +_bit: Jenc.Put,
+  +_mx: U32,
+  +_my: U32,
+  +_mw: U32,
+  +_ww: U32,
+  +_hh: U32,
+  +_qq: U32,
+  +_s1: U32,
+  +_x1: List<&2, Bool>,
+  +_a1: List<&2, L1.JTok>,
+  _ar: Array<U32>,
+  +_d1: U32
+) -> Type:
+  GMcusOut(_nn, _ar, _d1, L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{False{}, _s1, _x1, _a1}), _bit),
+    Jenc.encode.nx(U32.is_lt((_mx + 1 : U32), _mw), _mx), Jenc.encode.ny(U32.is_lt((_mx + 1 : U32), _mw), _my), _mw,
+    _ww, _hh, _qq)
+
+# the type of gmcus_fin's parameter ee
+def gmcus_fin.ee.ty(
+  _aa: Array<U32>,
+  +_py: U32,
+  +_bit: Jenc.Put,
+  +_mx: U32,
+  +_my: U32,
+  +_ww: U32,
+  +_hh: U32,
+  +_qq: U32,
+  +_s1: U32,
+  +_x1: List<&2, Bool>,
+  +_a1: List<&2, L1.JTok>,
+  _ar: Array<U32>,
+  +_d1: U32
+) -> Type:
+  {Jenc.encode.gstep(_aa, Jenc.encode.bookof(False{}), _bit, _py, (_mx * 8 : U32), (_my * 8 : U32), _ww, _hh,
+    Jenc.encode.ctx(_qq)) == (_ar, Jenc.encode.bookof(False{}), _d1, L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{False{},
+    _s1, _x1, _a1}), _bit)) : Array<U32> & Jenc.Book & U32 & Jenc.Put}
+
+# the gray MCU loop after one MCU, its rest named
+def gmcus_fin(
+  +nn: Nat,
+  -aa: Array<U32>,
+  +py: U32,
+  +bit: Jenc.Put,
+  +mx: U32,
+  +my: U32,
+  +mw: U32,
+  +ww: U32,
+  +hh: U32,
+  +qq: U32,
+  +s1: U32,
+  +x1: List<&2, Bool>,
+  +a1: List<&2, L1.JTok>,
+  -ar: Array<U32>,
+  +d1: U32,
+  ee: gmcus_fin.ee.ty(aa, py, bit, mx, my, ww, hh, qq, s1, x1, a1, ar, d1),
+  w1: {L1.jpg.blkwf(L1.JBlkTok{False{}, s1, x1, a1}) == True{} : Bool},
+  rest: gmcus_fin.rest.ty(nn, bit, mx, my, mw, ww, hh, qq, s1, x1, a1, ar, d1)
+) -> GMcusOut(1n+nn, aa, py, bit, mx, my, mw, ww, hh, qq):
+  (+ts, er, el, ew, eg) = rest
+  +t1 = {L1.JBlkTok{False{}, s1, x1, a1} : L1.JBlkTok}
+  +mo = U32.is_lt((mx + 1 : U32), mw)
+  +cx = Jenc.encode.ctx(qq)
+  +p1 = L1.jpg.feed(L1.jpg.blkbits(t1), bit)
+  (t1 <> ts, Equal.trans(Jenc.Put, Jenc.encode.gmcus(nn, Jenc.encode.gstep(aa, Jenc.encode.bookof(False{}), bit, py,
+    (mx * 8 : U32), (my * 8 :
+    U32), ww, hh, cx), Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx), Jenc.encode.gmcus(nn, (ar,
+    Jenc.encode.bookof(False{}), d1, p1), Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx),
+      L1.jpg.feed(L1.jpg.tbits(t1 <> ts),
+    bit), Equal.cong(Array<U32> & Jenc.Book & U32 & Jenc.Put, Jenc.Put, gg => Jenc.encode.gmcus(nn, gg,
+    Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx), Jenc.encode.gstep(aa,
+      Jenc.encode.bookof(False{}), bit, py, (mx * 8 :
+    U32), (my * 8 : U32), ww, hh, cx), (ar, Jenc.encode.bookof(False{}), d1, p1), ee), Equal.trans(Jenc.Put,
+      Jenc.encode.gmcus(nn, (ar, Jenc.encode.bookof(False{}),
+    d1, p1), Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx), L1.jpg.feed(L1.jpg.tbits(ts), p1),
+    L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit), er, Equal.sym(Jenc.Put, L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit),
+    L1.jpg.feed(L1.jpg.tbits(ts), p1), M2.feed_app(L1.jpg.blkbits(t1), L1.jpg.tbits(ts), bit)))), Equal.cong(Nat,
+    Nat, kk => 1n+kk, List.length(&2, L1.JBlkTok, ts), nn, el), Equal.trans(Bool, L1.jpg.also(L1.jpg.blkwf(t1),
+    L1.jpg.allwf(ts)), L1.jpg.allwf(ts), True{}, M2.also_t(L1.jpg.blkwf(t1), L1.jpg.allwf(ts), w1), ew),
+    Equal.trans(Bool, L1.jpg.tagok(t1 <> ts, (0, 0), L1.jpg.enc.frame(Jenc.KGray{}, ww, hh),
+    L1.jpg.enc.scan(Jenc.KGray{})), L1.jpg.tagok(ts, (0, 0), L1.jpg.enc.frame(Jenc.KGray{}, ww, hh),
+    L1.jpg.enc.scan(Jenc.KGray{})), True{}, gtag1(ww, hh, s1, x1, a1, ts), eg))
+
+# the gray MCU loop after one MCU, its MCU named
+def gmcus_step(
+  +nn: Nat,
+  -aa: Array<U32>,
+  +py: U32,
+  +bit: Jenc.Put,
+  +mx: U32,
+  +my: U32,
+  +mw: U32,
+  +ww: U32,
+  +hh: U32,
+  +qq: U32,
+  ih: GMcusIh(nn, mw, ww, hh, qq),
+  mo: GStepOut(Jenc.encode.gtile(aa, ww, hh, (mx * 8 : U32), (my * 8 : U32)), bit, py, qq)
+) -> GMcusOut(1n+nn, aa, py, bit, mx, my, mw, ww, hh, qq):
+  (+s1, +x1, +a1, ar, +d1, e, h1, w1) = mo
+  +mv = U32.is_lt((mx + 1 : U32), mw)
+  gmcus_fin(nn, aa, py, bit, mx, my, mw, ww, hh, qq, s1, x1, a1, ar, d1, e, w1, ih(ar, d1,
+    L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{False{}, s1, x1, a1}), bit), Jenc.encode.nx(mv, mx), Jenc.encode.ny(mv,
+    my), h1))
+
+# the encoder's gray MCU loop, from a predictor below 2048, codes one block per MCU, each read whole
+def gmcus_ok(
+  nn: Nat,
+  aa: Array<U32>,
+  +py: U32,
+  +bit: Jenc.Put,
+  +mx: U32,
+  +my: U32,
+  +mw: U32,
+  +ww: U32,
+  +hh: U32,
+  +qq: U32,
+  hy: {U32.is_lt(py, 2048) == True{} : Bool}
+) -> GMcusOut(nn, aa, py, bit, mx, my, mw, ww, hh, qq):
+  match nn:
+    case 0n:
+      ([], {==}, {==}, {==}, {==})
+    case 1n+ +mm:
+      gmcus_step(mm, aa, py, bit, mx, my, mw, ww, hh, qq, a2 => q1 => p2 => x2 => y2 => h1 => gmcus_ok(mm, a2, q1,
+        p2, x2, y2, mw, ww, hh, qq, h1), gstep_ok(Jenc.encode.gtile(aa, ww, hh, (mx * 8 : U32), (my * 8 : U32)), bit,
+        py, qq, hy))
+
+# the type of ggo_fin's parameter rr
+def ggo_fin.rr.ty(+_ww: U32, +_hh: U32, +_qq: U32, +_px: List<&2, U32>) -> Type:
+  GMcusOut(U32.to_nat(mcun(_ww, _hh)), Jenc.encode.pix.load(U32.to_nat((_ww * _hh : U32)), _px,
+    Jpeg.decode.plane((_ww * _hh : U32)), 0), 1024, Jenc.encode.put0(), 0, 0, U32.div((_ww + 7 : U32), 8), _ww, _hh,
+    _qq)
+
+# the gray entropy-coded bytes, its MCU loop's blocks named
+def ggo_fin(
+  +ww: U32,
+  +hh: U32,
+  +qq: U32,
+  +px: List<&2, U32>,
+  rr: ggo_fin.rr.ty(ww, hh, qq, px)
+) -> PathOut(Jenc.encode.armg(ww, hh, qq, px), U32.to_nat(mcun(ww, hh)), Jenc.KGray{}, ww, hh):
+  (+ts, er, el, ew, eg) = rr
+  (ts, Equal.cong(Jenc.Put, List<&2, U32>, pp => Jenc.encode.pad(pp), Jenc.encode.gmcus(U32.to_nat(mcun(ww, hh)),
+    (Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px, Jpeg.decode.plane((ww * hh : U32)), 0),
+    Jenc.encode.bookof(False{}), 1024, Jenc.encode.put0()), 0, 0, U32.div((ww + 7 : U32), 8), ww, hh,
+    Jenc.encode.ctx(qq)), L1.jpg.feed(L1.jpg.tbits(ts), Jenc.encode.put0()), er), el, ew, eg)
+
+# the gray entropy-coded bytes are luminance blocks the decoder reads whole, one per MCU
+def armg_ok(
+  +ww: U32,
+  +hh: U32,
+  +qq: U32,
+  +px: List<&2, U32>
+) -> PathOut(Jenc.encode.armg(ww, hh, qq, px), U32.to_nat(mcun(ww, hh)), Jenc.KGray{}, ww, hh):
+  ggo_fin(ww, hh, qq, px, gmcus_ok(U32.to_nat(mcun(ww, hh)), Jenc.encode.pix.load(U32.to_nat((ww * hh : U32)), px,
+    Jpeg.decode.plane((ww * hh : U32)), 0), 1024, Jenc.encode.put0(), 0, 0, U32.div((ww + 7 : U32), 8), ww, hh, qq,
+    {==}))
+
+# the encoder's entropy-coded bytes, in either layout, are blocks the decoder reads whole, as many per MCU as the
+# layout's frame has, in the order of its scan
+def arm_ok(
+  +ww: U32,
+  +hh: U32,
+  +qq: U32,
+  +kd: Jenc.Layout,
+  +px: List<&2, U32>
+) -> PathOut(Jenc.encode.arm(ww, hh, qq, kd, px), U32.to_nat(mcun(ww, hh)), kd, ww, hh):
+  match kd:
+    case Jenc.K444{}:
+      arm3_ok(ww, hh, qq, px)
+    case Jenc.KGray{}:
+      armg_ok(ww, hh, qq, px)
