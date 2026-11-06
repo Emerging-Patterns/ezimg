@@ -20,6 +20,7 @@ import ./proofs/JpegRefusesWhatPngRefuses.bend as PJpegRefusesWhatPngRefuses
 import ./proofs/JpegRoundTripKeepsSize.bend as PJpegRoundTripKeepsSize
 import ./proofs/JpegWritesJfifLayout.bend as PJpegWritesJfifLayout
 import ./proofs/MapAppliesPerSample.bend as PMapAppliesPerSample
+import ./proofs/PngAdam7PlacesPasses.bend as PPngAdam7PlacesPasses
 import ./proofs/PngAncillaryChunksIgnored.bend as PPngAncillaryChunksIgnored
 import ./proofs/PngDecodesWellFormed.bend as PPngDecodesWellFormed
 import ./proofs/PngHeaderPicksColourType.bend as PPngHeaderPicksColourType

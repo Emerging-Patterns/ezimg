@@ -43,6 +43,7 @@ import ./laws/JpegRefusesWhatPngRefuses.bend as JpegRefusesWhatPngRefuses
 import ./laws/JpegRoundTripKeepsSize.bend as JpegRoundTripKeepsSize
 import ./laws/JpegWritesJfifLayout.bend as JpegWritesJfifLayout
 import ./laws/MapAppliesPerSample.bend as MapAppliesPerSample
+import ./laws/PngAdam7PlacesPasses.bend as PngAdam7PlacesPasses
 import ./laws/PngAncillaryChunksIgnored.bend as PngAncillaryChunksIgnored
 import ./laws/PngDecodesWellFormed.bend as PngDecodesWellFormed
 import ./laws/PngHeaderPicksColourType.bend as PngHeaderPicksColourType

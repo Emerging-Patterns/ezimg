@@ -1350,15 +1350,43 @@ def a7.end(zz: Bool, rows: List<&2, List<&2, U32>>) -> Maybe<&2, List<&2, U32>>:
     case False{}:
       None{}
 
-def a7.s7(i5: List<&2, List<&2, U32>>, pp: Pass) -> Maybe<&2, List<&2, U32>>:
+# the seven passes put back together (PNG section 8.2), by halves: pass 7
+# holds the odd rows and passes 1 to 6 the even ones; of those, pass 6 holds
+# the odd columns and passes 1 to 5 the even ones; and so on down to pass 1,
+# every eighth sample of every eighth row. Each step interleaves rows
+# (ilv.rows) or columns (ilv.cols)
+def a7.merge(
+  r1: List<&2, List<&2, U32>>,
+  +r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  +r4: List<&2, List<&2, U32>>,
+  r5: List<&2, List<&2, U32>>,
+  +r6: List<&2, List<&2, U32>>,
+  r7: List<&2, List<&2, U32>>
+) -> List<&2, List<&2, U32>>:
+  ilv.rows(ilv.cols(ilv.rows(ilv.cols(ilv.rows(ilv.cols(r1, r2), r3), r4), r5), r6), r7)
+
+def a7.s7(
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  r4: List<&2, List<&2, U32>>,
+  r5: List<&2, List<&2, U32>>,
+  r6: List<&2, List<&2, U32>>,
+  pp: Pass
+) -> Maybe<&2, List<&2, U32>>:
   match pp:
     case PBad{}:
       None{}
     case PGot{r7, t7}:
-      a7.end(List.is_empty(&2, U32, t7), ilv.rows(i5, r7))
+      a7.end(List.is_empty(&2, U32, t7), a7.merge(r1, r2, r3, r4, r5, r6, r7))
 
 def a7.s6(
-  i4: List<&2, List<&2, U32>>,
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  r4: List<&2, List<&2, U32>>,
+  r5: List<&2, List<&2, U32>>,
   pp: Pass,
   +ww: U32,
   +hh: U32,
@@ -1371,10 +1399,13 @@ def a7.s6(
     case PBad{}:
       None{}
     case PGot{r6, t6}:
-      a7.s7(ilv.cols(i4, r6), pass.read(t6, ww, png.dn(hh), dd, cc, plte, trns))
+      a7.s7(r1, r2, r3, r4, r5, r6, pass.read(t6, ww, png.dn(hh), dd, cc, plte, trns))
 
 def a7.s5(
-  i3: List<&2, List<&2, U32>>,
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  r4: List<&2, List<&2, U32>>,
   pp: Pass,
   +ww: U32,
   +hh: U32,
@@ -1387,10 +1418,12 @@ def a7.s5(
     case PBad{}:
       None{}
     case PGot{r5, t5}:
-      a7.s6(ilv.rows(i3, r5), pass.read(t5, png.dn(ww), png.up(hh), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s6(r1, r2, r3, r4, r5, pass.read(t5, png.dn(ww), png.up(hh), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
 def a7.s4(
-  i2: List<&2, List<&2, U32>>,
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
   pp: Pass,
   +ww: U32,
   +hh: U32,
@@ -1404,10 +1437,11 @@ def a7.s4(
       None{}
     case PGot{r4, t4}:
       +w1 = png.up(ww)
-      a7.s5(ilv.cols(i2, r4), pass.read(t4, w1, png.dn(png.up(hh)), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s5(r1, r2, r3, r4, pass.read(t4, w1, png.dn(png.up(hh)), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
 def a7.s3(
-  i1: List<&2, List<&2, U32>>,
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
   pp: Pass,
   +ww: U32,
   +hh: U32,
@@ -1422,7 +1456,7 @@ def a7.s3(
     case PGot{r3, t3}:
       +w1 = png.up(ww)
       +h2 = png.up(png.up(hh))
-      a7.s4(ilv.rows(i1, r3), pass.read(t3, png.dn(w1), h2, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s4(r1, r2, r3, pass.read(t3, png.dn(w1), h2, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
 def a7.s2(
   r1: List<&2, List<&2, U32>>,
@@ -1440,7 +1474,7 @@ def a7.s2(
     case PGot{r2, t2}:
       +w2 = png.up(png.up(ww))
       +h2 = png.up(png.up(hh))
-      a7.s3(ilv.cols(r1, r2), pass.read(t2, w2, png.dn(h2), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s3(r1, r2, pass.read(t2, w2, png.dn(h2), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
 def a7.s1(
   pp: Pass,
@@ -1460,10 +1494,7 @@ def a7.s1(
       a7.s2(r1, pass.read(t1, png.dn(w2), h3, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
 
 # Adam7 (PNG section 8.2): seven passes in order, each a picture of its own,
-# put back together by halves. Pass 7 holds the odd rows and passes 1 to 6
-# the even ones; of those, pass 6 holds the odd columns and passes 1 to 5
-# the even ones; and so on down to pass 1, every eighth sample of every
-# eighth row. Each step interleaves rows or columns
+# read at the sizes png.a7.len counts and put back together by a7.merge
 def a7.go(
   +raw: List<&2, U32>,
   +ww: U32,
