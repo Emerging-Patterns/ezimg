@@ -3389,5 +3389,5 @@ def mcu(
         hy))
 
 # decode_jpeg of the state a walk ends in
-def w8.out(st: Jpeg.St) -> Maybe<&2, Img.Raster>:
-  Img.decode_jpeg.out(Jpeg.decode.finish(st))
+def w8.out(st: Jpeg.St, +facts: U32) -> Maybe<&2, Img.Raster>:
+  Img.decode_jpeg.out(Jpeg.decode.finish(st, facts))

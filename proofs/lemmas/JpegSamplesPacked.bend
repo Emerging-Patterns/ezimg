@@ -116,6 +116,9 @@ def L1.jpeg_rgb_opaque(yy, cb, cr):
 def L1.jpeg_gray_opaque(yy):
   alpha.first(Jpeg.gray.bits(yy))
 
+def L1.jpeg_direct_opaque(rr, gg, bb):
+  alpha.first(U32.or(U32.or(U32.shln(U32.and(255, rr), 16n), U32.shln(U32.and(255, gg), 8n)), U32.and(255, bb)))
+
 # the samples of a decoded picture, or none
 def pic.px(mm: Maybe<&2, Jpeg.Pic>) -> List<&2, U32>:
   match mm:
@@ -126,8 +129,8 @@ def pic.px(mm: Maybe<&2, Jpeg.Pic>) -> List<&2, U32>:
 
 # what jpeg_decode_packed says of samples px
 def pk.Ty(px: List<&2, U32>) -> Type:
-  &gray: Bool -> &ys: List<&2, U32> -> &bs: List<&2, U32> -> &rs: List<&2, U32>
-    -> {px == L1.jpeg.pack(gray, ys, bs, rs) : List<&2, U32>}
+  &gray: Bool -> &coded: Bool -> &ys: List<&2, U32> -> &bs: List<&2, U32> -> &rs: List<&2, U32>
+    -> {px == L1.jpeg.pack(gray, coded, ys, bs, rs) : List<&2, U32>}
 
 # the code's gray packing is the law's
 def grays.eq(+ys: List<&2, U32>) -> {Jpeg.decode.grays(ys) == L1.jpeg.grays(ys) : List<&2, U32>}:
@@ -155,26 +158,60 @@ def rgbs.eq(
       Equal.cong(List<&2, U32>, List<&2, U32>, tl => {Jpeg.rgb(yv, bv, rv) <> tl : List<&2, U32>},
         Jpeg.decode.rgbs(yt, bt, rt), L1.jpeg.rgbs(yt, bt, rt), rgbs.eq(yt, bt, rt))
 
+# the code's packing of samples coded as R, G and B is the law's
+def directs.eq(
+  +rs: List<&2, U32>,
+  +gs: List<&2, U32>,
+  +bs: List<&2, U32>
+) -> {Jpeg.decode.directs(rs, gs, bs) == L1.jpeg.directs(rs, gs, bs) : List<&2, U32>}:
+  match rs gs bs:
+    case Nil{} _gs _bs:
+      {==}
+    case _rv <> _rt Nil{} _bs:
+      {==}
+    case _rv <> _rt _gv <> _gt Nil{}:
+      {==}
+    case +rv <> rt +gv <> gt +bv <> bt:
+      Equal.cong(List<&2, U32>, List<&2, U32>, tl => {Jpeg.direct(rv, gv, bv) <> tl : List<&2, U32>},
+        Jpeg.decode.directs(rt, gt, bt), L1.jpeg.directs(rt, gt, bt), directs.eq(rt, gt, bt))
+
 # no picture has no samples
 def none.pk() -> pk.Ty([]):
-  (True{}, ([], ([], ([], {==}))))
+  (True{}, (False{}, ([], ([], ([], {==})))))
+
+# three components' samples, coded as R, G and B or as Y, Cb and Cr
+def pack.pk(
+  rgb: Bool,
+  +nn: Nat,
+  yy: Array<U32>,
+  cb: Array<U32>,
+  cr: Array<U32>
+) -> pk.Ty(Jpeg.decode.done.pack(rgb, nn, yy, cb, cr)):
+  match rgb:
+    case True{}:
+      +ey = Jpeg.decode.points(nn, yy)
+      +eb = Jpeg.decode.points(nn, cb)
+      +er = Jpeg.decode.points(nn, cr)
+      (False{}, (True{}, (ey, (eb, (er, directs.eq(ey, eb, er))))))
+    case False{}:
+      +ey = Jpeg.decode.points(nn, yy)
+      +eb = Jpeg.decode.points(nn, cb)
+      +er = Jpeg.decode.points(nn, cr)
+      (False{}, (False{}, (ey, (eb, (er, rgbs.eq(ey, eb, er))))))
 
 # gray or colour, by the component count
 def nf3.pk(
   three: Bool,
+  rgb: Bool,
   +ww: U32,
   +hh: U32,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> pk.Ty(pic.px(Jpeg.decode.done.nf3(three, ww, hh, yy, cb, cr))):
+) -> pk.Ty(pic.px(Jpeg.decode.done.nf3(three, rgb, ww, hh, yy, cb, cr))):
   match three:
     case True{}:
-      +nn = U32.to_nat((ww * hh : U32))
-      +ey = Jpeg.decode.points(nn, yy)
-      +eb = Jpeg.decode.points(nn, cb)
-      +er = Jpeg.decode.points(nn, cr)
-      (False{}, (ey, (eb, (er, rgbs.eq(ey, eb, er)))))
+      pack.pk(rgb, U32.to_nat((ww * hh : U32)), yy, cb, cr)
     case False{}:
       none.pk()
 
@@ -182,38 +219,41 @@ def nf3.pk(
 def nf1.pk(
   one: Bool,
   +nf: U32,
+  rgb: Bool,
   +ww: U32,
   +hh: U32,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> pk.Ty(pic.px(Jpeg.decode.done.nf1(one, nf, ww, hh, yy, cb, cr))):
+) -> pk.Ty(pic.px(Jpeg.decode.done.nf1(one, nf, rgb, ww, hh, yy, cb, cr))):
   match one:
     case True{}:
       +ey = Jpeg.decode.points(U32.to_nat((ww * hh : U32)), yy)
-      (True{}, (ey, ([], ([], grays.eq(ey)))))
+      (True{}, (False{}, (ey, ([], ([], grays.eq(ey))))))
     case False{}:
-      nf3.pk(U32.is_eq(nf, 3), ww, hh, yy, cb, cr)
+      nf3.pk(U32.is_eq(nf, 3), rgb, ww, hh, yy, cb, cr)
 
 # a failed scan has no samples, and a finished one is packed by its component count
 def dok.pk(
   bad: Bool,
   frame: Jpeg.Frame,
+  rgb: Bool,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> pk.Ty(pic.px(Jpeg.decode.done.ok(bad, frame, yy, cb, cr))):
+) -> pk.Ty(pic.px(Jpeg.decode.done.ok(bad, frame, rgb, yy, cb, cr))):
   match bad:
     case True{}:
       none.pk()
     case False{}:
       match frame:
         case Jpeg.Frame{+ww, +hh, +nf, _ids, _hs, _vs, _tq, _hmax, _vmax}:
-          nf1.pk(U32.is_eq(nf, 1), nf, ww, hh, yy, cb, cr)
+          nf1.pk(U32.is_eq(nf, 1), nf, rgb, ww, hh, yy, cb, cr)
 
 # the blocks' walk ends in decode.done, whose samples are packed
 def blocks.pk(
   left: Nat,
+  live: Bool,
   blk: Jpeg.Blk,
   +ctrl: Jpeg.Ctrl,
   +preds: Jpeg.Preds,
@@ -221,35 +261,41 @@ def blocks.pk(
   +scan: Jpeg.Scan,
   +tabs: Jpeg.Tabs,
   +ri: U32,
+  +rgb: Bool,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>,
   +ok: U32
-) -> pk.Ty(pic.px(Jpeg.decode.blocks(left, blk, ctrl, preds, frame, scan, tabs, ri, yy, cb, cr, ok))):
+) -> pk.Ty(pic.px(Jpeg.decode.blocks(left, live, blk, ctrl, preds, frame, scan, tabs, ri, rgb, yy, cb, cr, ok))):
   match left:
     case 0n:
-      match blk:
-        case Jpeg.Blk{+samples, _bits, _pred, +bok}:
-          dok.pk(U32.is_eq((ok * bok : U32), 0), frame,
-            Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(Jpeg.decode.ctrl.comp(ctrl), 0),
-              samples, yy),
-            Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(Jpeg.decode.ctrl.comp(ctrl), 1),
-              samples, cb),
-            Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(Jpeg.decode.ctrl.comp(ctrl), 2),
-              samples, cr))
+      match live:
+        case _live:
+          match blk:
+            case Jpeg.Blk{+samples, _bits, _pred, +bok}:
+              +gg = Jpeg.decode.geom(ctrl, frame, scan)
+              +cc = Jpeg.decode.ctrl.comp(ctrl)
+              dok.pk(U32.is_eq((ok * bok : U32), 0), frame, rgb, Jpeg.decode.paint.use(gg, U32.is_eq(cc, 0), samples,
+                yy), Jpeg.decode.paint.use(gg, U32.is_eq(cc, 1), samples, cb), Jpeg.decode.paint.use(gg, U32.is_eq(cc,
+                2), samples, cr))
     case 1n+pp:
-      match blk:
-        case Jpeg.Blk{+samples, +bits, +pred, +bok}:
-          match ctrl:
-            case Jpeg.Ctrl{+comp, _bi, _mx, _my, _mcu, _rst}:
-              blocks.pk(pp, Jpeg.decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri),
-                Jpeg.decode.adv.ctrl(Jpeg.decode.adv(ctrl, frame, scan, ri)),
-                Jpeg.decode.preds.next(Jpeg.decode.adv.duef(Jpeg.decode.adv(ctrl, frame, scan, ri)), preds, comp, pred),
-                frame, scan, tabs, ri,
-                Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(comp, 0), samples, yy),
-                Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(comp, 1), samples, cb),
-                Jpeg.decode.paint.use(Jpeg.decode.geom(ctrl, frame, scan), U32.is_eq(comp, 2), samples, cr),
-                (ok * bok : U32))
+      match live:
+        case False{}:
+          dok.pk(U32.is_eq(0, 0), frame, rgb, yy, cb, cr)
+        case True{}:
+          match blk:
+            case Jpeg.Blk{+samples, +bits, +pred, +bok}:
+              match ctrl:
+                case Jpeg.Ctrl{+comp, +bi, +mx, +my, +mcu, +rst}:
+                  +ct = {Jpeg.Ctrl{comp, bi, mx, my, mcu, rst} : Jpeg.Ctrl}
+                  +av = Jpeg.decode.adv(ct, frame, scan, ri)
+                  +gg = Jpeg.decode.geom(ct, frame, scan)
+                  +nx = Jpeg.decode.block.next(bits, preds, pred, ct, frame, scan, tabs, ri)
+                  blocks.pk(pp, Jpeg.decode.blk.live(nx), nx, Jpeg.decode.adv.ctrl(av),
+                    Jpeg.decode.preds.next(Jpeg.decode.adv.duef(av), preds, comp, pred), frame, scan, tabs, ri, rgb,
+                    Jpeg.decode.paint.use(gg, U32.is_eq(comp, 0), samples, yy), Jpeg.decode.paint.use(gg,
+                    U32.is_eq(comp, 1), samples, cb), Jpeg.decode.paint.use(gg, U32.is_eq(comp, 2), samples, cr),
+                    (ok * bok : U32))
 
 # the scan starts the blocks' walk, or has no blocks
 def start.pk(
@@ -259,16 +305,38 @@ def start.pk(
   +scan: Jpeg.Scan,
   +tabs: Jpeg.Tabs,
   +ri: U32,
+  +rgb: Bool,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> pk.Ty(pic.px(Jpeg.decode.start(nn, bits, frame, scan, tabs, ri, yy, cb, cr))):
+) -> pk.Ty(pic.px(Jpeg.decode.start(nn, bits, frame, scan, tabs, ri, rgb, yy, cb, cr))):
   match nn:
     case 0n:
       none.pk()
     case 1n+pp:
-      blocks.pk(pp, Jpeg.decode.block.of(bits, 0, Jpeg.decode.pred.zero(), frame, scan, tabs),
-        Jpeg.Ctrl{0, 0, 0, 0, 0, 0}, Jpeg.decode.pred.zero(), frame, scan, tabs, ri, yy, cb, cr, 1)
+      +b0 = Jpeg.decode.block.of(bits, 0, Jpeg.decode.pred.zero(), frame, scan, tabs)
+      blocks.pk(pp, Jpeg.decode.blk.live(b0), b0, Jpeg.Ctrl{0, 0, 0, 0, 0, 0}, Jpeg.decode.pred.zero(), frame, scan,
+        tabs, ri, rgb, yy, cb, cr, 1)
+
+# a scan the decoder does not run has no samples; one it runs starts
+def runf.pk(
+  fit: Bool,
+  +nb: U32,
+  +ww: U32,
+  +hh: U32,
+  frame: Jpeg.Frame,
+  scan: Jpeg.Scan,
+  tabs: Jpeg.Tabs,
+  ent: List<&2, U32>,
+  +ri: U32,
+  +rgb: Bool
+) -> pk.Ty(pic.px(Jpeg.decode.run.fit(fit, nb, ww, hh, frame, scan, tabs, ent, ri, rgb))):
+  match fit:
+    case False{}:
+      none.pk()
+    case True{}:
+      start.pk(U32.to_nat(nb), Jpeg.Bits{0, 1, 0, ent}, frame, scan, tabs, ri, rgb, Jpeg.decode.plane((ww * hh :
+        U32)), Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)))
 
 # an empty frame has no samples; any other starts the scan
 def runn.pk(
@@ -276,20 +344,21 @@ def runn.pk(
   +ww: U32,
   +hh: U32,
   frame: Jpeg.Frame,
-  scan: Jpeg.Scan,
+  +scan: Jpeg.Scan,
   tabs: Jpeg.Tabs,
-  ent: List<&2, U32>,
-  +ri: U32
-) -> pk.Ty(pic.px(Jpeg.decode.run.n(empty, ww, hh, frame, scan, tabs, ent, ri))):
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +rgb: Bool
+) -> pk.Ty(pic.px(Jpeg.decode.run.n(empty, ww, hh, frame, scan, tabs, ent, ri, rgb))):
   match empty:
     case True{}:
       none.pk()
     case False{}:
       match frame:
-        case Jpeg.Frame{_w, _h, _nf, _ids, +hs, +vs, _tq, +hmax, +vmax}:
-          start.pk(U32.to_nat((Jpeg.decode.ceil(ww, (hmax * 8 : U32)) * Jpeg.decode.ceil(hh, (vmax * 8 : U32))
-            * Jpeg.decode.blocks.sum(hs, vs, 0) : U32)), Jpeg.Bits{0, 1, 0, ent}, frame, scan, tabs, ri,
-            Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)))
+        case Jpeg.Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
+          +nb = Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)
+          runf.pk(Jpeg.decode.fits(ww, hh, nb, ent, nf, ids, scan), nb, ww, hh, Jpeg.Frame{w, h, nf, ids, hs, vs, tq,
+            hmax, vmax}, scan, tabs, ent, ri, rgb)
 
 # a run's samples are packed
 def run.pk(
@@ -297,11 +366,13 @@ def run.pk(
   scan: Jpeg.Scan,
   tabs: Jpeg.Tabs,
   ent: List<&2, U32>,
-  +ri: U32
-) -> pk.Ty(pic.px(Jpeg.decode.run(frame, scan, tabs, ent, ri))):
+  +ri: U32,
+  +rgb: Bool
+) -> pk.Ty(pic.px(Jpeg.decode.run(frame, scan, tabs, ent, ri, rgb))):
   match frame:
-    case Jpeg.Frame{+ww, +hh, _nf, _ids, _hs, _vs, _tq, _hmax, _vmax}:
-      runn.pk(Bool.or(U32.is_eq(ww, 0), U32.is_eq(hh, 0)), ww, hh, frame, scan, tabs, ent, ri)
+    case Jpeg.Frame{+ww, +hh, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
+      runn.pk(Bool.or(U32.is_eq(ww, 0), U32.is_eq(hh, 0)), ww, hh, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
+        vmax}, scan, tabs, ent, ri, rgb)
 
 # a walk that did not reach a baseline frame cleanly has no samples; one that did runs
 def fok.pk(
@@ -311,50 +382,41 @@ def fok.pk(
   scan: Jpeg.Scan,
   tabs: Jpeg.Tabs,
   ent: List<&2, U32>,
-  +ri: U32
-) -> pk.Ty(pic.px(Jpeg.decode.finish.ok(ok1, ok2, frame, scan, tabs, ent, ri))):
+  +ri: U32,
+  +rgb: Bool
+) -> pk.Ty(pic.px(Jpeg.decode.finish.ok(ok1, ok2, frame, scan, tabs, ent, ri, rgb))):
   match ok1 ok2:
     case False{} _ok2:
       none.pk()
     case True{} False{}:
       none.pk()
     case True{} True{}:
-      run.pk(frame, scan, tabs, List.reverse(&2, U32, ent), ri)
+      run.pk(frame, scan, tabs, List.reverse(&2, U32, ent), ri, rgb)
 
-# a walk that did not stop has no samples
+# a walk that did not end where a scan may end has no samples
 def fph.pk(
-  phase: Jpeg.Phase,
-  frame: Jpeg.Frame,
+  done: Bool,
+  +frame: Jpeg.Frame,
   scan: Jpeg.Scan,
   tabs: Jpeg.Tabs,
   ent: List<&2, U32>,
   +ri: U32,
   +kind: U32,
-  +bad: U32
-) -> pk.Ty(pic.px(Jpeg.decode.finish.ph(phase, frame, scan, tabs, ent, ri, kind, bad))):
-  match phase:
-    case Jpeg.Stop{}:
-      fok.pk(U32.is_eq(kind, 1), U32.is_eq(bad, 0), frame, scan, tabs, ent, ri)
-    case Jpeg.Seek{}:
-      none.pk()
-    case Jpeg.Mark{}:
-      none.pk()
-    case Jpeg.LenHi{_mark}:
-      none.pk()
-    case Jpeg.LenLo{_mark, _hi}:
-      none.pk()
-    case Jpeg.Pay{_mark, _left, _acc}:
-      none.pk()
-    case Jpeg.Ent{}:
-      none.pk()
-    case Jpeg.EntFF{}:
+  +bad: U32,
+  +facts: U32
+) -> pk.Ty(pic.px(Jpeg.decode.finish.ph(done, frame, scan, tabs, ent, ri, kind, bad, facts))):
+  match done:
+    case True{}:
+      fok.pk(Bool.and(U32.is_eq(kind, 1), Jpeg.decode.facts.soi(facts)), U32.is_eq(bad, 0), frame, scan, tabs, ent,
+        ri, Jpeg.decode.rgb.of(facts, frame))
+    case False{}:
       none.pk()
 
-# whatever the walk's state, the picture decode finishes with is packed
-def finish.pk(st: Jpeg.St) -> pk.Ty(pic.px(Jpeg.decode.finish(st))):
+# whatever the walk's state and the facts, the picture decode finishes with is packed
+def finish.pk(st: Jpeg.St, +facts: U32) -> pk.Ty(pic.px(Jpeg.decode.finish(st, facts))):
   match st:
     case Jpeg.St{+phase, +frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
-      fph.pk(phase, frame, scan, tabs, ent, ri, kind, bad)
+      fph.pk(Jpeg.decode.ph.end(phase), frame, scan, tabs, ent, ri, kind, bad, facts)
 
 # the samples of a raster, or none
 def raster.px(mr: Maybe<&2, Img.Raster>) -> List<&2, U32>:
@@ -384,12 +446,13 @@ def pk.move(
   eab: {aa == bb : List<&2, U32>},
   pr: pk.Ty(bb)
 ) -> pk.Ty(aa):
-  (gray, (ys, (bs, (rs, eb)))) = pr
-  (gray, (ys, (bs, (rs, Equal.trans(List<&2, U32>, aa, bb, L1.jpeg.pack(gray, ys, bs, rs), eab, eb)))))
+  (gray, (coded, (ys, (bs, (rs, eb))))) = pr
+  (gray, (coded, (ys, (bs, (rs, Equal.trans(List<&2, U32>, aa, bb, L1.jpeg.pack(gray, coded, ys, bs, rs), eab,
+    eb))))))
 
 def L1.jpeg_decode_packed(bytes, img, h_dec):
   pk.move(Img.pixels(img), pic.px(Jpeg.decode(bytes)), out.px(Jpeg.decode(bytes), img, h_dec),
-    finish.pk(Jpeg.decode.walk(bytes, Jpeg.decode.st0())))
+    finish.pk(Jpeg.decode.walk(bytes, Jpeg.decode.st0()), Jpeg.decode.facts(bytes)))
 
 # a sample with alpha 255 passes the alpha test
 def op.one(+pp: U32, ea: {U32.shrn(pp, 24n) == 255 : U32}) -> {U32.is_eq(U32.shrn(pp, 24n), 255) == True{} : Bool}:
@@ -434,25 +497,48 @@ def op.rgbs(
       op.step(Jpeg.rgb(yv, bv, rv), L1.jpeg.rgbs(yt, bt, rt), ok, L1.jpeg_rgb_opaque(yv, bv, rv),
         op.rgbs(yt, bt, rt, ok))
 
+# samples coded as R, G and B are all opaque
+def op.directs(
+  +rs: List<&2, U32>,
+  +gs: List<&2, U32>,
+  +bs: List<&2, U32>,
+  +ok: Bool
+) -> {D1.all.opaque(L1.jpeg.directs(rs, gs, bs), ok) == ok : Bool}:
+  match rs gs bs:
+    case Nil{} _gs _bs:
+      {==}
+    case _rv <> _rt Nil{} _bs:
+      {==}
+    case _rv <> _rt _gv <> _gt Nil{}:
+      {==}
+    case +rv <> +rt +gv <> +gt +bv <> +bt:
+      op.step(Jpeg.direct(rv, gv, bv), L1.jpeg.directs(rt, gt, bt), ok, L1.jpeg_direct_opaque(rv, gv, bv),
+        op.directs(rt, gt, bt, ok))
+
 # packed samples are all opaque
 def op.pack(
   gray: Bool,
+  coded: Bool,
   +ys: List<&2, U32>,
   +bs: List<&2, U32>,
   +rs: List<&2, U32>
-) -> {D1.all.opaque(L1.jpeg.pack(gray, ys, bs, rs), True{}) == True{} : Bool}:
+) -> {D1.all.opaque(L1.jpeg.pack(gray, coded, ys, bs, rs), True{}) == True{} : Bool}:
   match gray:
     case True{}:
       op.grays(ys, True{})
     case False{}:
-      op.rgbs(ys, bs, rs, True{})
+      match coded:
+        case True{}:
+          op.directs(ys, bs, rs, True{})
+        case False{}:
+          op.rgbs(ys, bs, rs, True{})
 
 # samples that are packed are all opaque
 def op.of(+px: List<&2, U32>, pr: pk.Ty(px)) -> {D1.all.opaque(px, True{}) == True{} : Bool}:
-  (gray, (ys, (bs, (rs, ep)))) = pr
-  Equal.trans(Bool, D1.all.opaque(px, True{}), D1.all.opaque(L1.jpeg.pack(gray, ys, bs, rs), True{}), True{},
-    Equal.cong(List<&2, U32>, Bool, ll => D1.all.opaque(ll, True{}), px, L1.jpeg.pack(gray, ys, bs, rs), ep),
-    op.pack(gray, ys, bs, rs))
+  (gray, (coded, (ys, (bs, (rs, ep))))) = pr
+  Equal.trans(Bool, D1.all.opaque(px, True{}), D1.all.opaque(L1.jpeg.pack(gray, coded, ys, bs, rs), True{}), True{},
+    Equal.cong(List<&2, U32>, Bool, ll => D1.all.opaque(ll, True{}), px, L1.jpeg.pack(gray, coded, ys, bs, rs), ep),
+    op.pack(gray, coded, ys, bs, rs))
 
 def L1.jpeg_decode_opaque(bytes, img, h_dec):
   op.of(Img.pixels(img), L1.jpeg_decode_packed(bytes, img, h_dec))

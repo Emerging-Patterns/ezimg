@@ -14,9 +14,9 @@ import ./proofs/InflateReadsStoredBlocks.bend as PInflateReadsStoredBlocks
 import ./proofs/InflateUptoKeepsBudget.bend as PInflateUptoKeepsBudget
 import ./proofs/InflateUptoReadsStoredBlocks.bend as PInflateUptoReadsStoredBlocks
 import ./proofs/JpegEncodeIgnoresAlpha.bend as PJpegEncodeIgnoresAlpha
+import ./proofs/JpegEncodeRefusesBadRasters.bend as PJpegEncodeRefusesBadRasters
 import ./proofs/JpegPlacesComponentSamples.bend as PJpegPlacesComponentSamples
 import ./proofs/JpegRefusesNonBaselineFrames.bend as PJpegRefusesNonBaselineFrames
-import ./proofs/JpegRefusesWhatPngRefuses.bend as PJpegRefusesWhatPngRefuses
 import ./proofs/JpegRoundTripKeepsSize.bend as PJpegRoundTripKeepsSize
 import ./proofs/JpegWritesJfifLayout.bend as PJpegWritesJfifLayout
 import ./proofs/MapAppliesPerSample.bend as PMapAppliesPerSample

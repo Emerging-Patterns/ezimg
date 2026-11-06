@@ -1,7 +1,9 @@
 # `decode_jpeg` returns none for every input that opens with SOI, then
 # segments other than frame headers (DHT, DQT, SOS, DRI, COM, APP0 to APP15)
 # each with a length field that fits its body, then a frame header other than
-# SOF0 or an SOF0 segment whose sample precision is not 8, whatever follows.
+# SOF0 and SOF1 (baseline and extended sequential Huffman, which this decoder
+# reads alike), or an SOF0 or SOF1 segment whose sample precision is not 8,
+# whatever follows.
 import Base
 import ../main.bend as Img
 
@@ -114,9 +116,9 @@ def segs.bytes(ss: List<&2, Seg>) -> List<&2, U32>:
 def jpeg.lead(ss: List<&2, Seg>, rest: List<&2, U32>) -> List<&2, U32>:
   List.append(&2, U32, [255, 216], List.append(&2, U32, segs.bytes(ss), rest))
 
-# the frame headers other than SOF0 (T.81 Table B.1): SOF1 to SOF3, SOF5 to SOF7, SOF9 to SOF11, SOF13 to SOF15
+# the frame headers other than SOF0 and SOF1 (T.81 Table B.1): SOF2, SOF3, SOF5 to SOF7, SOF9 to SOF11, SOF13 to
+# SOF15
 type Sofn is Data:
-  Sof1{}
   Sof2{}
   Sof3{}
   Sof5{}
@@ -132,8 +134,6 @@ type Sofn is Data:
 # a frame header's second byte
 def sofn.byte(sn: Sofn) -> U32:
   match sn:
-    case Sof1{}:
-      193
     case Sof2{}:
       194
     case Sof3{}:
@@ -157,8 +157,8 @@ def sofn.byte(sn: Sofn) -> U32:
     case Sof15{}:
       207
 
-# LAW: bytes that open with SOI and segments that are not frame headers, then a frame header other than SOF0,
-# decode to none, whatever follows
+# LAW: bytes that open with SOI and segments that are not frame headers, then a frame header other than SOF0 and
+# SOF1, decode to none, whatever follows
 law jpeg_refuse_sofn:
   for +segs: List<&2, Seg>
   for h_fit: segs.Fit(segs)
@@ -166,11 +166,16 @@ law jpeg_refuse_sofn:
   for +rest: List<&2, U32>
   {Img.decode_jpeg(jpeg.lead(segs, 255 <> (sofn.byte(sn) <> rest))) == None{} : Maybe<&2, Img.Raster>}
 
-# LAW: bytes that open with SOI and segments that are not frame headers, then an SOF0 segment whose sample
+# the marker of a sequential Huffman frame header this decoder reads: SOF1 (extended) or SOF0 (baseline)
+def sof.byte(+ext: Bool) -> U32:
+  Bool.pick(U32, ext, 193, 192)
+
+# LAW: bytes that open with SOI and segments that are not frame headers, then an SOF0 or SOF1 segment whose sample
 # precision is not 8, decode to none, whatever follows
 law jpeg_refuse_precision:
   for +segs: List<&2, Seg>
   for h_fit: segs.Fit(segs)
+  for +ext: Bool
   for +hi: U32
   for +lo: U32
   for +pp: U32
@@ -178,5 +183,6 @@ law jpeg_refuse_precision:
   for h_len: seg.Fits(hi, lo, pp <> body)
   for h_pp: {U32.is_eq(pp, 8) == False{} : Bool}
   for +rest: List<&2, U32>
-  {Img.decode_jpeg(jpeg.lead(segs, List.append(&2, U32, 255 <> (192 <> (hi <> (lo <> (pp <> body)))), rest)))
+  {Img.decode_jpeg(jpeg.lead(segs, List.append(&2, U32, 255 <> (sof.byte(ext) <> (hi <> (lo <> (pp <> body)))),
+    rest)))
     == None{} : Maybe<&2, Img.Raster>}

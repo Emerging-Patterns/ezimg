@@ -516,23 +516,34 @@ def encode.add64(prod: U32 & U32, acc: U32 & U32) -> U32 & U32:
 def encode.mac(+coef: U32, +samp: U32, acc: U32 & U32) -> U32 & U32:
   encode.add64(Jpeg.decode.widemul(coef, samp), acc)
 
-# the same rounding the matrix product applies to a finished sum
-def encode.q17(acc: U32 & U32) -> U32:
+# a finished sum rounded as the decoder's passes round it: the row pass (fine) keeps four fraction bits, the
+# column pass takes them off, so a coefficient is rounded once
+def encode.q17(acc: U32 & U32, +fine: Bool) -> U32:
   match acc:
     case (+hi, +lo):
-      Jpeg.decode.q17(hi, lo)
+      Jpeg.decode.qs(hi, lo, fine)
 
-def encode.scale(+coef: U32, +samp: U32) -> U32:
-  encode.q17(Jpeg.decode.widemul(coef, samp))
+def encode.scale(+coef: U32, +samp: U32, +fine: Bool) -> U32:
+  encode.q17(Jpeg.decode.widemul(coef, samp), fine)
 
-def encode.two(+c0: U32, +x0: U32, +c1: U32, +x1: U32) -> U32:
-  encode.q17(encode.mac(c1, x1, Jpeg.decode.widemul(c0, x0)))
+def encode.two(+c0: U32, +x0: U32, +c1: U32, +x1: U32, +fine: Bool) -> U32:
+  encode.q17(encode.mac(c1, x1, Jpeg.decode.widemul(c0, x0)), fine)
 
-def encode.two.n(+c0: U32, +x0: U32, +c1: U32, +x1: U32) -> U32:
-  encode.q17(encode.mac(Jpeg.decode.neg32(c1), x1, Jpeg.decode.widemul(c0, x0)))
+def encode.two.n(+c0: U32, +x0: U32, +c1: U32, +x1: U32, +fine: Bool) -> U32:
+  encode.q17(encode.mac(Jpeg.decode.neg32(c1), x1, Jpeg.decode.widemul(c0, x0)), fine)
 
-def encode.four(+c0: U32, +s0: U32, +c1: U32, +s1: U32, +c2: U32, +s2: U32, +c3: U32, +s3: U32) -> U32:
-  encode.q17(encode.mac(c3, s3, encode.mac(c2, s2, encode.mac(c1, s1, Jpeg.decode.widemul(c0, s0)))))
+def encode.four(
+  +c0: U32,
+  +s0: U32,
+  +c1: U32,
+  +s1: U32,
+  +c2: U32,
+  +s2: U32,
+  +c3: U32,
+  +s3: U32,
+  +fine: Bool
+) -> U32:
+  encode.q17(encode.mac(c3, s3, encode.mac(c2, s2, encode.mac(c1, s1, Jpeg.decode.widemul(c0, s0)))), fine)
 
 # even frequencies: symmetric samples share one weight
 def encode.even(
@@ -546,7 +557,8 @@ def encode.even(
   +s7: U32,
   +k0: U32,
   +k2: U32,
-  +k6: U32
+  +k6: U32,
+  +fine: Bool
 ) -> Oct:
   +a0 = (s0 + s7 : U32)
   +a1 = (s1 + s6 : U32)
@@ -554,16 +566,26 @@ def encode.even(
   +a3 = (s3 + s4 : U32)
   +e0 = (a0 - a3 : U32)
   +e1 = (a1 - a2 : U32)
-  Oct{encode.scale(k0, (a0 + a1 + a2 + a3 : U32)), 0, encode.two(k2, e0, k6, e1), 0,
-    encode.scale(k0, ((a0 + a3 : U32) - (a1 + a2 : U32) : U32)), 0, encode.two.n(k6, e0, k2, e1), 0}
+  Oct{encode.scale(k0, (a0 + a1 + a2 + a3 : U32), fine), 0, encode.two(k2, e0, k6, e1, fine), 0,
+    encode.scale(k0, ((a0 + a3 : U32) - (a1 + a2 : U32) : U32), fine), 0, encode.two.n(k6, e0, k2, e1, fine), 0}
 
 # odd frequencies: antisymmetric samples share one weight
-def encode.odd(+d0: U32, +d1: U32, +d2: U32, +d3: U32, +o0: U32, +o1: U32, +o2: U32, +o3: U32) -> Oct:
+def encode.odd(
+  +d0: U32,
+  +d1: U32,
+  +d2: U32,
+  +d3: U32,
+  +o0: U32,
+  +o1: U32,
+  +o2: U32,
+  +o3: U32,
+  +fine: Bool
+) -> Oct:
   +n0 = Jpeg.decode.neg32(o0)
   +n2 = Jpeg.decode.neg32(o2)
   +n3 = Jpeg.decode.neg32(o3)
-  Oct{0, encode.four(o0, d0, o1, d1, o2, d2, o3, d3), 0, encode.four(o1, d0, n3, d1, n0, d2, n2, d3), 0,
-    encode.four(o2, d0, n0, d1, o3, d2, o1, d3), 0, encode.four(o3, d0, n2, d1, o1, d2, n0, d3)}
+  Oct{0, encode.four(o0, d0, o1, d1, o2, d2, o3, d3, fine), 0, encode.four(o1, d0, n3, d1, n0, d2, n2, d3, fine), 0,
+    encode.four(o2, d0, n0, d1, o3, d2, o1, d3, fine), 0, encode.four(o3, d0, n2, d1, o1, d2, n0, d3, fine)}
 
 def encode.dct8.od(+f0: U32, +f2: U32, +f4: U32, +f6: U32, od: Oct) -> Oct:
   match od:
@@ -586,18 +608,19 @@ def encode.dct8.k(
   +s5: U32,
   +s6: U32,
   +s7: U32,
-  kern: Kern
+  kern: Kern,
+  +fine: Bool
 ) -> Oct:
   match kern:
     case Kern{+k0, +k2, +k6, +o0, +o1, +o2, +o3}:
-      encode.dct8.at(encode.even(s0, s1, s2, s3, s4, s5, s6, s7, k0, k2, k6),
-        encode.odd((s0 - s7 : U32), (s1 - s6 : U32), (s2 - s5 : U32), (s3 - s4 : U32), o0, o1, o2, o3))
+      encode.dct8.at(encode.even(s0, s1, s2, s3, s4, s5, s6, s7, k0, k2, k6, fine),
+        encode.odd((s0 - s7 : U32), (s1 - s6 : U32), (s2 - s5 : U32), (s3 - s4 : U32), o0, o1, o2, o3, fine))
 
-# one 8-point transform. Pairing is the matrix product, so the rounded value matches.
-def encode.dct8(samp: Oct, kern: Kern) -> Oct:
+# one 8-point transform, fine for the row pass. Pairing is the matrix product, so the rounded value matches.
+def encode.dct8(samp: Oct, kern: Kern, +fine: Bool) -> Oct:
   match samp:
     case Oct{+s0, +s1, +s2, +s3, +s4, +s5, +s6, +s7}:
-      encode.dct8.k(s0, s1, s2, s3, s4, s5, s6, s7, kern)
+      encode.dct8.k(s0, s1, s2, s3, s4, s5, s6, s7, kern, fine)
 
 def encode.take(row: List<&2, U32>) -> Oct:
   match row:
@@ -771,7 +794,7 @@ def encode.oct.stride(aa: Array<U32>, +at: U32, +step: U32) -> Array<U32> & Oct:
 def encode.col.use(got: Array<U32> & Oct, kern: Kern) -> Array<U32> & Oct:
   match got:
     case (arr, o):
-      (arr, encode.dct8(o, kern))
+      (arr, encode.dct8(o, kern, False{}))
 
 # one frequency column, read straight from the plane
 def encode.col(arr: Array<U32>, +at: U32, kern: Kern) -> Array<U32> & Oct:
@@ -783,7 +806,7 @@ def encode.pass1(rows: List<&2, List<&2, U32>>, +kern: Kern, arr: Array<U32>, +a
       +_z = encode.kern.drop(kern)
       arr
     case h <> t:
-      encode.pass1(t, kern, encode.lay(encode.dct8(encode.take(h), kern), arr, at), (at + 8 : U32))
+      encode.pass1(t, kern, encode.lay(encode.dct8(encode.take(h), kern, True{}), arr, at), (at + 8 : U32))
 
 def encode.pix.sink(aa: Array<U32>) -> U32:
   match aa:
@@ -833,7 +856,7 @@ def encode.pass.rows.done(st: Planes, kern: Kern) -> Array<U32>:
 def encode.pass.rows.lay(got: Array<U32> & Oct, +kern: Kern, dst: Array<U32>, +at: U32) -> Planes:
   match got:
     case (src, o):
-      Planes{src, encode.lay(encode.dct8(o, kern), dst, at), (at + 8 : U32)}
+      Planes{src, encode.lay(encode.dct8(o, kern, True{}), dst, at), (at + 8 : U32)}
 
 def encode.pass.rows.next(st: Planes, +kern: Kern) -> Planes:
   match st:

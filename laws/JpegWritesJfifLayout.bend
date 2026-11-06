@@ -1,7 +1,6 @@
-# When `encode_jpeg(r)` is some, it begins with SOI and ends with EOI; when
-# both sides of `r` are at most 65535 it is SOI, APP0 with the JFIF
-# identifier, DQT, SOF0 carrying `r`'s width and height, two DHT, SOS, the
-# entropy-coded data and EOI.
+# When `encode_jpeg(r)` is some, it begins with SOI and ends with EOI, and it
+# is SOI, APP0 with the JFIF identifier, DQT, SOF0 carrying `r`'s width and
+# height, two DHT, SOS, the entropy-coded data and EOI.
 import Base
 import ../main.bend as Img
 
@@ -29,13 +28,11 @@ def jfif.file(
     List.append(&2, U32, jfif.seg(192, frame), List.append(&2, U32, jfif.seg(196, dc),
     List.append(&2, U32, jfif.seg(196, ac), jfif.seg(218, sos))))))), List.append(&2, U32, ent, [255, 217]))
 
-# LAW: when encode_jpeg(r) is some and both sides are at most 65535, it is SOI, APP0 with the JFIF
-# identifier, DQT, SOF0 carrying r's width and height, DHT, SOS, the entropy-coded bytes and EOI
+# LAW: when encode_jpeg(r) is some, it is SOI, APP0 with the JFIF identifier, DQT, SOF0 carrying r's width
+# and height, DHT, SOS, the entropy-coded bytes and EOI
 law jpeg_enc_layout:
   for +img: Img.Raster
   for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg(img)) == True{} : Bool}
-  for h_w: {U32.is_le(Img.width(img), 65535) == True{} : Bool}
-  for h_h: {U32.is_le(Img.height(img), 65535) == True{} : Bool}
   exs app: List<&2, U32>
   exs dq: List<&2, U32>
   exs sof: List<&2, U32>
@@ -46,7 +43,7 @@ law jpeg_enc_layout:
   {Img.encode_jpeg(img) == Some{jfif.file(Img.width(img), Img.height(img), app, dq, sof, dc, ac, sos, ent)}
     : Maybe<&2, List<&2, U32>>}
 
-# LAW: when encode_jpeg(r) is some, it begins with SOI and ends with EOI, whatever r's size
+# LAW: when encode_jpeg(r) is some, it begins with SOI and ends with EOI
 law jpeg_enc_ends:
   for +img: Img.Raster
   for h_some: {Maybe.is_some(&2, List<&2, U32>, Img.encode_jpeg(img)) == True{} : Bool}
