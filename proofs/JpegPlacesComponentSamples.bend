@@ -9,6 +9,7 @@ import ./lemmas/JpegHuffmanCoding.bend as M2
 import ./lemmas/RowMajorIndex.bend as M3
 import ./lemmas/SubtractionAndHuffmanWalk.bend as M4
 import ./lemmas/WordAddition.bend as M5
+import ./lemmas/PngEncoderArithmetic.bend as M6
 
 # a stopped walk stays where it stopped, whatever bytes follow
 law walk_stop:
@@ -4962,6 +4963,747 @@ def w13.pt(
     tq, hmax, vmax}, scan, xx, yy, aa),
     D1.jpg.val(Array.get(U32, Jpeg.decode.plane((ww * hh : U32)), kk)), 0, e3))))
 
+# ---- libjpeg's upsampling (jpg.up.value) ----
+
+# a U32 above 0 less one stays below what it was below
+def sub1.nat(
+  nx: Nat,
+  +xx: U32,
+  +nn: U32,
+  +ee: {U32.to_nat(xx) == nx : Nat},
+  hz: {Nat.is_eq(nx, 0n) == False{} : Bool},
+  hl: {Nat.is_lt(nx, U32.to_nat(nn)) == True{} : Bool}
+) -> {Nat.is_lt(U32.to_nat((xx - 1 : U32)), U32.to_nat(nn)) == True{} : Bool}:
+  match nx:
+    case 0n:
+      Empty.absurd({Nat.is_lt(U32.to_nat((xx - 1 : U32)), U32.to_nat(nn)) == True{} : Bool}, M1.jst.true_false(hz))
+    case 1n+(+dd):
+      +es = {M6.u32_sub_nat(xx, 1, dd, ee) : {U32.to_nat((xx - 1 : U32)) == dd : Nat}}
+      +hs = {Equal.trans(Bool, Nat.is_lt(dd, 1n+dd), Nat.is_le(1n+dd, 1n+dd), True{}, M1.lt_le_succ(dd, 1n+dd),
+        M1.le_refl(dd)) : {Nat.is_lt(dd, 1n+dd) == True{} : Bool}}
+      +hd = {M1.lt_le_trans(dd, 1n+dd, U32.to_nat(nn), hs, M1.lt_le(1n+dd, U32.to_nat(nn), hl)) :
+        {Nat.is_lt(dd, U32.to_nat(nn)) == True{} : Bool}}
+      Equal.trans(Bool, Nat.is_lt(U32.to_nat((xx - 1 : U32)), U32.to_nat(nn)), Nat.is_lt(dd, U32.to_nat(nn)), True{},
+        Equal.cong(Nat, Bool, zz => Nat.is_lt(zz, U32.to_nat(nn)), U32.to_nat((xx - 1 : U32)), dd, es), hd)
+
+# a U32 other than 0 less one stays below what it was below
+def sub1.lt(
+  +xx: U32,
+  +nn: U32,
+  hz: {U32.is_eq(xx, 0) == False{} : Bool},
+  hl: {U32.is_lt(xx, nn) == True{} : Bool}
+) -> {U32.is_lt((xx - 1 : U32), nn) == True{} : Bool}:
+  +hzn = {Equal.trans(Bool, Nat.is_eq(U32.to_nat(xx), 0n), U32.is_eq(xx, 0), False{}, Equal.sym(Bool, U32.is_eq(xx, 0),
+    Nat.is_eq(U32.to_nat(xx), 0n), M1.u32_eq(xx, 0)), hz) : {Nat.is_eq(U32.to_nat(xx), 0n) == False{} : Bool}}
+  Equal.trans(Bool, U32.is_lt((xx - 1 : U32), nn), Nat.is_lt(U32.to_nat((xx - 1 : U32)), U32.to_nat(nn)), True{},
+    M5.u32_lt((xx - 1 : U32), nn), sub1.nat(U32.to_nat(xx), xx, nn, {==}, hzn, lt_of(xx, nn, hl)))
+
+# the farther pixel of an odd pixel is below the side
+def far.lt.odd(
+  lt: Bool,
+  +xx: U32,
+  +nn: U32,
+  he: {U32.is_lt((xx + 1 : U32), nn) == lt : Bool},
+  hl: {U32.is_lt(xx, nn) == True{} : Bool}
+) -> {U32.is_lt(Bool.pick(U32, lt, (xx + 1 : U32), xx), nn) == True{} : Bool}:
+  match lt:
+    case True{}:
+      he
+    case False{}:
+      hl
+
+# the farther pixel of an even pixel is below the side
+def far.lt.even(
+  zz: Bool,
+  +xx: U32,
+  +nn: U32,
+  he: {U32.is_eq(xx, 0) == zz : Bool},
+  hl: {U32.is_lt(xx, nn) == True{} : Bool}
+) -> {U32.is_lt(Bool.pick(U32, zz, xx, (xx - 1 : U32)), nn) == True{} : Bool}:
+  match zz:
+    case True{}:
+      hl
+    case False{}:
+      sub1.lt(xx, nn, he, hl)
+
+def far.lt.p(
+  ev: Bool,
+  +xx: U32,
+  +nn: U32,
+  hl: {U32.is_lt(xx, nn) == True{} : Bool}
+) -> {U32.is_lt(Bool.pick(U32, ev, Bool.pick(U32, U32.is_eq(xx, 0), xx, (xx - 1 : U32)), Bool.pick(U32,
+  U32.is_lt((xx + 1 : U32), nn), (xx + 1 : U32), xx)), nn) == True{} : Bool}:
+  match ev:
+    case True{}:
+      far.lt.even(U32.is_eq(xx, 0), xx, nn, {==}, hl)
+    case False{}:
+      far.lt.odd(U32.is_lt((xx + 1 : U32), nn), xx, nn, {==}, hl)
+
+# the farther pixel the filter reads is inside the frame
+def far.lt(
+  +xx: U32,
+  +nn: U32,
+  +hl: {U32.is_lt(xx, nn) == True{} : Bool}
+) -> {U32.is_lt(Jpeg.decode.up.far(xx, nn), nn) == True{} : Bool}:
+  far.lt.p(U32.is_eq(U32.and(xx, 1), 0), xx, nn, hl)
+
+# a filtered pixel's four reads each hand the plane back: the pixel is the filter of the plane's values
+def CellEq(+mode: U32, +xx: U32, +yy: U32, +ww: U32, +hh: U32, -aa: Array<U32>) -> Type:
+  {Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa) == (aa, Jpeg.decode.up.mix(mode, xx, yy, D1.jpg.val(Array.get(U32, aa,
+    (yy * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa, (yy * ww + Jpeg.decode.up.far(xx, ww) : U32))),
+    D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa,
+    (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))) : Array<U32> & U32}
+
+def cell.eq(
+  +mode: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  -aa: Array<U32>,
+  d0: M2.Dup(aa),
+  d1: M2.Dup(aa),
+  d2: M2.Dup(aa),
+  d3: M2.Dup(aa)
+) -> CellEq(mode, xx, yy, ww, hh, aa):
+  +xf = Jpeg.decode.up.far(xx, ww)
+  +yf = Jpeg.decode.up.far(yy, hh)
+  -mx = Jpeg.decode.up.mix(mode, xx, yy, D1.jpg.val(Array.get(U32, aa, (yy * ww + xx : U32))),
+    D1.jpg.val(Array.get(U32, aa, (yy * ww + Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32, aa,
+    (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(yy, hh) * ww +
+    Jpeg.decode.up.far(xx, ww) : U32))))
+  -v0 = D1.jpg.val(Array.get(U32, aa, (yy * ww + xx : U32)))
+  -vh = D1.jpg.val(Array.get(U32, aa, (yy * ww + xf : U32)))
+  -vv = D1.jpg.val(Array.get(U32, aa, (yf * ww + xx : U32)))
+  e0 = Equal.sym(Array<U32> & U32, Array.get(U32, aa, (yy * ww + xx : U32)), (aa, v0), M2.get.eq.d(aa,
+    (yy * ww + xx : U32), d0))
+  %e0 : {Jpeg.decode.up.cell.a(_, mode, xx, yy, xf, yf, ww) == (aa, mx) : Array<U32> & U32}
+  e1 = Equal.sym(Array<U32> & U32, Array.get(U32, aa, (yy * ww + xf : U32)), (aa, vh), M2.get.eq.d(aa,
+    (yy * ww + xf : U32), d1))
+  %e1 : {Jpeg.decode.up.cell.b(_, mode, xx, yy, xf, yf, ww, v0) == (aa, mx) : Array<U32> & U32}
+  e2 = Equal.sym(Array<U32> & U32, Array.get(U32, aa, (yf * ww + xx : U32)), (aa, vv), M2.get.eq.d(aa,
+    (yf * ww + xx : U32), d2))
+  %e2 : {Jpeg.decode.up.cell.c(_, mode, xx, yy, xf, yf, ww, v0, vh) == (aa, mx) : Array<U32> & U32}
+  e3 = Equal.sym(Array<U32> & U32, Array.get(U32, aa, (yf * ww + xf : U32)), (aa, D1.jpg.val(Array.get(U32, aa, (yf *
+    ww + xf : U32)))),
+    M2.get.eq.d(aa, (yf * ww + xf : U32), d3))
+  %e3 : {Jpeg.decode.up.cell.d(_, mode, xx, yy, v0, vh, vv) == (aa, mx) : Array<U32> & U32}
+  {==}
+
+# five copies' worth of reads of a plane
+def Dups(-aa: Array<U32>) -> Type:
+  M2.Dup(aa) & M2.Dup(aa) & M2.Dup(aa) & M2.Dup(aa) & M2.Dup(aa)
+
+def dsplit(-aa: Array<U32>, dd: M2.Dup(aa)) -> M2.Dup(aa) & M2.Dup(aa):
+  (b1, b2, e1, e2) = dd
+  (M2.dup.tr(b1, aa, e1, M2.dup(b1)), M2.dup.tr(b2, aa, e2, M2.dup(b2)))
+
+def mk5.c(-aa: Array<U32>, ef: M2.Dup(aa) & M2.Dup(aa), a1: M2.Dup(aa), a2: M2.Dup(aa), c1: M2.Dup(aa)) -> Dups(aa):
+  (e5, f5) = ef
+  (a1, a2, c1, e5, f5)
+
+def mk5.b(-aa: Array<U32>, ab: M2.Dup(aa) & M2.Dup(aa), cd: M2.Dup(aa) & M2.Dup(aa)) -> Dups(aa):
+  (a1, a2) = ab
+  (c1, c2) = cd
+  mk5.c(aa, dsplit(aa, c2), a1, a2, c1)
+
+def mk5.a(-aa: Array<U32>, pq: M2.Dup(aa) & M2.Dup(aa)) -> Dups(aa):
+  (pp, qq) = pq
+  mk5.b(aa, dsplit(aa, pp), dsplit(aa, qq))
+
+def mk5(-aa: Array<U32>, dd: M2.Dup(aa)) -> Dups(aa):
+  mk5.a(aa, dsplit(aa, dd))
+
+# the filtered pixel at m is the filter at (X, Y)
+def AtIs(-lst: List<&2, U32>, +mm: Nat, +mode: U32, +xx: U32, +yy: U32, +ww: U32, +hh: U32, -aa: Array<U32>) -> Type:
+  {List.get(&2, U32, lst, mm) == Some{Jpeg.decode.up.mix(mode, xx, yy, D1.jpg.val(Array.get(U32, aa, (yy * ww + xx :
+    U32))), D1.jpg.val(Array.get(U32, aa, (yy * ww + Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32, aa,
+    (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(yy, hh) * ww +
+    Jpeg.decode.up.far(xx, ww) : U32))))} : Maybe<&2, U32>}
+
+# within a row: the walk's pixel m, at most lx on, is pixel xx + m of the row
+def walk.at(
+  ly: Nat,
+  lx: Nat,
+  mm: Nat,
+  +xx: U32,
+  +yy: U32,
+  +mode: U32,
+  +ww: U32,
+  +hh: U32,
+  +wn: Nat,
+  -aa: Array<U32>,
+  dd: Dups(aa),
+  hm: {Nat.is_le(mm, lx) == True{} : Bool}
+) -> AtIs(Jpeg.decode.up.walk(ly, lx, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), xx, yy, mode, ww, hh, wn), mm,
+  mode, Laws.jpg.idx(mm, xx), yy, ww, hh, aa):
+  match ly:
+    case 0n:
+      match lx:
+        case 0n:
+          match mm:
+            case 0n:
+              (d0, d1, d2, d3, _d4) = dd
+              es = Equal.sym(Array<U32> & U32, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), (aa,
+                Jpeg.decode.up.mix(mode, xx, yy, D1.jpg.val(Array.get(U32, aa, (yy * ww + xx : U32))),
+                D1.jpg.val(Array.get(U32, aa, (yy * ww + Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32,
+                aa, (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa,
+                (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))),
+                cell.eq(mode, xx, yy, ww, hh, aa, d0, d1, d2, d3))
+              %es : AtIs(Jpeg.decode.up.walk(0n, 0n, _, xx, yy, mode, ww, hh, wn), 0n, mode, xx, yy, ww, hh, aa)
+              {==}
+            case 1n+rr:
+              Empty.absurd(AtIs(Jpeg.decode.up.walk(0n, 0n, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), xx, yy,
+                mode, ww, hh, wn), 1n+rr, mode, Laws.jpg.idx(1n+rr, xx), yy, ww, hh, aa),
+                M1.false_true(hm))
+        case 1n+pp:
+          match mm:
+            case 0n:
+              (d0, d1, d2, d3, _d4) = dd
+              es = Equal.sym(Array<U32> & U32, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), (aa,
+                Jpeg.decode.up.mix(mode, xx, yy, D1.jpg.val(Array.get(U32, aa, (yy * ww + xx : U32))),
+                D1.jpg.val(Array.get(U32, aa, (yy * ww + Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32,
+                aa, (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa,
+                (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))),
+                cell.eq(mode, xx, yy, ww, hh, aa, d0, d1, d2, d3))
+              %es : AtIs(Jpeg.decode.up.walk(0n, 1n+pp, _, xx, yy, mode, ww, hh, wn), 0n, mode, xx, yy, ww, hh, aa)
+              {==}
+            case 1n+rr:
+              (d0, d1, d2, d3, d4) = dd
+              es = Equal.sym(Array<U32> & U32, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), (aa,
+                Jpeg.decode.up.mix(mode, xx, yy, D1.jpg.val(Array.get(U32, aa, (yy * ww + xx : U32))),
+                D1.jpg.val(Array.get(U32, aa, (yy * ww + Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32,
+                aa, (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa,
+                (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))),
+                cell.eq(mode, xx, yy, ww, hh, aa, d0, d1, d2, d3))
+              %es : AtIs(Jpeg.decode.up.walk(0n, 1n+pp, _, xx, yy, mode, ww, hh, wn), 1n+rr, mode, Laws.jpg.idx(rr,
+                (xx + 1 : U32)), yy, ww, hh, aa)
+              walk.at(0n, pp, rr, (xx + 1 : U32), yy, mode, ww, hh, wn, aa, mk5(aa, d4), hm)
+    case 1n+qq:
+      match lx:
+        case 0n:
+          match mm:
+            case 0n:
+              (d0, d1, d2, d3, _d4) = dd
+              es = Equal.sym(Array<U32> & U32, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), (aa,
+                Jpeg.decode.up.mix(mode, xx, yy, D1.jpg.val(Array.get(U32, aa, (yy * ww + xx : U32))),
+                D1.jpg.val(Array.get(U32, aa, (yy * ww + Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32,
+                aa, (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa,
+                (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))),
+                cell.eq(mode, xx, yy, ww, hh, aa, d0, d1, d2, d3))
+              %es : AtIs(Jpeg.decode.up.walk(1n+qq, 0n, _, xx, yy, mode, ww, hh, wn), 0n, mode, xx, yy, ww, hh, aa)
+              {==}
+            case 1n+rr:
+              Empty.absurd(AtIs(Jpeg.decode.up.walk(1n+qq, 0n, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), xx, yy,
+                mode, ww, hh, wn), 1n+rr, mode, Laws.jpg.idx(1n+rr, xx), yy, ww, hh,
+                aa),
+                M1.false_true(hm))
+        case 1n+pp:
+          match mm:
+            case 0n:
+              (d0, d1, d2, d3, _d4) = dd
+              es = Equal.sym(Array<U32> & U32, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), (aa,
+                Jpeg.decode.up.mix(mode, xx, yy, D1.jpg.val(Array.get(U32, aa, (yy * ww + xx : U32))),
+                D1.jpg.val(Array.get(U32, aa, (yy * ww + Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32,
+                aa, (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa,
+                (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))),
+                cell.eq(mode, xx, yy, ww, hh, aa, d0, d1, d2, d3))
+              %es : AtIs(Jpeg.decode.up.walk(1n+qq, 1n+pp, _, xx, yy, mode, ww, hh, wn), 0n, mode, xx, yy, ww, hh, aa)
+              {==}
+            case 1n+rr:
+              (d0, d1, d2, d3, d4) = dd
+              es = Equal.sym(Array<U32> & U32, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), (aa,
+                Jpeg.decode.up.mix(mode, xx, yy, D1.jpg.val(Array.get(U32, aa, (yy * ww + xx : U32))),
+                D1.jpg.val(Array.get(U32, aa, (yy * ww + Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32,
+                aa, (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa,
+                (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))),
+                cell.eq(mode, xx, yy, ww, hh, aa, d0, d1, d2, d3))
+              %es : AtIs(Jpeg.decode.up.walk(1n+qq, 1n+pp, _, xx, yy, mode, ww, hh, wn), 1n+rr, mode,
+                Laws.jpg.idx(rr, (xx + 1 : U32)), yy, ww, hh, aa)
+              walk.at(1n+qq, pp, rr, (xx + 1 : U32), yy, mode, ww, hh, wn, aa, mk5(aa, d4), hm)
+
+# past a row: the walk's pixel 1 + lx + m on is pixel m of the next rows
+def walk.skip(
+  lx: Nat,
+  +qq: Nat,
+  +mm: Nat,
+  +xx: U32,
+  +yy: U32,
+  +mode: U32,
+  +ww: U32,
+  +hh: U32,
+  +wn: Nat,
+  -aa: Array<U32>,
+  dd: Dups(aa)
+) -> {List.get(&2, U32, Jpeg.decode.up.walk(1n+qq, lx, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), xx, yy, mode, ww,
+  hh, wn), Nat.add(1n+lx, mm)) ==
+  List.get(&2, U32, Jpeg.decode.up.walk(qq, wn, Jpeg.decode.up.cell(mode, 0, (yy + 1 : U32), ww, hh, aa), 0, (yy + 1 :
+    U32), mode, ww, hh, wn), mm) : Maybe<&2, U32>}:
+  match lx:
+    case 0n:
+      (d0, d1, d2, d3, _d4) = dd
+      es = Equal.sym(Array<U32> & U32, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), (aa, Jpeg.decode.up.mix(mode, xx,
+        yy, D1.jpg.val(Array.get(U32, aa, (yy * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa, (yy * ww +
+        Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(yy, hh) * ww + xx :
+        U32))), D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))),
+        cell.eq(mode, xx, yy, ww, hh, aa, d0, d1, d2, d3))
+      %es : {List.get(&2, U32, Jpeg.decode.up.walk(1n+qq, 0n, _, xx, yy, mode, ww, hh, wn), 1n+mm) ==
+        List.get(&2, U32, Jpeg.decode.up.walk(qq, wn, Jpeg.decode.up.cell(mode, 0, (yy + 1 : U32), ww, hh, aa), 0, (yy
+          + 1 : U32), mode, ww, hh, wn), mm) : Maybe<&2, U32>}
+      {==}
+    case 1n+pp:
+      (d0, d1, d2, d3, d4) = dd
+      es = Equal.sym(Array<U32> & U32, Jpeg.decode.up.cell(mode, xx, yy, ww, hh, aa), (aa, Jpeg.decode.up.mix(mode, xx,
+        yy, D1.jpg.val(Array.get(U32, aa, (yy * ww + xx : U32))), D1.jpg.val(Array.get(U32, aa, (yy * ww +
+        Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(yy, hh) * ww + xx :
+        U32))), D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))),
+        cell.eq(mode, xx, yy, ww, hh, aa, d0, d1, d2, d3))
+      %es : {List.get(&2, U32, Jpeg.decode.up.walk(1n+qq, 1n+pp, _, xx, yy, mode, ww, hh, wn), 1n+Nat.add(1n+pp, mm)) ==
+        List.get(&2, U32, Jpeg.decode.up.walk(qq, wn, Jpeg.decode.up.cell(mode, 0, (yy + 1 : U32), ww, hh, aa), 0, (yy
+          + 1 : U32), mode, ww, hh, wn), mm) : Maybe<&2, U32>}
+      walk.skip(pp, qq, mm, (xx + 1 : U32), yy, mode, ww, hh, wn, aa, mk5(aa, d4))
+
+# over rows: the walk's pixel yn * (1 + wn) + xn, from the start of row y0, is pixel xn of row y0 + yn
+def rows.at(
+  yn: Nat,
+  ly: Nat,
+  +xn: Nat,
+  +y0: U32,
+  +mode: U32,
+  +ww: U32,
+  +hh: U32,
+  +wn: Nat,
+  -aa: Array<U32>,
+  dd: Dups(aa),
+  hy: {Nat.is_le(yn, ly) == True{} : Bool},
+  +hx: {Nat.is_le(xn, wn) == True{} : Bool}
+) -> AtIs(Jpeg.decode.up.walk(ly, wn, Jpeg.decode.up.cell(mode, 0, y0, ww, hh, aa), 0, y0, mode, ww, hh, wn),
+  Nat.add(Nat.mul(yn, 1n+wn), xn), mode, Laws.jpg.idx(xn, 0), Laws.jpg.idx(yn, y0),
+  ww, hh, aa):
+  match yn:
+    case 0n:
+      walk.at(ly, wn, xn, 0, y0, mode, ww, hh, wn, aa, dd, hx)
+    case 1n+(+rr):
+      match ly:
+        case 0n:
+          Empty.absurd(AtIs(Jpeg.decode.up.walk(0n, wn, Jpeg.decode.up.cell(mode, 0, y0, ww, hh, aa), 0, y0, mode, ww,
+            hh, wn), Nat.add(Nat.mul(1n+rr, 1n+wn), xn), mode, Laws.jpg.idx(xn, 0),
+            Laws.jpg.idx(1n+rr, y0), ww, hh, aa), M1.false_true(hy))
+        case 1n+(+qq):
+          (d0, d1, _d2, _d3, _d4) = dd
+          +mr = Nat.mul(rr, 1n+wn)
+          +y1 = (y0 + 1 : U32)
+          +ea = {M1.ras.add_assoc(1n+wn, mr, xn) : {Nat.add(Nat.add(1n+wn, mr), xn) == Nat.add(1n+wn, Nat.add(mr, xn)) :
+            Nat}}
+          Equal.trans(Maybe<&2, U32>, List.get(&2, U32, Jpeg.decode.up.walk(1n+qq, wn, Jpeg.decode.up.cell(mode, 0, y0,
+            ww, hh, aa), 0, y0, mode, ww, hh, wn), Nat.add(Nat.add(1n+wn, mr), xn)),
+            List.get(&2, U32, Jpeg.decode.up.walk(1n+qq, wn, Jpeg.decode.up.cell(mode, 0, y0, ww, hh, aa), 0, y0, mode,
+              ww, hh, wn), Nat.add(1n+wn, Nat.add(mr, xn))),
+            Some{Jpeg.decode.up.mix(mode, Laws.jpg.idx(xn, 0), Laws.jpg.idx(rr, y1), D1.jpg.val(Array.get(U32, aa,
+              (Laws.jpg.idx(rr, y1) * ww + Laws.jpg.idx(xn, 0) : U32))), D1.jpg.val(Array.get(U32, aa,
+              (Laws.jpg.idx(rr, y1) * ww + Jpeg.decode.up.far(Laws.jpg.idx(xn, 0), ww) : U32))),
+              D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(Laws.jpg.idx(rr, y1), hh) * ww + Laws.jpg.idx(xn, 0) :
+              U32))), D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(Laws.jpg.idx(rr, y1), hh) * ww +
+              Jpeg.decode.up.far(Laws.jpg.idx(xn, 0), ww) : U32))))},
+            Equal.cong(Nat, Maybe<&2, U32>, nn => List.get(&2, U32, Jpeg.decode.up.walk(1n+qq, wn,
+              Jpeg.decode.up.cell(mode, 0, y0, ww, hh, aa), 0, y0, mode, ww, hh, wn), nn),
+            Nat.add(Nat.add(1n+wn, mr), xn), Nat.add(1n+wn, Nat.add(mr, xn)), ea),
+            Equal.trans(Maybe<&2, U32>, List.get(&2, U32, Jpeg.decode.up.walk(1n+qq, wn, Jpeg.decode.up.cell(mode, 0,
+              y0, ww, hh, aa), 0, y0, mode, ww, hh, wn), Nat.add(1n+wn, Nat.add(mr, xn))),
+            List.get(&2, U32, Jpeg.decode.up.walk(qq, wn, Jpeg.decode.up.cell(mode, 0, y1, ww, hh, aa), 0, y1, mode,
+              ww, hh, wn), Nat.add(mr, xn)),
+            Some{Jpeg.decode.up.mix(mode, Laws.jpg.idx(xn, 0), Laws.jpg.idx(rr, y1), D1.jpg.val(Array.get(U32, aa,
+              (Laws.jpg.idx(rr, y1) * ww + Laws.jpg.idx(xn, 0) : U32))), D1.jpg.val(Array.get(U32, aa,
+              (Laws.jpg.idx(rr, y1) * ww + Jpeg.decode.up.far(Laws.jpg.idx(xn, 0), ww) : U32))),
+              D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(Laws.jpg.idx(rr, y1), hh) * ww + Laws.jpg.idx(xn, 0) :
+              U32))), D1.jpg.val(Array.get(U32, aa, (Jpeg.decode.up.far(Laws.jpg.idx(rr, y1), hh) * ww +
+              Jpeg.decode.up.far(Laws.jpg.idx(xn, 0), ww) : U32))))},
+            walk.skip(wn, qq, Nat.add(mr, xn), 0, y0, mode, ww, hh, wn, aa, mk5(aa, d0)),
+            rows.at(rr, qq, xn, y1, mode, ww, hh, wn, aa, mk5(aa, d1), hy, hx)))
+
+# a plane's filtered rows: pixel yn * wn + xn is the filter at (xn, yn)
+def rows.top(
+  hn: Nat,
+  wn: Nat,
+  +xn: Nat,
+  +yn: Nat,
+  +mode: U32,
+  +ww: U32,
+  +hh: U32,
+  aa: Array<U32>,
+  hyn: {Nat.is_lt(yn, hn) == True{} : Bool},
+  hxn: {Nat.is_lt(xn, wn) == True{} : Bool}
+) -> AtIs(Jpeg.decode.up.rows(hn, wn, mode, ww, hh, aa), Nat.add(Nat.mul(yn, wn), xn), mode, Laws.jpg.idx(xn, 0),
+  Laws.jpg.idx(yn, 0), ww, hh, aa):
+  match hn:
+    case 0n:
+      Empty.absurd(AtIs(Jpeg.decode.up.rows(0n, wn, mode, ww, hh, aa), Nat.add(Nat.mul(yn, wn), xn), mode,
+        Laws.jpg.idx(xn, 0), Laws.jpg.idx(yn, 0), ww, hh, aa), M1.false_true(Equal.trans(Bool, False{},
+        Nat.is_lt(yn, 0n), True{}, M1.lt_zero_false(yn), hyn)))
+    case 1n+(+qq):
+      match wn:
+        case 0n:
+          Empty.absurd(AtIs(Jpeg.decode.up.rows(1n+qq, 0n, mode, ww, hh, aa), Nat.add(Nat.mul(yn, 0n), xn), mode,
+            Laws.jpg.idx(xn, 0), Laws.jpg.idx(yn, 0), ww, hh, aa), M1.false_true(Equal.trans(Bool,
+            False{}, Nat.is_lt(xn, 0n), True{}, M1.lt_zero_false(xn), hxn)))
+        case 1n+(+pp):
+          +hy = {Equal.trans(Bool, Nat.is_le(1n+yn, 1n+qq), Nat.is_lt(yn, 1n+qq), True{}, Equal.sym(Bool,
+            Nat.is_lt(yn, 1n+qq), Nat.is_le(1n+yn, 1n+qq), M1.lt_le_succ(yn, 1n+qq)), hyn) : {Nat.is_le(yn, qq) ==
+            True{} : Bool}}
+          +hx = {Equal.trans(Bool, Nat.is_le(1n+xn, 1n+pp), Nat.is_lt(xn, 1n+pp), True{}, Equal.sym(Bool,
+            Nat.is_lt(xn, 1n+pp), Nat.is_le(1n+xn, 1n+pp), M1.lt_le_succ(xn, 1n+pp)), hxn) : {Nat.is_le(xn, pp) ==
+            True{} : Bool}}
+          rows.at(yn, qq, xn, 0, mode, ww, hh, pp, aa, mk5(aa, M2.dup(aa)), hy, hx)
+
+# a component's painted plane at a pixel inside the frame is jpg.point over its units
+def up.pv(
+  +cc: U32,
+  +us: List<&2, Laws.JUnit>,
+  +ww: U32,
+  +hh: U32,
+  +nf: U32,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  +tq: List<&2, U32>,
+  +hmax: U32,
+  +vmax: U32,
+  +scan: Jpeg.Scan,
+  +aa: U32,
+  +bb: U32,
+  +hD: {Nat.is_lt(Jpeg.decode.depth((ww * hh : U32)), 32n) == True{} : Bool},
+  +hfD: {Nat.is_le(Nat.mul(U32.to_nat(ww), U32.to_nat(hh)), Nat.pow(2n, Jpeg.decode.depth((ww * hh : U32)))) == True{} :
+    Bool},
+  +ha: {U32.is_lt(aa, ww) == True{} : Bool},
+  +hb: {U32.is_lt(bb, hh) == True{} : Bool}
+) -> {D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+  Jpeg.decode.plane((ww * hh : U32))), (bb * ww + aa : U32))) == Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs,
+  vs, tq, hmax, vmax}, scan, aa, bb, 0) : U32}:
+  Equal.trans(U32, D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
+    vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (bb * ww + aa : U32))), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh,
+    nf, ids, hs, vs, tq, hmax, vmax}, scan, aa, bb, D1.jpg.val(Array.get(U32, Jpeg.decode.plane((ww * hh : U32)), (bb *
+    ww + aa : U32)))),
+    Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, aa, bb, 0),
+      Laws.jpeg_plane_at(Jpeg.decode.depth((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)),
+    plane_perfect((ww * hh : U32)), hD, us, cc, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, hfD, aa, bb, ha, hb),
+    Equal.cong(U32, U32, vv => Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, aa,
+      bb, vv), D1.jpg.val(Array.get(U32, Jpeg.decode.plane((ww * hh : U32)), (bb * ww + aa : U32))), 0,
+    plane_zero((ww * hh : U32), (bb * ww + aa : U32))))
+
+# a component's point at (aa, bb), as its painted plane holds it
+def PtEq(
+  +cc: U32,
+  +us: List<&2, Laws.JUnit>,
+  +ww: U32,
+  +hh: U32,
+  +nf: U32,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  +tq: List<&2, U32>,
+  +hmax: U32,
+  +vmax: U32,
+  +scan: Jpeg.Scan,
+  +aa: U32,
+  +bb: U32
+) -> Type:
+  {Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, aa, bb, 0) ==
+    D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc,
+    Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (bb * ww + aa :
+      U32))) : U32}
+
+# PtEq at the farther pixel across and the farther row down
+def PtEqD(
+  +cc: U32,
+  +us: List<&2, Laws.JUnit>,
+  +ww: U32,
+  +hh: U32,
+  +nf: U32,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  +tq: List<&2, U32>,
+  +hmax: U32,
+  +vmax: U32,
+  +scan: Jpeg.Scan,
+  +xx: U32,
+  +yy: U32
+) -> Type:
+  PtEq(cc, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, Jpeg.decode.up.far(xx, ww), Jpeg.decode.up.far(yy, hh))
+
+# the filter of the painted plane's values, at the counted pixel, is the filter of the component's points
+def up.fin(
+  +cc: U32,
+  +us: List<&2, Laws.JUnit>,
+  +ww: U32,
+  +hh: U32,
+  +nf: U32,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  +tq: List<&2, U32>,
+  +hmax: U32,
+  +vmax: U32,
+  +scan: Jpeg.Scan,
+  +xx: U32,
+  +yy: U32,
+  ex: {xx == Laws.jpg.idx(U32.to_nat(xx), 0) : U32},
+  ey: {yy == Laws.jpg.idx(U32.to_nat(yy), 0) : U32},
+  e0: PtEq(cc, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy),
+  e1: PtEq(cc, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, Jpeg.decode.up.far(xx, ww), yy),
+  e2: PtEq(cc, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, Jpeg.decode.up.far(yy, hh)),
+  e3: PtEqD(cc, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy)
+) -> {Some{Jpeg.decode.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww),
+  Laws.jpg.idx(U32.to_nat(xx), 0), Laws.jpg.idx(U32.to_nat(yy), 0), D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us,
+  cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))),
+  (Laws.jpg.idx(U32.to_nat(yy), 0) * ww + Laws.jpg.idx(U32.to_nat(xx), 0) : U32))), D1.jpg.val(Array.get(U32,
+  Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh :
+  U32))), (Laws.jpg.idx(U32.to_nat(yy), 0) * ww + Jpeg.decode.up.far(Laws.jpg.idx(U32.to_nat(xx), 0), ww) : U32))),
+  D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+  Jpeg.decode.plane((ww * hh : U32))), (Jpeg.decode.up.far(Laws.jpg.idx(U32.to_nat(yy), 0), hh) * ww +
+  Laws.jpg.idx(U32.to_nat(xx), 0) : U32))), D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf,
+  ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))),
+  (Jpeg.decode.up.far(Laws.jpg.idx(U32.to_nat(yy), 0), hh) * ww + Jpeg.decode.up.far(Laws.jpg.idx(U32.to_nat(xx), 0),
+  ww) : U32))))} == Some{Laws.jpg.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax,
+  vmax, ww), xx, yy, Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0),
+  Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww), yy, 0),
+  Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, Laws.jpg.up.far(yy, hh), 0),
+  Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww),
+  Laws.jpg.up.far(yy, hh), 0))} :
+  Maybe<&2, U32>}:
+  +m = Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww)
+  %ex : {Some{Jpeg.decode.up.mix(m, _, Laws.jpg.idx(U32.to_nat(yy), 0), D1.jpg.val(Array.get(U32,
+    Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh :
+    U32))), (Laws.jpg.idx(U32.to_nat(yy), 0) * ww + _ : U32))), D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc,
+    Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))),
+    (Laws.jpg.idx(U32.to_nat(yy), 0) * ww + Jpeg.decode.up.far(_, ww) : U32))), D1.jpg.val(Array.get(U32,
+    Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh :
+    U32))), (Jpeg.decode.up.far(Laws.jpg.idx(U32.to_nat(yy), 0), hh) * ww + _ : U32))), D1.jpg.val(Array.get(U32,
+    Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh :
+    U32))), (Jpeg.decode.up.far(Laws.jpg.idx(U32.to_nat(yy), 0), hh) * ww + Jpeg.decode.up.far(_, ww) : U32))))} ==
+    Some{Laws.jpg.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), xx, yy,
+    Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww), yy, 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, Laws.jpg.up.far(yy, hh), 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww), Laws.jpg.up.far(yy, hh),
+    0))} : Maybe<&2, U32>}
+  %ey : {Some{Jpeg.decode.up.mix(m, xx, _, D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf,
+    ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (_ * ww + xx : U32))),
+    D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    Jpeg.decode.plane((ww * hh : U32))), (_ * ww + Jpeg.decode.up.far(xx, ww) : U32))), D1.jpg.val(Array.get(U32,
+    Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh :
+    U32))), (Jpeg.decode.up.far(_, hh) * ww + xx : U32))), D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc,
+    Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))),
+    (Jpeg.decode.up.far(_, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))} ==
+    Some{Laws.jpg.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), xx, yy,
+    Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww), yy, 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, Laws.jpg.up.far(yy, hh), 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww), Laws.jpg.up.far(yy, hh),
+    0))} : Maybe<&2, U32>}
+  %e0 : {Some{Jpeg.decode.up.mix(m, xx, yy, _, D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh,
+    nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (yy * ww + Jpeg.decode.up.far(xx, ww)
+    : U32))), D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
+    scan, Jpeg.decode.plane((ww * hh : U32))), (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))),
+    D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    Jpeg.decode.plane((ww * hh : U32))), (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))} ==
+    Some{Laws.jpg.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), xx, yy,
+    Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww), yy, 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, Laws.jpg.up.far(yy, hh), 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww), Laws.jpg.up.far(yy, hh),
+    0))} :
+    Maybe<&2, U32>}
+  %e1 : {Some{Jpeg.decode.up.mix(m, xx, yy, Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
+    scan, xx, yy, 0), _, D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+    hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))),
+    D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    Jpeg.decode.plane((ww * hh : U32))), (Jpeg.decode.up.far(yy, hh) * ww + Jpeg.decode.up.far(xx, ww) : U32))))} ==
+    Some{Laws.jpg.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), xx, yy,
+    Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww), yy, 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, Laws.jpg.up.far(yy, hh), 0), Laws.jpg.point(us,
+    cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww), Laws.jpg.up.far(yy, hh),
+    0))} :
+    Maybe<&2, U32>}
+  %e2 : {Some{Jpeg.decode.up.mix(m, xx, yy, Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
+    scan, xx, yy, 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    Jpeg.decode.up.far(xx, ww), yy, 0), _, D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf,
+    ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (Jpeg.decode.up.far(yy, hh) * ww +
+    Jpeg.decode.up.far(xx, ww) : U32))))} == Some{Laws.jpg.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc),
+    Jpeg.decode.at(vs, cc), hmax, vmax, ww), xx, yy, Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+    hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    Laws.jpg.up.far(xx, ww), yy, 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    xx, Laws.jpg.up.far(yy, hh), 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    Laws.jpg.up.far(xx, ww), Laws.jpg.up.far(yy, hh), 0))} :
+    Maybe<&2, U32>}
+  %e3 : {Some{Jpeg.decode.up.mix(m, xx, yy, Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
+    scan, xx, yy, 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    Jpeg.decode.up.far(xx, ww), yy, 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
+    scan, xx, Jpeg.decode.up.far(yy, hh), 0), _)} == Some{Laws.jpg.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc),
+    Jpeg.decode.at(vs, cc), hmax, vmax, ww), xx, yy, Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+    hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    Laws.jpg.up.far(xx, ww), yy, 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    xx, Laws.jpg.up.far(yy, hh), 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
+    Laws.jpg.up.far(xx, ww), Laws.jpg.up.far(yy, hh), 0))} :
+    Maybe<&2, U32>}
+  {==}
+
+# the statement of w13.up.z: the plane read out, as painted or filtered by zero, is the component's value
+def UpGoal(
+  zero: Bool,
+  +cc: U32,
+  +us: List<&2, Laws.JUnit>,
+  +ww: U32,
+  +hh: U32,
+  +nf: U32,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  +tq: List<&2, U32>,
+  +hmax: U32,
+  +vmax: U32,
+  +scan: Jpeg.Scan,
+  +xx: U32,
+  +yy: U32
+) -> Type:
+  {List.get(&2, U32, Jpeg.decode.up.out.z(zero, Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc),
+    hmax, vmax, ww), U32.to_nat((ww * hh : U32)), ww, hh, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs,
+    vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32)))), U32.to_nat((yy * ww + xx : U32))) ==
+    Some{Bool.pick(U32, zero, Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy,
+      0), Laws.jpg.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), xx, yy,
+      Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us,
+      cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww), yy, 0),
+      Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, Laws.jpg.up.far(yy, hh),
+      0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww),
+      Laws.jpg.up.far(yy, hh), 0)))} : Maybe<&2, U32>}
+
+# a component's plane read out, as painted (w13.pt) or filtered (rows.top, then up.pv at the four pixels)
+def w13.up.z(
+  zero: Bool,
+  +cc: U32,
+  +us: List<&2, Laws.JUnit>,
+  +ww: U32,
+  +hh: U32,
+  +nf: U32,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  +tq: List<&2, U32>,
+  +hmax: U32,
+  +vmax: U32,
+  +scan: Jpeg.Scan,
+  +xx: U32,
+  +yy: U32,
+  +hD: {Nat.is_lt(Jpeg.decode.depth((ww * hh : U32)), 32n) == True{} : Bool},
+  +hfD: {Nat.is_le(Nat.mul(U32.to_nat(ww), U32.to_nat(hh)), Nat.pow(2n, Jpeg.decode.depth((ww * hh : U32)))) == True{} :
+    Bool},
+  +hK: {Nat.is_lt(U32.to_nat((yy * ww + xx : U32)), U32.to_nat((ww * hh : U32))) == True{} : Bool},
+  +h_xx: {U32.is_lt(xx, ww) == True{} : Bool},
+  +h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
+) -> UpGoal(zero, cc, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy):
+  match zero:
+    case True{}:
+      w13.pt(cc, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
+    case False{}:
+      +xn = U32.to_nat(xx)
+      +yn = U32.to_nat(yy)
+      +hxf = far.lt(xx, ww, h_xx)
+      +hyf = far.lt(yy, hh, h_yy)
+      +ei = {idx_nat(ww, hh, xx, yy, Jpeg.decode.depth((ww * hh : U32)), hD, hfD, h_xx, h_yy) : {U32.to_nat((yy * ww +
+        xx : U32)) ==
+        Nat.add(Nat.mul(yn, U32.to_nat(ww)), xn) : Nat}}
+      ek = Equal.sym(Nat, U32.to_nat((yy * ww + xx : U32)), Nat.add(Nat.mul(yn, U32.to_nat(ww)), xn), ei)
+      %ek : {List.get(&2, U32, Jpeg.decode.up.rows(U32.to_nat(hh), U32.to_nat(ww),
+        Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), ww, hh,
+        Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww *
+        hh : U32)))), _) ==
+        Some{Laws.jpg.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), xx,
+          yy, Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0),
+          Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww),
+          yy, 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx,
+          Laws.jpg.up.far(yy, hh), 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
+          scan, Laws.jpg.up.far(xx, ww), Laws.jpg.up.far(yy, hh), 0))} : Maybe<&2, U32>}
+      ex = Equal.sym(U32, Laws.jpg.idx(xn, 0), xx, idx.of(xx))
+      ey = Equal.sym(U32, Laws.jpg.idx(yn, 0), yy, idx.of(yy))
+      e0 = Equal.sym(U32, D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+        hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (yy * ww + xx : U32))), Laws.jpg.point(us, cc,
+        Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), up.pv(cc, us, ww, hh, nf, ids, hs, vs,
+        tq, hmax, vmax, scan,
+        xx, yy, hD, hfD, h_xx, h_yy))
+      e1 = Equal.sym(U32, D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+        hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (yy * ww + Jpeg.decode.up.far(xx, ww) : U32))),
+        Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.up.far(xx, ww),
+        yy, 0), up.pv(cc, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan,
+        Jpeg.decode.up.far(xx, ww), yy, hD, hfD, hxf, h_yy))
+      e2 = Equal.sym(U32, D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+        hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (Jpeg.decode.up.far(yy, hh) * ww + xx : U32))),
+        Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, Jpeg.decode.up.far(yy,
+        hh), 0), up.pv(cc, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan,
+        xx, Jpeg.decode.up.far(yy, hh), hD, hfD, h_xx, hyf))
+      e3 = Equal.sym(U32, D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+        hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (Jpeg.decode.up.far(yy, hh) * ww +
+        Jpeg.decode.up.far(xx, ww) : U32))), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
+        vmax}, scan, Jpeg.decode.up.far(xx, ww), Jpeg.decode.up.far(yy, hh), 0), up.pv(cc, us, ww, hh, nf, ids, hs, vs,
+        tq, hmax, vmax, scan,
+        Jpeg.decode.up.far(xx, ww), Jpeg.decode.up.far(yy, hh), hD, hfD, hxf, hyf))
+      Equal.trans(Maybe<&2, U32>, List.get(&2, U32, Jpeg.decode.up.rows(U32.to_nat(hh), U32.to_nat(ww),
+        Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), ww, hh,
+        Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww *
+          hh : U32)))), Nat.add(Nat.mul(yn, U32.to_nat(ww)), xn)),
+          Some{Jpeg.decode.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww),
+          Laws.jpg.idx(xn, 0), Laws.jpg.idx(yn, 0), D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww,
+          hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (Laws.jpg.idx(yn, 0) * ww +
+          Laws.jpg.idx(xn, 0) : U32))), D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf,
+          ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), (Laws.jpg.idx(yn, 0) * ww +
+          Jpeg.decode.up.far(Laws.jpg.idx(xn, 0), ww) : U32))), D1.jpg.val(Array.get(U32, Laws.jpg.paint.all(us, cc,
+          Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))),
+          (Jpeg.decode.up.far(Laws.jpg.idx(yn, 0), hh) * ww + Laws.jpg.idx(xn, 0) : U32))), D1.jpg.val(Array.get(U32,
+          Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww *
+          hh : U32))), (Jpeg.decode.up.far(Laws.jpg.idx(yn, 0), hh) * ww + Jpeg.decode.up.far(Laws.jpg.idx(xn, 0), ww)
+          : U32))))},
+        Some{Laws.jpg.up.mix(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), xx,
+          yy, Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0),
+          Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Laws.jpg.up.far(xx, ww),
+          yy, 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx,
+          Laws.jpg.up.far(yy, hh), 0), Laws.jpg.point(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
+          scan, Laws.jpg.up.far(xx, ww), Laws.jpg.up.far(yy, hh), 0))}, rows.top(U32.to_nat(hh), U32.to_nat(ww), xn,
+          yn, Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), ww, hh,
+          Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww *
+          hh : U32))), lt_of(yy, hh, h_yy),
+        lt_of(xx, ww, h_xx)), up.fin(cc, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, ex, ey, e0, e1, e2,
+        e3))
+
+# a component's plane read out as libjpeg upsamples it: point k is jpg.up.value over the component's units
+def w13.up(
+  +cc: U32,
+  +us: List<&2, Laws.JUnit>,
+  +ww: U32,
+  +hh: U32,
+  +nf: U32,
+  +ids: List<&2, U32>,
+  +hs: List<&2, U32>,
+  +vs: List<&2, U32>,
+  +tq: List<&2, U32>,
+  +hmax: U32,
+  +vmax: U32,
+  +scan: Jpeg.Scan,
+  +xx: U32,
+  +yy: U32,
+  +hD: {Nat.is_lt(Jpeg.decode.depth((ww * hh : U32)), 32n) == True{} : Bool},
+  +hfD: {Nat.is_le(Nat.mul(U32.to_nat(ww), U32.to_nat(hh)), Nat.pow(2n, Jpeg.decode.depth((ww * hh : U32)))) == True{} :
+    Bool},
+  +hK: {Nat.is_lt(U32.to_nat((yy * ww + xx : U32)), U32.to_nat((ww * hh : U32))) == True{} : Bool},
+  +h_xx: {U32.is_lt(xx, ww) == True{} : Bool},
+  +h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
+) -> {List.get(&2, U32, Jpeg.decode.up.out(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax,
+  vmax, ww), U32.to_nat((ww * hh : U32)), ww, hh, Laws.jpg.paint.all(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+  hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32)))), U32.to_nat((yy * ww + xx : U32))) ==
+  Some{Laws.jpg.up.value(us, cc, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)} : Maybe<&2, U32>}:
+  w13.up.z(U32.is_eq(Jpeg.decode.up.mode(Jpeg.decode.at(hs, cc), Jpeg.decode.at(vs, cc), hmax, vmax, ww), 0), cc, us,
+    ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx,
+    h_yy)
+
 # three samples coded as R, G and B, when all three are there
 def dir3(rr: Maybe<&2, U32>, gg: Maybe<&2, U32>, bb: Maybe<&2, U32>) -> Maybe<&2, U32>:
   match rr:
@@ -5044,31 +5786,35 @@ def w13.pack(
   +hK: {Nat.is_lt(U32.to_nat((yy * ww + xx : U32)), U32.to_nat((ww * hh : U32))) == True{} : Bool},
   +h_xx: {U32.is_lt(xx, ww) == True{} : Bool},
   +h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
-) -> {List.get(&2, U32, Jpeg.decode.done.pack(rgb, U32.to_nat((ww * hh : U32)), Laws.jpg.paint.all(us, 0,
+) -> {List.get(&2, U32, Jpeg.decode.done.pack(rgb, U32.to_nat((ww * hh : U32)), ww, hh, Jpeg.decode.ups(hs, vs, hmax,
+  vmax, ww), Laws.jpg.paint.all(us, 0,
   Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))),
   Laws.jpg.paint.all(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh :
   U32))), Laws.jpg.paint.all(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww *
   hh : U32)))), U32.to_nat((yy * ww + xx : U32))) ==
-  Some{Laws.jpg.colour(nf, rgb, Laws.jpg.point(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx,
-    yy, 0), Laws.jpg.point(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0),
-    Laws.jpg.point(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0))} : Maybe<&2, U32>}:
+  Some{Laws.jpg.colour(nf, rgb, Laws.jpg.up.value(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx,
+    yy), Laws.jpg.up.value(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy),
+    Laws.jpg.up.value(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy))} : Maybe<&2, U32>}:
   match rgb:
     case True{}:
-      +py = Jpeg.decode.points(U32.to_nat((ww * hh : U32)), Laws.jpg.paint.all(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs,
+      +py = Jpeg.decode.up.out(Jpeg.decode.up.mode(Jpeg.decode.at(hs, 0), Jpeg.decode.at(vs, 0), hmax, vmax, ww),
+        U32.to_nat((ww * hh : U32)), ww, hh, Laws.jpg.paint.all(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs,
         vs,
         tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))))
-      +pb = Jpeg.decode.points(U32.to_nat((ww * hh : U32)), Laws.jpg.paint.all(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs,
+      +pb = Jpeg.decode.up.out(Jpeg.decode.up.mode(Jpeg.decode.at(hs, 1), Jpeg.decode.at(vs, 1), hmax, vmax, ww),
+        U32.to_nat((ww * hh : U32)), ww, hh, Laws.jpg.paint.all(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs,
         vs,
         tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))))
-      +pr = Jpeg.decode.points(U32.to_nat((ww * hh : U32)), Laws.jpg.paint.all(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs,
+      +pr = Jpeg.decode.up.out(Jpeg.decode.up.mode(Jpeg.decode.at(hs, 2), Jpeg.decode.at(vs, 2), hmax, vmax, ww),
+        U32.to_nat((ww * hh : U32)), ww, hh, Laws.jpg.paint.all(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs,
         vs,
         tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))))
-      +v0 = Laws.jpg.point(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0)
-      +v1 = Laws.jpg.point(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0)
-      +v2 = Laws.jpg.point(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0)
-      +ey = w13.pt(0, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
-      +eb = w13.pt(1, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
-      +er = w13.pt(2, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
+      +v0 = Laws.jpg.up.value(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)
+      +v1 = Laws.jpg.up.value(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)
+      +v2 = Laws.jpg.up.value(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)
+      +ey = w13.up(0, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
+      +eb = w13.up(1, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
+      +er = w13.up(2, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
       +gy = List.get(&2, U32, py, U32.to_nat((yy * ww + xx : U32)))
       +gb = List.get(&2, U32, pb, U32.to_nat((yy * ww + xx : U32)))
       +gr = List.get(&2, U32, pr, U32.to_nat((yy * ww + xx : U32)))
@@ -5089,21 +5835,24 @@ def w13.pack(
         Equal.sym(Maybe<&2, U32>, Some{Laws.jpg.colour(nf, True{}, v0, v1, v2)}, Some{Jpeg.direct(v0, v1, v2)},
         ec)))
     case False{}:
-      +py = Jpeg.decode.points(U32.to_nat((ww * hh : U32)), Laws.jpg.paint.all(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs,
+      +py = Jpeg.decode.up.out(Jpeg.decode.up.mode(Jpeg.decode.at(hs, 0), Jpeg.decode.at(vs, 0), hmax, vmax, ww),
+        U32.to_nat((ww * hh : U32)), ww, hh, Laws.jpg.paint.all(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs,
         vs,
         tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))))
-      +pb = Jpeg.decode.points(U32.to_nat((ww * hh : U32)), Laws.jpg.paint.all(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs,
+      +pb = Jpeg.decode.up.out(Jpeg.decode.up.mode(Jpeg.decode.at(hs, 1), Jpeg.decode.at(vs, 1), hmax, vmax, ww),
+        U32.to_nat((ww * hh : U32)), ww, hh, Laws.jpg.paint.all(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs,
         vs,
         tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))))
-      +pr = Jpeg.decode.points(U32.to_nat((ww * hh : U32)), Laws.jpg.paint.all(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs,
+      +pr = Jpeg.decode.up.out(Jpeg.decode.up.mode(Jpeg.decode.at(hs, 2), Jpeg.decode.at(vs, 2), hmax, vmax, ww),
+        U32.to_nat((ww * hh : U32)), ww, hh, Laws.jpg.paint.all(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs,
         vs,
         tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))))
-      +v0 = Laws.jpg.point(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0)
-      +v1 = Laws.jpg.point(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0)
-      +v2 = Laws.jpg.point(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0)
-      +ey = w13.pt(0, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
-      +eb = w13.pt(1, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
-      +er = w13.pt(2, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
+      +v0 = Laws.jpg.up.value(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)
+      +v1 = Laws.jpg.up.value(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)
+      +v2 = Laws.jpg.up.value(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)
+      +ey = w13.up(0, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
+      +eb = w13.up(1, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
+      +er = w13.up(2, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
       +gy = List.get(&2, U32, py, U32.to_nat((yy * ww + xx : U32)))
       +gb = List.get(&2, U32, pb, U32.to_nat((yy * ww + xx : U32)))
       +gr = List.get(&2, U32, pr, U32.to_nat((yy * ww + xx : U32)))
@@ -5148,13 +5897,14 @@ def w13.nf3(
   +hK: {Nat.is_lt(U32.to_nat((yy * ww + xx : U32)), U32.to_nat((ww * hh : U32))) == True{} : Bool},
   +h_xx: {U32.is_lt(xx, ww) == True{} : Bool},
   +h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
-) -> w13.Q(Jpeg.decode.done.nf3(bb, rgb, ww, hh, Laws.jpg.paint.all(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+) -> w13.Q(Jpeg.decode.done.nf3(bb, rgb, ww, hh, Jpeg.decode.ups(hs, vs, hmax, vmax, ww), Laws.jpg.paint.all(us, 0,
+  Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
   hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), Laws.jpg.paint.all(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs,
   tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), Laws.jpg.paint.all(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs,
   vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32)))), U32.to_nat((yy * ww + xx : U32)),
-  Laws.jpg.colour(nf, rgb, Laws.jpg.point(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0),
-  Laws.jpg.point(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us, 2,
-  Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0))):
+  Laws.jpg.colour(nf, rgb, Laws.jpg.up.value(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy),
+  Laws.jpg.up.value(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy), Laws.jpg.up.value(us, 2,
+  Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy))):
   match bb:
     case True{}:
       w13.pack(rgb, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, eb1, hD, hfD, hK, h_xx, h_yy)
@@ -5185,20 +5935,22 @@ def w13.nf1(
   +hK: {Nat.is_lt(U32.to_nat((yy * ww + xx : U32)), U32.to_nat((ww * hh : U32))) == True{} : Bool},
   +h_xx: {U32.is_lt(xx, ww) == True{} : Bool},
   +h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
-) -> w13.Q(Jpeg.decode.done.nf1(bb, nf, rgb, ww, hh, Laws.jpg.paint.all(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
+) -> w13.Q(Jpeg.decode.done.nf1(bb, nf, rgb, ww, hh, Jpeg.decode.ups(hs, vs, hmax, vmax, ww), Laws.jpg.paint.all(us, 0,
+  Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
   hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), Laws.jpg.paint.all(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs,
   tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))), Laws.jpg.paint.all(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs,
   vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32)))), U32.to_nat((yy * ww + xx : U32)),
-  Laws.jpg.colour(nf, rgb, Laws.jpg.point(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0),
-  Laws.jpg.point(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us, 2,
-  Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0))):
+  Laws.jpg.colour(nf, rgb, Laws.jpg.up.value(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy),
+  Laws.jpg.up.value(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy), Laws.jpg.up.value(us, 2,
+  Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy))):
   match bb:
     case True{}:
-      +py = Jpeg.decode.points(U32.to_nat((ww * hh : U32)), Laws.jpg.paint.all(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs,
+      +py = Jpeg.decode.up.out(Jpeg.decode.up.mode(Jpeg.decode.at(hs, 0), Jpeg.decode.at(vs, 0), hmax, vmax, ww),
+        U32.to_nat((ww * hh : U32)), ww, hh, Laws.jpg.paint.all(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs,
         vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))))
-      +v0 = Laws.jpg.point(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0)
-      +v1 = Laws.jpg.point(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0)
-      +v2 = Laws.jpg.point(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0)
+      +v0 = Laws.jpg.up.value(us, 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)
+      +v1 = Laws.jpg.up.value(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)
+      +v2 = Laws.jpg.up.value(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)
       +ec = {Equal.cong(Bool, Maybe<&2, U32>, zz => {Some{Bool.pick(U32, zz, Jpeg.gray(v0), Bool.pick(U32, rgb,
         Jpeg.direct(v0, v1, v2), Jpeg.rgb(v0, v1, v2)))} : Maybe<&2, U32>}, U32.is_eq(nf, 1), True{}, eb1) :
         {Some{Laws.jpg.colour(nf, rgb, v0, v1, v2)} == Some{Jpeg.gray(v0)} : Maybe<&2, U32>}}
@@ -5210,7 +5962,7 @@ def w13.nf1(
           rgb, v0, v1, v2)},
         Equal.cong(Maybe<&2, U32>, Maybe<&2, U32>, mm => mgray(mm), List.get(&2, U32, py, U32.to_nat((yy * ww + xx :
           U32))), Some{v0},
-        w13.pt(0, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)),
+        w13.up(0, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)),
         Equal.sym(Maybe<&2, U32>, Some{Laws.jpg.colour(nf, rgb, v0, v1, v2)}, Some{Jpeg.gray(v0)}, ec)))
     case False{}:
       w13.nf3(U32.is_eq(nf, 3), rgb, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, eb1, hD, hfD, hK,
@@ -5243,10 +5995,10 @@ def w13.dn(
   Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32))),
   Laws.jpg.paint.all(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh :
   U32))), Laws.jpg.paint.all(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww *
-  hh : U32)))), U32.to_nat((yy * ww + xx : U32)), Laws.jpg.colour(nf, rgb, Laws.jpg.point(us, 0, Jpeg.Frame{ww, hh, nf,
-  ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
-  vmax}, scan, xx, yy, 0), Laws.jpg.point(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy,
-  0))):
+  hh : U32)))), U32.to_nat((yy * ww + xx : U32)), Laws.jpg.colour(nf, rgb, Laws.jpg.up.value(us, 0, Jpeg.Frame{ww, hh,
+    nf,
+  ids, hs, vs, tq, hmax, vmax}, scan, xx, yy), Laws.jpg.up.value(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
+  vmax}, scan, xx, yy), Laws.jpg.up.value(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy))):
   match bb:
     case True{}:
       {==}
@@ -5282,12 +6034,13 @@ def w13.st(
 ) -> w13.Q(Jpeg.decode.start(nb, Jpeg.Bits{0, 1, 0, ent}, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
   tabs, ri, rgb, Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh :
   U32))), U32.to_nat((yy * ww + xx : U32)),
-  Laws.jpg.colour(nf, rgb, Laws.jpg.point(Laws.jpg.decoded.n(nb, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
-    scan, tabs, ent, ri), 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0),
-    Laws.jpg.point(Laws.jpg.decoded.n(nb, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent, ri), 1,
-    Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(Laws.jpg.decoded.n(nb,
+  Laws.jpg.colour(nf, rgb, Laws.jpg.up.value(Laws.jpg.decoded.n(nb, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
+    scan, tabs, ent, ri), 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy),
+    Laws.jpg.up.value(Laws.jpg.decoded.n(nb, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent, ri),
+      1,
+    Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy), Laws.jpg.up.value(Laws.jpg.decoded.n(nb,
     Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent, ri), 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs,
-    tq, hmax, vmax}, scan, xx, yy, 0))):
+    tq, hmax, vmax}, scan, xx, yy))):
   match nb:
     case 0n:
       {==}
@@ -5306,10 +6059,10 @@ def w13.st(
         hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, Jpeg.decode.plane((ww * hh : U32)))), Laws.jpeg_blocks_paint(pp,
         b0, c0, Jpeg.decode.pred.zero(), fr, scan, tabs, ri, rgb, Jpeg.decode.plane((ww * hh : U32)),
         Jpeg.decode.plane((ww * hh : U32)), Jpeg.decode.plane((ww * hh : U32)), 1))
-      %sl : w13.Q(_, U32.to_nat((yy * ww + xx : U32)), Laws.jpg.colour(nf, rgb, Laws.jpg.point(us, 0, Jpeg.Frame{ww,
-        hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs,
-        vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
-        vmax}, scan, xx, yy, 0)))
+      %sl : w13.Q(_, U32.to_nat((yy * ww + xx : U32)), Laws.jpg.colour(nf, rgb, Laws.jpg.up.value(us, 0, Jpeg.Frame{ww,
+        hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy), Laws.jpg.up.value(us, 1, Jpeg.Frame{ww, hh, nf, ids, hs,
+        vs, tq, hmax, vmax}, scan, xx, yy), Laws.jpg.up.value(us, 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
+        vmax}, scan, xx, yy)))
       w13.dn(U32.is_eq(ok, 0), rgb, us, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
 
 # a scan the decoder does not run is none; one it runs is the scan decode of its blocks
@@ -5339,13 +6092,15 @@ def w13.fit(
   +h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
 ) -> w13.Q(Jpeg.decode.run.fit(fit, Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax), ww, hh, Jpeg.Frame{ww, hh, nf,
   ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent, ri, rgb), U32.to_nat((yy * ww + xx : U32)), Laws.jpg.colour(nf, rgb,
-  Laws.jpg.point(Laws.jpg.decoded.n(U32.to_nat(Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)), Jpeg.Frame{ww, hh, nf,
+  Laws.jpg.up.value(Laws.jpg.decoded.n(U32.to_nat(Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)), Jpeg.Frame{ww, hh,
+    nf,
   ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent, ri), 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx,
-  yy, 0), Laws.jpg.point(Laws.jpg.decoded.n(U32.to_nat(Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)), Jpeg.Frame{ww,
+    yy), Laws.jpg.up.value(Laws.jpg.decoded.n(U32.to_nat(Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)),
+    Jpeg.Frame{ww,
   hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent, ri), 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
-  scan, xx, yy, 0), Laws.jpg.point(Laws.jpg.decoded.n(U32.to_nat(Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)),
+  scan, xx, yy), Laws.jpg.up.value(Laws.jpg.decoded.n(U32.to_nat(Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax)),
   Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent, ri), 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
-  hmax, vmax}, scan, xx, yy, 0))):
+  hmax, vmax}, scan, xx, yy))):
   match fit:
     case False{}:
       {==}
@@ -5381,23 +6136,25 @@ def w13.fin(
   +h_xx: {U32.is_lt(xx, ww) == True{} : Bool},
   +h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
 ) -> w13.Q(Jpeg.decode.finish.ok(k1, b0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, tabs, ent, ri,
-  rgb), U32.to_nat((yy * ww + xx : U32)), Laws.jpg.colour(nf, rgb, Laws.jpg.point(Laws.jpg.decoded(ww, hh, nf, ids, hs,
+  rgb), U32.to_nat((yy * ww + xx : U32)), Laws.jpg.colour(nf, rgb, Laws.jpg.up.value(Laws.jpg.decoded(ww, hh, nf, ids,
+    hs,
   vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent), ri), 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax,
-  vmax}, scan, xx, yy, 0), Laws.jpg.point(Laws.jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs,
-  List.reverse(&2, U32, ent), ri), 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0),
-  Laws.jpg.point(Laws.jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent), ri),
-  2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0))):
+  vmax}, scan, xx, yy), Laws.jpg.up.value(Laws.jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs,
+  List.reverse(&2, U32, ent), ri), 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy),
+  Laws.jpg.up.value(Laws.jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent),
+    ri),
+  2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy))):
   match k1 b0:
     case True{} True{}:
       +en = List.reverse(&2, U32, ent)
       +se = Equal.sym(Bool, Bool.or(U32.is_eq(ww, 0), U32.is_eq(hh, 0)), False{}, ew)
       %se : w13.Q(Jpeg.decode.run.n(_, ww, hh, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, tabs, en, ri,
-        rgb), U32.to_nat((yy * ww + xx : U32)), Laws.jpg.colour(nf, rgb, Laws.jpg.point(Laws.jpg.decoded(ww, hh, nf,
+        rgb), U32.to_nat((yy * ww + xx : U32)), Laws.jpg.colour(nf, rgb, Laws.jpg.up.value(Laws.jpg.decoded(ww, hh, nf,
         ids, hs, vs, tq, hmax, vmax, scan, tabs, en, ri), 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan,
-        xx, yy, 0), Laws.jpg.point(Laws.jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, en, ri), 1,
-        Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(Laws.jpg.decoded(ww, hh,
+          xx, yy), Laws.jpg.up.value(Laws.jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, en, ri), 1,
+        Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy), Laws.jpg.up.value(Laws.jpg.decoded(ww, hh,
         nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, en, ri), 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax},
-        scan, xx, yy, 0)))
+        scan, xx, yy)))
       w13.fit(Jpeg.decode.fits(ww, hh, Jpeg.decode.nblocks(ww, hh, hs, vs, hmax, vmax), en, nf, ids, scan), en, tabs,
         ri,
         rgb, ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, xx, yy, hD, hfD, hK, h_xx, h_yy)
@@ -5469,12 +6226,11 @@ def Laws.jpeg_place(
     kind, bad}, h_walk)
   %sh : w13.Q(Jpeg.decode.finish(_, Jpeg.decode.facts(bytes)), U32.to_nat((yy * ww + xx : U32)), Laws.jpg.colour(nf,
     Jpeg.decode.rgb.of(Jpeg.decode.facts(bytes), Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}),
-    Laws.jpg.point(Laws.jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent),
-    ri), 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(Laws.jpg.decoded(ww,
+    Laws.jpg.up.value(Laws.jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent),
+    ri), 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy), Laws.jpg.up.value(Laws.jpg.decoded(ww,
     hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent), ri), 1, Jpeg.Frame{ww, hh, nf, ids, hs,
-    vs, tq, hmax, vmax}, scan, xx, yy, 0), Laws.jpg.point(Laws.jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax,
-    scan, tabs, List.reverse(&2, U32, ent), ri), 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy,
-    0)))
+    vs, tq, hmax, vmax}, scan, xx, yy), Laws.jpg.up.value(Laws.jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax,
+    scan, tabs, List.reverse(&2, U32, ent), ri), 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy)))
   w13.fin(Bool.and(U32.is_eq(kind, 1), Jpeg.decode.facts.soi(Jpeg.decode.facts(bytes))), U32.is_eq(bad, 0), ent, tabs,
     ri, Jpeg.decode.rgb.of(Jpeg.decode.facts(bytes), Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}), ww, hh, nf,
     ids, hs, vs, tq, hmax, vmax, scan, xx, yy, ew, hD, hfD, hK, h_xx, h_yy)

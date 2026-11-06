@@ -183,21 +183,28 @@ def none.pk() -> pk.Ty([]):
 def pack.pk(
   rgb: Bool,
   +nn: Nat,
+  +ww: U32,
+  +hh: U32,
+  ups: Jpeg.Ups,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> pk.Ty(Jpeg.decode.done.pack(rgb, nn, yy, cb, cr)):
+) -> pk.Ty(Jpeg.decode.done.pack(rgb, nn, ww, hh, ups, yy, cb, cr)):
   match rgb:
     case True{}:
-      +ey = Jpeg.decode.points(nn, yy)
-      +eb = Jpeg.decode.points(nn, cb)
-      +er = Jpeg.decode.points(nn, cr)
-      (False{}, (True{}, (ey, (eb, (er, directs.eq(ey, eb, er))))))
+      match ups:
+        case Jpeg.Ups{+m0, +m1, +m2}:
+          +ey = Jpeg.decode.up.out(m0, nn, ww, hh, yy)
+          +eb = Jpeg.decode.up.out(m1, nn, ww, hh, cb)
+          +er = Jpeg.decode.up.out(m2, nn, ww, hh, cr)
+          (False{}, (True{}, (ey, (eb, (er, directs.eq(ey, eb, er))))))
     case False{}:
-      +ey = Jpeg.decode.points(nn, yy)
-      +eb = Jpeg.decode.points(nn, cb)
-      +er = Jpeg.decode.points(nn, cr)
-      (False{}, (False{}, (ey, (eb, (er, rgbs.eq(ey, eb, er))))))
+      match ups:
+        case Jpeg.Ups{+m0, +m1, +m2}:
+          +ey = Jpeg.decode.up.out(m0, nn, ww, hh, yy)
+          +eb = Jpeg.decode.up.out(m1, nn, ww, hh, cb)
+          +er = Jpeg.decode.up.out(m2, nn, ww, hh, cr)
+          (False{}, (False{}, (ey, (eb, (er, rgbs.eq(ey, eb, er))))))
 
 # gray or colour, by the component count
 def nf3.pk(
@@ -205,13 +212,14 @@ def nf3.pk(
   rgb: Bool,
   +ww: U32,
   +hh: U32,
+  ups: Jpeg.Ups,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> pk.Ty(pic.px(Jpeg.decode.done.nf3(three, rgb, ww, hh, yy, cb, cr))):
+) -> pk.Ty(pic.px(Jpeg.decode.done.nf3(three, rgb, ww, hh, ups, yy, cb, cr))):
   match three:
     case True{}:
-      pack.pk(rgb, U32.to_nat((ww * hh : U32)), yy, cb, cr)
+      pack.pk(rgb, U32.to_nat((ww * hh : U32)), ww, hh, ups, yy, cb, cr)
     case False{}:
       none.pk()
 
@@ -222,16 +230,19 @@ def nf1.pk(
   rgb: Bool,
   +ww: U32,
   +hh: U32,
+  ups: Jpeg.Ups,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> pk.Ty(pic.px(Jpeg.decode.done.nf1(one, nf, rgb, ww, hh, yy, cb, cr))):
+) -> pk.Ty(pic.px(Jpeg.decode.done.nf1(one, nf, rgb, ww, hh, ups, yy, cb, cr))):
   match one:
     case True{}:
-      +ey = Jpeg.decode.points(U32.to_nat((ww * hh : U32)), yy)
-      (True{}, (False{}, (ey, ([], ([], grays.eq(ey))))))
+      match ups:
+        case Jpeg.Ups{+m0, _m1, _m2}:
+          +ey = Jpeg.decode.up.out(m0, U32.to_nat((ww * hh : U32)), ww, hh, yy)
+          (True{}, (False{}, (ey, ([], ([], grays.eq(ey))))))
     case False{}:
-      nf3.pk(U32.is_eq(nf, 3), rgb, ww, hh, yy, cb, cr)
+      nf3.pk(U32.is_eq(nf, 3), rgb, ww, hh, ups, yy, cb, cr)
 
 # a failed scan has no samples, and a finished one is packed by its component count
 def dok.pk(
@@ -247,8 +258,8 @@ def dok.pk(
       none.pk()
     case False{}:
       match frame:
-        case Jpeg.Frame{+ww, +hh, +nf, _ids, _hs, _vs, _tq, _hmax, _vmax}:
-          nf1.pk(U32.is_eq(nf, 1), nf, rgb, ww, hh, yy, cb, cr)
+        case Jpeg.Frame{+ww, +hh, +nf, _ids, +hs, +vs, _tq, +hmax, +vmax}:
+          nf1.pk(U32.is_eq(nf, 1), nf, rgb, ww, hh, Jpeg.decode.ups(hs, vs, hmax, vmax, ww), yy, cb, cr)
 
 # the blocks' walk ends in decode.done, whose samples are packed
 def blocks.pk(

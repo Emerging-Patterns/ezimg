@@ -1161,6 +1161,41 @@ def jpg.decoded(
     hmax,
     vmax}, scan, tabs, ent, ri)
 
+# the pixel, along an axis of nn pixels, whose painted sample the triangle filter mixes into pixel xx as the farther
+# one: for a component painted two pixels to a sample, the pixel before an even pixel holds the sample before, the
+# pixel after an odd one the sample after, and past an edge the pixel itself, the edge sample repeated as libjpeg
+# repeats it (jdsample.c's first and last columns; jdmainct.c's context rows at the top and bottom)
+def jpg.up.far(+xx: U32, +nn: U32) -> U32:
+  Bool.pick(U32, U32.is_eq(U32.and(xx, 1), 0), Bool.pick(U32, U32.is_eq(xx, 0), xx, (xx - 1 : U32)),
+    Bool.pick(U32, U32.is_lt((xx + 1 : U32), nn), (xx + 1 : U32), xx))
+
+# libjpeg-turbo's triangle filter (jdsample.c) at pixel (xx, yy), from the nearer sample v0, the farther one across
+# vh, the farther one down vv and the one across and down vd. Mode 1 (h2v1_fancy_upsample): (3 v0 + vh + 1) >> 2
+# for an even pixel, + 2 for an odd one. Mode 3 (h1v2_fancy_upsample): (3 v0 + vv + 1) >> 2 for an even row, + 2 for
+# an odd one. Mode 2 (h2v2_fancy_upsample): the column sums c = 3 v0 + vv and c' = 3 vh + vd, then (3 c + c' + 8) >> 4
+# for an even pixel, + 7 for an odd one.
+def jpg.up.mix(+mode: U32, +xx: U32, +yy: U32, +v0: U32, +vh: U32, +vv: U32, +vd: U32) -> U32:
+  +ex = U32.is_eq(U32.and(xx, 1), 0)
+  +ey = U32.is_eq(U32.and(yy, 1), 0)
+  Bool.pick(U32, U32.is_eq(mode, 1), U32.shrn((v0 * 3 + vh + Bool.pick(U32, ex, 1, 2) : U32), 2n),
+    Bool.pick(U32, U32.is_eq(mode, 3), U32.shrn((v0 * 3 + vv + Bool.pick(U32, ey, 1, 2) : U32), 2n),
+    U32.shrn(((v0 * 3 + vv : U32) * 3 + (vh * 3 + vd : U32) + Bool.pick(U32, ex, 8, 7) : U32), 4n)))
+
+# the value of scan component comp at pixel (xx, yy): the painted point (jpg.point) when libjpeg upsamples the
+# component by repeating its samples (mode 0 of Jpeg.decode.up.mode, jinit_upsampler's choice by the sampling
+# factors and the frame's width), else the triangle filter of the painted points at (xx, yy), at the farther pixel
+# across, the farther row down, and both
+def jpg.up.value(+us: List<&2, JUnit>, +comp: U32, +frame: Jpeg.Frame, +scan: Jpeg.Scan, +xx: U32, +yy: U32) -> U32:
+  match frame:
+    case Jpeg.Frame{+ww, +hh, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
+      +fr = {Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax} : Jpeg.Frame}
+      +mode = Jpeg.decode.up.mode(Jpeg.decode.at(hs, comp), Jpeg.decode.at(vs, comp), hmax, vmax, ww)
+      +xf = jpg.up.far(xx, ww)
+      +yf = jpg.up.far(yy, hh)
+      Bool.pick(U32, U32.is_eq(mode, 0), jpg.point(us, comp, fr, scan, xx, yy, 0), jpg.up.mix(mode, xx, yy,
+        jpg.point(us, comp, fr, scan, xx, yy, 0), jpg.point(us, comp, fr, scan, xf, yy, 0), jpg.point(us, comp, fr,
+        scan, xx, yf, 0), jpg.point(us, comp, fr, scan, xf, yf, 0)))
+
 # a pixel from its three component values: gray for a frame of one component; else, for a file coded as RGB (rgb),
 # the values as R, G and B (Jpeg.direct); else the T.871 colour of Y, Cb and Cr (trusted in src/jpeg.bend)
 def jpg.colour(+nf: U32, +rgb: Bool, +yv: U32, +bv: U32, +rv: U32) -> U32:
@@ -1187,13 +1222,15 @@ def jpg.px.want(mm: Maybe<&2, Img.Raster>, +vv: U32) -> Maybe<&2, U32>:
 # returns a raster, its pixel (x, y) is the pixel of the component values at
 # (x, y): gray of Y for one component; else, for a file coded as RGB
 # (Jpeg.decode.rgb.of the file's markers, as libjpeg-turbo chooses), the
-# values as R, G and B; else rgb of Y, Cb and Cr. Each component's
-# value is jpg.point over the data units the decoder decodes, their samples
-# as src/jpeg.bend decodes them (trusted there): the k-th unit placed at
-# decode.geom of the k-th place of the decoder's walk (jpg.trace;
-# jpeg_walk_frame: T.81 A.2.3's order; jpeg_mcu_grid_comp: the A.2.3 grid),
-# each of its samples replicated over the pw by ph pixels it covers
-# (jpg.block.at, jpeg_paint_at)
+# values as R, G and B; else rgb of Y, Cb and Cr. Each component's value is
+# jpg.up.value: libjpeg-turbo's upsampling (jdsample.c: the triangle filter
+# for a component of half the horizontal or vertical factor, or both, else
+# each sample repeated) of the component as painted, jpg.point over the
+# data units the decoder decodes, their samples as src/jpeg.bend decodes them
+# (trusted there): the k-th unit placed at decode.geom of the k-th place of
+# the decoder's walk (jpg.trace; jpeg_walk_frame: T.81 A.2.3's order;
+# jpeg_mcu_grid_comp: the A.2.3 grid), each of its samples painted over the
+# pw by ph pixels it covers (jpg.block.at, jpeg_paint_at)
 law jpeg_place:
   for +bytes: List<&2, U32>
   for +ww: U32
@@ -1223,11 +1260,9 @@ law jpeg_place:
   for +h_yy: {U32.is_lt(yy, hh) == True{} : Bool}
   {jpg.px.at(Img.decode_jpeg(bytes), U32.to_nat((yy * ww + xx : U32))) == jpg.px.want(Img.decode_jpeg(bytes),
     jpg.colour(nf, Jpeg.decode.rgb.of(Jpeg.decode.facts(bytes), Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}),
-    jpg.point(jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32,
-    ent),
-    ri), 0, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0), jpg.point(jpg.decoded(ww, hh, nf,
-    ids,
-    hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent), ri), 1, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq,
-    hmax,
-    vmax}, scan, xx, yy, 0), jpg.point(jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2,
-    U32, ent), ri), 2, Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy, 0))) : Maybe<&2, U32>}
+    jpg.up.value(jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent), ri), 0,
+    Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy),
+    jpg.up.value(jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent), ri), 1,
+    Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy),
+    jpg.up.value(jpg.decoded(ww, hh, nf, ids, hs, vs, tq, hmax, vmax, scan, tabs, List.reverse(&2, U32, ent), ri), 2,
+    Jpeg.Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}, scan, xx, yy))) : Maybe<&2, U32>}

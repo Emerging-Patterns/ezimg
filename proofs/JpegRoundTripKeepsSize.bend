@@ -336,15 +336,17 @@ def nf3.sized(
   rgb: Bool,
   +ww: U32,
   +hh: U32,
+  ups: Jpeg.Ups,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> {Laws.jpg.sized(Img.decode_jpeg.out(Jpeg.decode.done.nf3(three, rgb, ww, hh, yy, cb, cr)), ww, hh) == True{} :
-  Bool}:
+) -> {Laws.jpg.sized(Img.decode_jpeg.out(Jpeg.decode.done.nf3(three, rgb, ww, hh, ups, yy, cb, cr)), ww,
+  hh) == True{} : Bool}:
   match three:
     case True{}:
-      sized.pic(ww, hh, Jpeg.decode.done.pack(rgb, U32.to_nat((ww * hh : U32)), yy, cb, cr))
+      sized.pic(ww, hh, Jpeg.decode.done.pack(rgb, U32.to_nat((ww * hh : U32)), ww, hh, ups, yy, cb, cr))
     case False{}:
+      -_u = ups
       -_g = rgb
       -_y = yy
       -_b = cb
@@ -358,19 +360,22 @@ def nf1.sized(
   rgb: Bool,
   +ww: U32,
   +hh: U32,
+  ups: Jpeg.Ups,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> {Laws.jpg.sized(Img.decode_jpeg.out(Jpeg.decode.done.nf1(one, nf, rgb, ww, hh, yy, cb, cr)), ww, hh) == True{} :
-  Bool}:
+) -> {Laws.jpg.sized(Img.decode_jpeg.out(Jpeg.decode.done.nf1(one, nf, rgb, ww, hh, ups, yy, cb, cr)), ww,
+  hh) == True{} : Bool}:
   match one:
     case True{}:
-      -_g = rgb
-      -_b = cb
-      -_r = cr
-      sized.pic(ww, hh, Jpeg.decode.grays(Jpeg.decode.points(U32.to_nat((ww * hh : U32)), yy)))
+      match ups:
+        case Jpeg.Ups{+m0, _m1, _m2}:
+          -_g = rgb
+          -_b = cb
+          -_r = cr
+          sized.pic(ww, hh, Jpeg.decode.grays(Jpeg.decode.up.out(m0, U32.to_nat((ww * hh : U32)), ww, hh, yy)))
     case False{}:
-      nf3.sized(U32.is_eq(nf, 3), rgb, ww, hh, yy, cb, cr)
+      nf3.sized(U32.is_eq(nf, 3), rgb, ww, hh, ups, yy, cb, cr)
 
 # the planes of a finished scan as a picture of the frame's size, or none
 def dok.sized(
@@ -398,7 +403,7 @@ def dok.sized(
       -_r = cr
       {==}
     case False{}:
-      nf1.sized(U32.is_eq(nf, 1), nf, rgb, ww, hh, yy, cb, cr)
+      nf1.sized(U32.is_eq(nf, 1), nf, rgb, ww, hh, Jpeg.decode.ups(hs, vs, hmax, vmax, ww), yy, cb, cr)
 
 # the block loop ends in a picture of the frame's size, or none
 def blocks.sized(
