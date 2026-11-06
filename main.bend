@@ -494,11 +494,20 @@ def decode_jpeg(bytes: List<&2, U32>) -> Maybe<&2, Raster>:
   decode_jpeg.out(Jpeg.decode(bytes))
 
 # a sample's colour, alpha cleared. The mask is the first operand, so a law
-# over any sample sees its bits without a case split.
-def colour(+pp: U32) -> U32:
-  U32.and(16777215, pp)
+# one channel of a sample flattened onto white: a / 255 of the channel over (255 - a) / 255 of white, rounded
+def colour.ch(+cc: U32, +aa: U32) -> U32:
+  U32.div((cc * aa + (255 - aa) * 255 + 127 : U32), 255)
 
-# every sample's colour, alpha cleared
+# a sample's colour flattened onto white, alpha cleared: a JPEG holds no alpha, so a sample shows as it would over
+# a white page. An opaque sample keeps its colour, (255 c + 127) / 255 = c.
+def colour(+pp: U32) -> U32:
+  +aa = U32.shrn(pp, 24n)
+  +rr = colour.ch(U32.and(U32.shrn(pp, 16n), 255), aa)
+  +gg = colour.ch(U32.and(U32.shrn(pp, 8n), 255), aa)
+  +bb = colour.ch(U32.and(pp, 255), aa)
+  U32.or(U32.or(U32.shln(rr, 16n), U32.shln(gg, 8n)), bb)
+
+# every sample's colour flattened onto white
 def colours(px: List<&2, U32>) -> List<&2, U32>:
   match px:
     case Nil{}:
@@ -526,8 +535,9 @@ def encode_jpeg.good(+ww: U32, +hh: U32, px: List<&2, U32>) -> Bool:
   Bool.and(Bool.and(encode_jpeg.side(ww), encode_jpeg.side(hh)), Bool.and(U32.is_le((ww * hh : U32), 2147483648),
     Nat.is_eq(List.length(&2, U32, px), Nat.mul(U32.to_nat(ww), U32.to_nat(hh)))))
 
-# a baseline sequential 4:4:4 JPEG of the samples' colour: alpha is cleared
-# before the encoder sees a sample. None exactly when encode_jpeg.good says the
+# a baseline sequential 4:4:4 JPEG of the samples' colour: each sample is
+# flattened onto white before the encoder sees it
+# (laws/JpegEncodeFlattensAlpha.bend). None exactly when encode_jpeg.good says the
 # raster is not one it writes (laws/JpegEncodeRefusesBadRasters.bend).
 #
 # Trusted, not proved: for every raster encode_jpeg writes, every colour

@@ -13,7 +13,7 @@ import ./proofs/GetSetTouchOnePoint.bend as PGetSetTouchOnePoint
 import ./proofs/InflateReadsStoredBlocks.bend as PInflateReadsStoredBlocks
 import ./proofs/InflateUptoKeepsBudget.bend as PInflateUptoKeepsBudget
 import ./proofs/InflateUptoReadsStoredBlocks.bend as PInflateUptoReadsStoredBlocks
-import ./proofs/JpegEncodeIgnoresAlpha.bend as PJpegEncodeIgnoresAlpha
+import ./proofs/JpegEncodeFlattensAlpha.bend as PJpegEncodeFlattensAlpha
 import ./proofs/JpegEncodeRefusesBadRasters.bend as PJpegEncodeRefusesBadRasters
 import ./proofs/JpegPlacesComponentSamples.bend as PJpegPlacesComponentSamples
 import ./proofs/JpegRefusesNonBaselineFrames.bend as PJpegRefusesNonBaselineFrames

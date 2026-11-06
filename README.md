@@ -35,8 +35,10 @@ raster for a sequential 8-bit Huffman JPEG (SOF0 or SOF1) that opens with SOI, a
 a block fails to decode, or the frame has more than 2^31 points or more blocks than its entropy-coded bytes can hold.
 Three components are YCbCr unless the file says RGB the way libjpeg reads it (an Adobe APP14 with transform 0 and
 no JFIF APP0, or component ids 'R', 'G', 'B').
+Subsampled chroma is upsampled as libjpeg-turbo upsamples it (jdsample.c's triangle filter for 4:2:2, 4:2:0
+and 4:4:0).
 `encode_jpeg` writes a baseline sequential 4:4:4 JPEG of the samples' colour,
-dropping alpha, and returns none exactly when a side is 0 or past 65535 (a JPEG frame's 16 bits), the
+flattening each sample onto white (a JPEG holds no alpha), and returns none exactly when a side is 0 or past 65535 (a JPEG frame's 16 bits), the
 raster has more than 2^31 points, or its sample count is not the area. Every sample is one `U32` packed `0xAARRGGBB`, whichever
 decoder returned it: a JPEG sample has alpha 255, and a gray JPEG sample
 repeats its level in R, G and B.
