@@ -372,21 +372,17 @@ def adler.fin(pp: U32 & U32) -> U32:
 def adler.of(xs: List<&2, U32>) -> U32:
   adler.fin(adler.go(xs, 1, 0))
 
-# the byte `i` from the head
-def copy.nth.put(+hh: U32, rest: Maybe<&2, U32>, zz: Bool) -> Maybe<&2, U32>:
-  match zz:
-    case True{}:
-      Some{hh}
-    case False{}:
-      rest
-
-# the byte `i` from the head, or none
-def copy.nth(xs: List<&2, U32>, +ii: U32) -> Maybe<&2, U32>:
-  match xs:
-    case Nil{}:
+# the byte `i` from the head, or none. `zz` is whether `i` is zero, so the
+# walk stops at that byte: a back-reference costs its distance, not the
+# whole output so far
+def copy.nth(xs: List<&2, U32>, zz: Bool, +ii: U32) -> Maybe<&2, U32>:
+  match xs zz:
+    case Nil{} _z:
       None{}
-    case Con{+h, t}:
-      copy.nth.put(h, copy.nth(t, (ii - 1 : U32)), U32.is_zero(ii))
+    case +h <> _t True{}:
+      Some{h}
+    case _h <> t False{}:
+      copy.nth(t, U32.is_zero((ii - 1 : U32)), (ii - 1 : U32))
 
 # copy `n` bytes from `dist` back. `m` is the next byte, already read.
 def copy.run(nn: Nat, mm: Maybe<&2, U32>, +dist: U32, +out: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
@@ -397,11 +393,11 @@ def copy.run(nn: Nat, mm: Maybe<&2, U32>, +dist: U32, +out: List<&2, U32>) -> Ma
       None{}
     case 1n+p Some{+b}:
       +out2 = {b <> out : List<&2, U32>}
-      copy.run(p, copy.nth(out2, (dist - 1 : U32)), dist, out2)
+      copy.run(p, copy.nth(out2, U32.is_zero((dist - 1 : U32)), (dist - 1 : U32)), dist, out2)
 
 # copy `len` bytes from `dist` back into a newest-first buffer
 def copy.start(+len: U32, +dist: U32, +out: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  copy.run(U32.to_nat(len), copy.nth(out, (dist - 1 : U32)), dist, out)
+  copy.run(U32.to_nat(len), copy.nth(out, U32.is_zero((dist - 1 : U32)), (dist - 1 : U32)), dist, out)
 
 # the reader, one bit at a time
 # ------------------------------
