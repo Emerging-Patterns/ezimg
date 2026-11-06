@@ -1466,7 +1466,7 @@ def rd.push(
         cmf, skew, hlit, hdist, run, sym, rep
       )
 
-# code 16 needs a previous length
+# code 16 needs a length stored before it, by a 0-15 or a repeat
 def rd.rep16(
   zz: Bool,
   wh: Wh,
@@ -1633,7 +1633,9 @@ def rd.clens(
         nleft, prev, cmf, skew, hlit, hdist, run, sy
       )
 
-# the repeat is done, or it ran past the list
+# the repeat is done, or more lengths follow. A repeat stores lengths, so
+# `dist` is 1 after it, as after a 0-15: code 16 then repeats `prev`, which
+# 17 and 18 set to 0 (RFC 1951 3.2.7, zlib's inflate)
 def rd.mrep.d(
   zz: Bool,
   +lens: List<&2, U32>,
@@ -1663,7 +1665,7 @@ def rd.mrep.d(
       )
     case False{}:
       rd.sym(
-        WClen{}, final, left, dist, out, lit, dts, clen, lens, nleft, prev,
+        WClen{}, final, left, 1, out, lit, dts, clen, lens, nleft, prev,
         cmf, skew, hlit, hdist, run, sym, rep
       )
 
