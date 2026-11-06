@@ -72,9 +72,9 @@ and the audit behind them are in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md
 
 Scope today: PNG decode reads 8-bit colour types 0, 2, 3, 4 and 6 without
 interlace, and refuses anything else; PNG encode writes colour type 2 or 6,
-for rasters of fewer than 2^28 samples. JPEG decode reads one-scan sequential
-8-bit Huffman frames (baseline or extended) and refuses progressive, lossless,
-arithmetic and multi-scan ones; JPEG encode writes baseline 4:2:0, 4:4:4 or gray. Full codec
+for rasters of fewer than 2^28 samples. JPEG decode reads sequential 8-bit
+Huffman frames (baseline or extended), in one scan or several, and refuses
+progressive, lossless and arithmetic ones; JPEG encode writes baseline 4:2:0, 4:4:4 or gray. Full codec
 conformance is not claimed.
 
 PNG encode does not compress. Every row has filter type None and the zlib

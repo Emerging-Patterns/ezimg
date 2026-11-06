@@ -1629,6 +1629,8 @@ def ph.ok(ph: Jpeg.Phase) -> Bool:
       False{}
     case Jpeg.EntFF{}:
       False{}
+    case Jpeg.Rest{_mark, _acc}:
+      False{}
 
 # a walk state between two segments that has read no frame header: kind is still 0
 def inv(st: Jpeg.St) -> Bool:

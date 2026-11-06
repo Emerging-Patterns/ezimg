@@ -1,5 +1,5 @@
-# src/jpeg: sequential 8-bit Huffman JPEG (SOF0 baseline, SOF1 extended) in one scan: grayscale, YCbCr, or RGB
-# as coded when an Adobe APP14 or the component ids say so (libjpeg's rule).
+# src/jpeg: sequential 8-bit Huffman JPEG (SOF0 baseline, SOF1 extended) in one scan or several (T.81 E.2):
+# grayscale, YCbCr, or RGB as coded when an Adobe APP14 or the component ids say so (libjpeg's rule).
 #
 # Trusted, not proved: decode_jpeg reads the baseline files other encoders
 # (libjpeg, Pillow) write, to within the IDCT accuracy T.83 asks of a decoder:
@@ -39,7 +39,9 @@ type Tabs is Data:
   Tabs{q0: List<&2, U32>, q1: List<&2, U32>, q2: List<&2, U32>, q3: List<&2, U32>, dc0: Huff, dc1: Huff,
     dc2: Huff, dc3: Huff, ac0: Huff, ac1: Huff, ac2: Huff, ac3: Huff}
 
-# marker walk: seeking, a marker byte, a length, a payload, or the entropy scan
+# marker walk: seeking, a marker byte, a length, a payload, or the entropy scan. Rest: a scan ended at
+# marker mark, not RSTn or EOI, after a frame header; acc holds the bytes after it, last first, for the next walk
+# (decode.chain), since tables and further scans may follow a scan (T.81 B.2.1, E.2)
 type Phase is Data:
   Seek{}
   Mark{}
@@ -49,6 +51,7 @@ type Phase is Data:
   Ent{}
   EntFF{}
   Stop{}
+  Rest{mark: U32, acc: List<&2, U32>}
 
 # parser state. kind 1 is a baseline frame. bad 1 rejects the file.
 type St is Data:
@@ -2073,6 +2076,337 @@ def decode.run(frame: Frame, scan: Scan, tabs: Tabs, ent: List<&2, U32>, +ri: U3
     case Frame{+w, +h, _nf, _ids, _hs, _vs, _tq, _hmax, _vmax}:
       decode.run.n(Bool.or(U32.is_eq(w, 0), U32.is_eq(h, 0)), w, h, frame, scan, tabs, ent, ri, rgb)
 
+# ---- files of several scans (T.81 B.2.3, E.2) ----
+# A sequential frame may code its components over several scans, each holding one component (non-interleaved, A.2.2)
+# or several (interleaved, A.2.3), with tables and a restart interval redefined between them (B.2.4). The walk keeps
+# each scan with the tables in force when it was read (decode.chain); the passes below decode them in file order
+# onto the frame's planes. Every frame component is in exactly one scan, and a scan's components are in the frame's
+# order (B.2.3); anything else is refused.
+
+# a scan read: its header, the tables and restart interval it was read with, and its entropy-coded bytes in file order
+type Pass is Data:
+  Pass{scan: Scan, tabs: Tabs, ent: List<&2, U32>, ri: U32}
+
+# the bit of frame component ii in a mask of components (a frame has at most 3)
+def decode.bit(+ii: U32) -> U32:
+  match ii:
+    case 0:
+      1
+    case 1:
+      2
+    case 2:
+      4
+    case 3:
+      8
+    case _:
+      0
+
+# the position of want in xs, 255 when it is absent. eq says the element before xs was want, and ii counts the
+# elements before it (as decode.index, which gives 0 for an absent want)
+def decode.pos(xs: List<&2, U32>, eq: Bool, +want: U32, +ii: U32) -> U32:
+  match xs:
+    case Nil{}:
+      match eq:
+        case True{}:
+          ii
+        case False{}:
+          255
+    case +n <> t:
+      match eq:
+        case True{}:
+          +_d = decode.drop(n <> t)
+          ii
+        case False{}:
+          decode.pos(t, U32.is_eq(n, want), want, decode.index.add(U32.is_eq(n, want), ii))
+
+# the frame position of each scan component
+def decode.ix(sids: List<&2, U32>, +ids: List<&2, U32>) -> List<&2, U32>:
+  match sids:
+    case Nil{}:
+      []
+    case +sid <> rest:
+      decode.pos(ids, False{}, sid, 0) <> decode.ix(rest, ids)
+
+# the components of a scan as a mask over the frame's, 0 when one is not in the frame or they are not in the frame's
+# order, each after the one before (B.2.3); lo is the least position the next may have
+def decode.ix.mask(ix: List<&2, U32>, ok: Bool, +lo: U32, +nf: U32, +acc: U32) -> U32:
+  match ix:
+    case Nil{}:
+      match ok:
+        case True{}:
+          acc
+        case False{}:
+          0
+    case +ii <> rest:
+      decode.ix.mask(rest, Bool.and(ok, Bool.and(U32.is_ge(ii, lo), U32.is_lt(ii, nf))), (ii + 1 : U32), nf,
+        U32.or(acc, decode.bit(ii)))
+
+# the data units in one MCU of an interleaved scan: hi * vi for each of its components (A.2.3)
+def decode.units(ix: List<&2, U32>, +hs: List<&2, U32>, +vs: List<&2, U32>, +acc: U32) -> U32:
+  match ix:
+    case Nil{}:
+      acc
+    case +ii <> rest:
+      decode.units(rest, hs, vs, (acc + decode.at(hs, ii) * decode.at(vs, ii) : U32))
+
+# the frame a scan is decoded over. An interleaved scan keeps the frame: its MCUs hold each of its components' hi * vi
+# blocks (A.2.3). A scan of one component has one block to an MCU, in raster order over that component's blocks
+# (A.2.2): the frame of that component alone, sampled 1 by 1, with hmax / hi by vmax / vi pixels to a sample.
+def decode.pass.frame(
+  one: Bool,
+  +ww: U32,
+  +hh: U32,
+  +nf: U32,
+  +ids: List<&2, U32>,
+  hs: List<&2, U32>,
+  vs: List<&2, U32>,
+  tq: List<&2, U32>,
+  +hmax: U32,
+  +vmax: U32,
+  +sid: U32,
+  +fi: U32
+) -> Frame:
+  match one:
+    case False{}:
+      +_s = (sid - sid : U32)
+      Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}
+    case True{}:
+      +_d = decode.drop(ids)
+      +_n = (nf - nf : U32)
+      Frame{ww, hh, 1, [sid], [1], [1], [decode.at(tq, fi)], U32.div(hmax, decode.geom.nz(decode.at(hs, fi))),
+        U32.div(vmax, decode.geom.nz(decode.at(vs, fi)))}
+
+# the units in an MCU of a scan: one for a scan of one component, else its components' hi * vi
+def decode.pass.units(one: Bool, +ix: List<&2, U32>, +hs: List<&2, U32>, +vs: List<&2, U32>) -> U32:
+  match one:
+    case True{}:
+      1
+    case False{}:
+      decode.units(ix, hs, vs, 0)
+
+# the blocks of a scan: ceil(w / 8 hmax) * ceil(h / 8 vmax) MCUs over the frame it is decoded over, units to an MCU
+def decode.pass.nb(frame: Frame, +units: U32) -> U32:
+  match frame:
+    case Frame{+w, +h, _nf, _ids, _hs, _vs, _tq, +hmax, +vmax}:
+      (decode.ceil(w, (hmax * 8 : U32)) * decode.ceil(h, (vmax * 8 : U32)) * units : U32)
+
+# how a scan is decoded over a frame: the frame position of each of its components, those components as a mask (0
+# when the scan is not one decode.passes.ok takes), the frame it is decoded over, and its blocks
+type Plan is Data:
+  Plan{ix: List<&2, U32>, mask: U32, frame: Frame, nb: U32}
+
+def decode.frame.ids(frame: Frame) -> List<&2, U32>:
+  match frame:
+    case Frame{_w, _h, _nf, +ids, _hs, _vs, _tq, _hmax, _vmax}:
+      ids
+
+def decode.plan.go(+ns: U32, sids: List<&2, U32>, +ix: List<&2, U32>, frame: Frame) -> Plan:
+  match frame:
+    case Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
+      +one = U32.is_eq(ns, 1)
+      +pf = decode.pass.frame(one, w, h, nf, ids, hs, vs, tq, hmax, vmax, decode.at(sids, 0), decode.at(ix, 0))
+      Plan{ix, decode.ix.mask(ix, True{}, 0, nf, 0), pf, decode.pass.nb(pf, decode.pass.units(one, ix, hs, vs))}
+
+def decode.plan(scan: Scan, +frame: Frame) -> Plan:
+  match scan:
+    case Scan{+ns, +sids, _td, _ta, _ss, _se, _ah}:
+      decode.plan.go(ns, sids, decode.ix(sids, decode.frame.ids(frame)), frame)
+
+def decode.plan.mask(pl: Plan) -> U32:
+  match pl:
+    case Plan{_ix, +mask, _frame, _nb}:
+      mask
+
+def decode.plan.nb(pl: Plan) -> U32:
+  match pl:
+    case Plan{_ix, _mask, _frame, +nb}:
+      nb
+
+def decode.plan.ix(pl: Plan) -> List<&2, U32>:
+  match pl:
+    case Plan{+ix, _mask, _frame, _nb}:
+      ix
+
+def decode.plan.frame(pl: Plan) -> Frame:
+  match pl:
+    case Plan{_ix, _mask, +frame, _nb}:
+      frame
+
+def decode.frame.nf(frame: Frame) -> U32:
+  match frame:
+    case Frame{_w, _h, +nf, _ids, _hs, _vs, _tq, _hmax, _vmax}:
+      nf
+
+# whether every pass has its components in the frame, in the frame's order, none of them in an earlier pass, and
+# entropy-coded bytes enough for its blocks (two bits a block, as decode.fits asks of a single scan); and, at the end,
+# every frame component in some pass. mask holds the components of the passes before.
+def decode.passes.ok(passes: List<&2, Pass>, +frame: Frame, +mask: U32, ok: Bool) -> Bool:
+  match passes:
+    case Nil{}:
+      Bool.and(ok, U32.is_eq(mask, (decode.bit(decode.frame.nf(frame)) - 1 : U32)))
+    case Pass{scan, _tabs, ent, _ri} <> rest:
+      +pl = decode.plan(scan, frame)
+      +bits = decode.plan.mask(pl)
+      decode.passes.ok(rest, frame, U32.or(mask, bits), Bool.and(ok, Bool.and(Bool.not(U32.is_eq(bits, 0)),
+        Bool.and(U32.is_eq(U32.and(mask, bits), 0), Nat.is_le(decode.need.bits(U32.to_nat(decode.plan.nb(pl))),
+        decode.ent.bits(ent))))))
+
+# the block run of a pass, as decode.blocks runs a single scan, painting each block onto the plane of its frame
+# component (ix gives the frame position of each scan component). Gives 0 or 1 for whether every block decoded, and
+# the planes.
+def decode.pass.blocks(
+  left: Nat,
+  live: Bool,
+  blk: Blk,
+  +ctrl: Ctrl,
+  +preds: Preds,
+  +frame: Frame,
+  +scan: Scan,
+  +tabs: Tabs,
+  +ri: U32,
+  +ix: List<&2, U32>,
+  yy: Array<U32>,
+  cb: Array<U32>,
+  cr: Array<U32>,
+  +ok: U32
+) -> U32 & Array<U32> & Array<U32> & Array<U32>:
+  match left:
+    case 0n:
+      match live:
+        case _live:
+          match blk:
+            case Blk{+samples, _bits, _pred, +bok}:
+              +gg = decode.geom(ctrl, frame, scan)
+              +fi = decode.at(ix, decode.ctrl.comp(ctrl))
+              ((ok * bok : U32), decode.paint.use(gg, U32.is_eq(fi, 0), samples, yy), decode.paint.use(gg,
+                U32.is_eq(fi, 1), samples, cb), decode.paint.use(gg, U32.is_eq(fi, 2), samples, cr))
+    case 1n+p:
+      match live:
+        case False{}:
+          +_b = blk
+          (0, yy, cb, cr)
+        case True{}:
+          match blk:
+            case Blk{+samples, +bits, +pred, +bok}:
+              match ctrl:
+                case Ctrl{+comp, _bi, _mx, _my, _mcu, _rst}:
+                  +av = decode.adv(ctrl, frame, scan, ri)
+                  +gg = decode.geom(ctrl, frame, scan)
+                  +fi = decode.at(ix, comp)
+                  +nx = decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri)
+                  decode.pass.blocks(p, decode.blk.live(nx), nx, decode.adv.ctrl(av), decode.preds.next(
+                    decode.adv.duef(av), preds, comp, pred), frame, scan, tabs, ri, ix, decode.paint.use(gg,
+                    U32.is_eq(fi, 0), samples, yy), decode.paint.use(gg, U32.is_eq(fi, 1), samples, cb),
+                    decode.paint.use(gg, U32.is_eq(fi, 2), samples, cr), (ok * bok : U32))
+
+# the nn blocks of a pass from its first, predictors and restart count starting afresh (E.2.4, F.2.1.3.1)
+def decode.pass.start(
+  nn: Nat,
+  bits: Bits,
+  +frame: Frame,
+  +scan: Scan,
+  +tabs: Tabs,
+  +ri: U32,
+  +ix: List<&2, U32>,
+  yy: Array<U32>,
+  cb: Array<U32>,
+  cr: Array<U32>
+) -> U32 & Array<U32> & Array<U32> & Array<U32>:
+  match nn:
+    case 0n:
+      (1, yy, cb, cr)
+    case 1n+p:
+      +b0 = decode.block.of(bits, 0, decode.pred.zero(), frame, scan, tabs)
+      decode.pass.blocks(p, decode.blk.live(b0), b0, Ctrl{0, 0, 0, 0, 0, 0}, decode.pred.zero(), frame, scan, tabs, ri,
+        ix, yy, cb, cr, 1)
+
+# the planes after one more pass: ok is 0 once a pass has failed, and a failed pass stops the passes after it
+def decode.pass.then(
+  +ok: U32,
+  got: U32 & Array<U32> & Array<U32> & Array<U32>
+) -> U32 & Array<U32> & Array<U32> & Array<U32>:
+  (bok, yy, cb, cr) = got
+  ((ok * bok : U32), yy, cb, cr)
+
+def decode.pass.run(
+  live: Bool,
+  pass: Pass,
+  frame: Frame,
+  +ok: U32,
+  yy: Array<U32>,
+  cb: Array<U32>,
+  cr: Array<U32>
+) -> U32 & Array<U32> & Array<U32> & Array<U32>:
+  match live:
+    case False{}:
+      +_p = pass
+      (0, yy, cb, cr)
+    case True{}:
+      match pass:
+        case Pass{+scan, +tabs, +ent, +ri}:
+          +pl = decode.plan(scan, frame)
+          decode.pass.then(ok, decode.pass.start(U32.to_nat(decode.plan.nb(pl)), Bits{0, 1, 0, ent},
+            decode.plan.frame(pl), scan, tabs, ri, decode.plan.ix(pl), yy, cb, cr))
+
+def decode.pass.ok.at(
+  +ok: U32,
+  pass: Pass,
+  +frame: Frame,
+  yy: Array<U32>,
+  cb: Array<U32>,
+  cr: Array<U32>
+) -> U32 & Array<U32> & Array<U32> & Array<U32>:
+  decode.pass.run(Bool.not(U32.is_eq(ok, 0)), pass, frame, ok, yy, cb, cr)
+
+# a pass painted onto the planes got holds, with the ok flag before it
+def decode.pass.at(
+  pass: Pass,
+  +frame: Frame,
+  got: U32 & Array<U32> & Array<U32> & Array<U32>
+) -> U32 & Array<U32> & Array<U32> & Array<U32>:
+  (ok, yy, cb, cr) = got
+  decode.pass.ok.at(ok, pass, frame, yy, cb, cr)
+
+# the passes painted in file order onto the planes, got holding the ok flag and the planes so far
+def decode.passes.go(
+  passes: List<&2, Pass>,
+  +frame: Frame,
+  got: U32 & Array<U32> & Array<U32> & Array<U32>
+) -> U32 & Array<U32> & Array<U32> & Array<U32>:
+  match passes:
+    case Nil{}:
+      got
+    case pass <> rest:
+      decode.passes.go(rest, frame, decode.pass.at(pass, frame, got))
+
+def decode.passes.done(got: U32 & Array<U32> & Array<U32> & Array<U32>, frame: Frame, rgb: Bool) -> Maybe<&2, Pic>:
+  (ok, yy, cb, cr) = got
+  decode.done(ok, frame, rgb, yy, cb, cr)
+
+def decode.passes.fit(
+  fit: Bool,
+  +frame: Frame,
+  passes: List<&2, Pass>,
+  +ww: U32,
+  +hh: U32,
+  rgb: Bool
+) -> Maybe<&2, Pic>:
+  match fit:
+    case False{}:
+      None{}
+    case True{}:
+      decode.passes.done(decode.passes.go(passes, frame, (1, decode.plane((ww * hh : U32)), decode.plane((ww * hh :
+        U32)), decode.plane((ww * hh : U32)))), frame, rgb)
+
+# the picture of a frame coded over the scans passes: none for an empty frame (DNL is not read), one of more than 2^31
+# points, or scans decode.passes.ok refuses; else each pass painted in turn. rgb as for decode.run.
+def decode.passes(frame: Frame, +passes: List<&2, Pass>, rgb: Bool) -> Maybe<&2, Pic>:
+  match frame:
+    case Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
+      +frame = {Frame{w, h, nf, ids, hs, vs, tq, hmax, vmax} : Frame}
+      decode.passes.fit(Bool.and(Bool.not(Bool.or(U32.is_eq(w, 0), U32.is_eq(h, 0))), Bool.and(decode.area.ok(w, h),
+        decode.passes.ok(passes, frame, 0, True{}))), frame, passes, w, h, rgb)
+
 # the file opened with SOI (bit 0 of what decode.facts reads)
 def decode.facts.soi(+facts: U32) -> Bool:
   U32.is_eq(U32.and(facts, 1), 1)
@@ -2132,19 +2466,6 @@ def decode.finish.ok(
         case True{}:
           decode.run(frame, scan, tabs, List.reverse(&2, U32, ent), ri, rgb)
 
-# the phases a walk may end in and still hand its scan on: EOI read (Stop), or the bytes ended inside the
-# entropy-coded data, which libjpeg also takes as the end of the image (with a warning)
-def decode.ph.end(phase: Phase) -> Bool:
-  match phase:
-    case Stop{}:
-      True{}
-    case Ent{}:
-      True{}
-    case EntFF{}:
-      True{}
-    case _:
-      False{}
-
 def decode.finish.ph(
   done: Bool,
   +frame: Frame,
@@ -2162,12 +2483,6 @@ def decode.finish.ph(
         ent, ri, decode.rgb.of(facts, frame))
     case False{}:
       None{}
-
-# the picture of a finished walk, facts being what decode.facts read of the file's markers
-def decode.finish(st: St, +facts: U32) -> Maybe<&2, Pic>:
-  match st:
-    case St{+phase, +frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
-      decode.finish.ph(decode.ph.end(phase), frame, scan, tabs, ent, ri, kind, bad, facts)
 
 def decode.max.b(gt: Bool, +aa: U32, +bb: U32) -> U32:
   match gt:
@@ -2958,6 +3273,25 @@ def decode.step.pay(
     case 1n+p:
       decode.step.last(p, bb, mark, acc, frame, scan, tabs, ent, ri, kind, bad)
 
+# a marker other than RSTn and EOI inside a scan ends the scan: after a frame header the walk keeps the bytes after
+# it (Rest); before one the file is refused
+def decode.ent.next(
+  framed: Bool,
+  +bb: U32,
+  frame: Frame,
+  scan: Scan,
+  tabs: Tabs,
+  ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32
+) -> St:
+  match framed:
+    case True{}:
+      St{Rest{bb, []}, frame, scan, tabs, ent, ri, kind, bad}
+    case False{}:
+      St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
+
 def decode.ent.rst.b(
   rst: Bool,
   +bb: U32,
@@ -2973,7 +3307,7 @@ def decode.ent.rst.b(
     case True{}:
       St{Ent{}, frame, scan, tabs, bb <> (255 <> ent), ri, kind, bad}
     case False{}:
-      St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
+      decode.ent.next(U32.is_eq(kind, 1), bb, frame, scan, tabs, ent, ri, kind, bad)
 
 # a byte of the entropy-coded data: 255 may open a stuffed pair or a marker, any other byte is data.
 # Compares with U32.is_eq, not a literal pattern, so a law reaches a symbolic byte.
@@ -3036,6 +3370,8 @@ def decode.step.ph(
           decode.ent.rst.b(decode.between(bb, 208, 215), bb, frame, scan, tabs, ent, ri, kind, bad)
     case Stop{}:
       St{Stop{}, frame, scan, tabs, ent, ri, kind, bad}
+    case Rest{+mark, +acc}:
+      St{Rest{mark, bb <> acc}, frame, scan, tabs, ent, ri, kind, bad}
 
 def decode.step(+bb: U32, st: St) -> St:
   match st:
@@ -3048,6 +3384,119 @@ def decode.walk(xs: List<&2, U32>, st: St) -> St:
       st
     case b <> t:
       decode.walk(t, decode.step(b, st))
+
+# the scans of a file: whether every walk read them cleanly, and the passes, last first
+type Chain is Data:
+  Chain{ok: Bool, passes: List<&2, Pass>}
+
+# a walk that read one frame header and no error
+def decode.st.good(st: St) -> Bool:
+  match st:
+    case St{_phase, _frame, _scan, _tabs, _ent, _ri, +kind, +bad}:
+      Bool.and(U32.is_eq(kind, 1), U32.is_eq(bad, 0))
+
+def decode.scan.ns(scan: Scan) -> U32:
+  match scan:
+    case Scan{+ns, _sids, _td, _ta, _ss, _se, _ah}:
+      ns
+
+# the passes with the last walk's scan, unless that walk read no SOS (only other segments, then EOI): none says its
+# component count is 0, asked with U32.is_eq so a law reaches a symbolic count
+def decode.chain.last(
+  none: Bool,
+  scan: Scan,
+  tabs: Tabs,
+  ent: List<&2, U32>,
+  +ri: U32,
+  passes: List<&2, Pass>
+) -> List<&2, Pass>:
+  match none:
+    case True{}:
+      match ent:
+        case Nil{}:
+          passes
+        case +e <> et:
+          Pass{scan, tabs, List.reverse(&2, U32, e <> et), ri} <> passes
+    case False{}:
+      Pass{scan, tabs, List.reverse(&2, U32, ent), ri} <> passes
+
+# the scans of the walks from st on, good saying st read cleanly: a walk that ended at a marker after its scan (Rest)
+# hands on a pass of its scan, with the tables and restart interval it read it with, and the bytes after the marker
+# are walked on from that marker with the same frame, tables and restart interval (T.81 B.2.4: tables may be
+# redefined between scans). A walk ending where a scan may end is the last; one ending anywhere else, or with an error
+# or a second frame header, refuses the file.
+def decode.chain(left: Nat, good: Bool, st: St, passes: List<&2, Pass>) -> Chain:
+  match left:
+    case 0n:
+      Chain{False{}, []}
+    case 1n+p:
+      match good:
+        case False{}:
+          Chain{False{}, []}
+        case True{}:
+          match st:
+            case St{phase, +frame, +scan, +tabs, +ent, +ri, _kind, _bad}:
+              match phase:
+                case Rest{+mark, +acc}:
+                  +nx = decode.walk(List.reverse(&2, U32, acc), decode.mark(mark, frame, decode.scan0(), tabs, [], ri,
+                    1, 0))
+                  decode.chain(p, decode.st.good(nx), nx, Pass{scan, tabs, List.reverse(&2, U32, ent), ri} <> passes)
+                case Stop{}:
+                  Chain{True{}, decode.chain.last(U32.is_eq(decode.scan.ns(scan), 0), scan, tabs, ent, ri, passes)}
+                case Ent{}:
+                  Chain{True{}, decode.chain.last(U32.is_eq(decode.scan.ns(scan), 0), scan, tabs, ent, ri, passes)}
+                case EntFF{}:
+                  Chain{True{}, decode.chain.last(U32.is_eq(decode.scan.ns(scan), 0), scan, tabs, ent, ri, passes)}
+                case _:
+                  Chain{False{}, []}
+
+def decode.multi.go(ok: Bool, passes: List<&2, Pass>, frame: Frame, rgb: Bool) -> Maybe<&2, Pic>:
+  match ok:
+    case False{}:
+      +_p = passes
+      None{}
+    case True{}:
+      decode.passes(frame, List.reverse(&2, Pass, passes), rgb)
+
+# the picture of a file of several scans: its chain of walks read cleanly from SOI, then its passes
+def decode.multi(chain: Chain, +frame: Frame, +facts: U32) -> Maybe<&2, Pic>:
+  match chain:
+    case Chain{+ok, +passes}:
+      decode.multi.go(Bool.and(ok, decode.facts.soi(facts)), passes, frame, decode.rgb.of(facts, frame))
+
+# the picture of a finished walk, facts being what decode.facts read of the file's markers. A walk that ended at a
+# marker after its scan reads on (decode.chain). One that read EOI (Stop), or whose bytes ended inside the
+# entropy-coded data, which libjpeg also takes as the end of the image (with a warning), hands its scan on; any other
+# has no picture.
+def decode.finish.at(
+  phase: Phase,
+  +frame: Frame,
+  +scan: Scan,
+  +tabs: Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32,
+  +facts: U32
+) -> Maybe<&2, Pic>:
+  match phase:
+    case Rest{+mark, +acc}:
+      +st = {St{Rest{mark, acc}, frame, scan, tabs, ent, ri, kind, bad} : St}
+      decode.multi(decode.chain(1n+1n+List.length(&2, U32, acc), decode.st.good(st), st, []), frame, facts)
+    case Stop{}:
+      decode.finish.ph(True{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case Ent{}:
+      decode.finish.ph(True{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case EntFF{}:
+      decode.finish.ph(True{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case _:
+      decode.finish.ph(False{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+
+# the picture of a finished walk, facts being what decode.facts read of the file's markers
+def decode.finish(st: St, +facts: U32) -> Maybe<&2, Pic>:
+  match st:
+    case St{+phase, +frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
+      decode.finish.at(phase, frame, scan, tabs, ent, ri, kind, bad, facts)
 
 # the JPEG start-of-image marker, FF D8
 def soi() -> List<&2, U32>:

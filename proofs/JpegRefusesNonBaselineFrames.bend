@@ -350,6 +350,8 @@ def ph.norm(ph: Jpeg.Phase) -> Jpeg.Phase:
       Jpeg.Stop{}
     case Jpeg.EntFF{}:
       Jpeg.Stop{}
+    case Jpeg.Rest{_mark, _acc}:
+      Jpeg.Stop{}
 
 # a phase between segments is its own ph.norm
 def ph.norm.eq(ph: Jpeg.Phase, h_ok: {M1.ph.ok(ph) == True{} : Bool}) -> {ph == ph.norm(ph) : Jpeg.Phase}:
@@ -370,6 +372,8 @@ def ph.norm.eq(ph: Jpeg.Phase, h_ok: {M1.ph.ok(ph) == True{} : Bool}) -> {ph == 
       Empty.absurd({Jpeg.Pay{mark, left, acc} == Jpeg.Stop{} : Jpeg.Phase}, M1.false_true(h_ok))
     case Jpeg.EntFF{}:
       Empty.absurd({Jpeg.EntFF{} == Jpeg.Stop{} : Jpeg.Phase}, M1.false_true(h_ok))
+    case Jpeg.Rest{mark, acc}:
+      Empty.absurd({Jpeg.Rest{mark, acc} == Jpeg.Stop{} : Jpeg.Phase}, M1.false_true(h_ok))
 
 # a segment marker starts its length field
 def mk.mark(
@@ -427,6 +431,26 @@ def mk.mark(
     case Laws.MApp15{}:
       {==}
 
+# kind 0 is not 1
+def k0.not1(+kind: U32, hk: {U32.is_eq(kind, 0) == True{} : Bool}) -> {U32.is_eq(kind, 1) == False{} : Bool}:
+  Equal.cong(U32, Bool, kk => U32.is_eq(kk, 1), kind, 0, M1.ueq(kind, 0, hk))
+
+# a marker other than RSTn and EOI inside a scan, before any frame header, stops the walk on an error
+def ent.none(
+  +bb: U32,
+  +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
+  +tabs: Jpeg.Tabs,
+  +ent: List<&2, U32>,
+  +ri: U32,
+  +kind: U32,
+  +bad: U32,
+  hk: {U32.is_eq(kind, 0) == True{} : Bool}
+) -> {Jpeg.decode.ent.next(U32.is_eq(kind, 1), bb, frame, scan, tabs, ent, ri, kind, bad)
+  == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1} : Jpeg.St}:
+  Equal.cong(Bool, Jpeg.St, kk => Jpeg.decode.ent.next(kk, bb, frame, scan, tabs, ent, ri, kind, bad),
+    U32.is_eq(kind, 1), False{}, k0.not1(kind, hk))
+
 # a segment marker inside a scan stops the walk on an error
 def mk.ent(
   mk: Laws.Mk,
@@ -436,52 +460,53 @@ def mk.ent(
   +ent: List<&2, U32>,
   +ri: U32,
   +kind: U32,
-  +bad: U32
+  +bad: U32,
+  hk: {U32.is_eq(kind, 0) == True{} : Bool}
 ) -> {Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad)
   == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1} : Jpeg.St}:
   match mk:
     case Laws.MDht{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MDqt{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MSos{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MDri{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MCom{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp0{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp1{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp2{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp3{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp4{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp5{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp6{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp7{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp8{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp9{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp10{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp11{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp12{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp13{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp14{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.MApp15{}:
-      {==}
+      ent.none(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad, hk)
 
 # a segment's reader leaves kind as it found it, and the walk seeking, in a scan, or stopped
 def mk.disp(
@@ -585,32 +610,33 @@ def sofn.ent(
   +ent: List<&2, U32>,
   +ri: U32,
   +kind: U32,
-  +bad: U32
+  +bad: U32,
+  hk: {U32.is_eq(kind, 0) == True{} : Bool}
 ) -> {Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad)
   == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1} : Jpeg.St}:
   match sn:
     case Laws.Sof2{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.Sof3{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.Sof5{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.Sof6{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.Sof7{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.Sof9{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.Sof10{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.Sof11{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.Sof13{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.Sof14{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
     case Laws.Sof15{}:
-      {==}
+      ent.none(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad, hk)
 
 # what a segment's walk leaves: the kind it found and a phase between segments
 def seg.Goal(
@@ -645,7 +671,7 @@ def seg.ph(
   +kind: U32,
   +bad: U32,
   h_fit: Laws.seg.Fits(hi, lo, body),
-  h_inv: {M1.inv(Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}) == True{} : Bool}
+  +h_inv: {M1.inv(Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}) == True{} : Bool}
 ) -> seg.Goal(ph, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad):
   match ph:
     case Jpeg.Seek{}:
@@ -682,7 +708,7 @@ def seg.ph(
         Equal.cong(Jpeg.St, Bool, ss => M1.inv(ss), Jpeg.decode.walk(tail, Jpeg.decode.step(mm, ff)), stop,
           Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, Jpeg.decode.step(mm, ff)), Jpeg.decode.walk(tail, stop), stop,
             Equal.cong(Jpeg.St, Jpeg.St, ss => Jpeg.decode.walk(tail, ss), Jpeg.decode.step(mm, ff), stop,
-              mk.ent(mk, frame, scan, tabs, ent, ri, kind, bad)),
+              mk.ent(mk, frame, scan, tabs, ent, ri, kind, bad, h_inv)),
             stop.walk(tail, frame, scan, tabs, ent, ri, kind, 1))), h_inv)
     case Jpeg.Mark{}:
       Empty.absurd(seg.Goal(Jpeg.Mark{}, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad),
@@ -698,6 +724,9 @@ def seg.ph(
         M1.false_true(h_inv))
     case Jpeg.EntFF{}:
       Empty.absurd(seg.Goal(Jpeg.EntFF{}, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad),
+        M1.false_true(h_inv))
+    case Jpeg.Rest{mark, acc}:
+      Empty.absurd(seg.Goal(Jpeg.Rest{mark, acc}, mk, hi, lo, body, frame, scan, tabs, ent, ri, kind, bad),
         M1.false_true(h_inv))
 
 # a segment walked from a state between segments that read no frame header ends in one
@@ -751,7 +780,7 @@ def sofn.ph(
   +kind: U32,
   +bad: U32,
   +facts: U32,
-  h_inv: {M1.inv(Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}) == True{} : Bool}
+  +h_inv: {M1.inv(Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}) == True{} : Bool}
 ) -> fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}, facts):
   match ph:
     case Jpeg.Seek{}:
@@ -760,7 +789,7 @@ def sofn.ph(
         2, facts))
     case Jpeg.Ent{}:
       fin.after(rest, Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad),
-        frame, scan, tabs, ent, ri, kind, 1, facts, sofn.ent(sn, frame, scan, tabs, ent, ri, kind, bad),
+        frame, scan, tabs, ent, ri, kind, 1, facts, sofn.ent(sn, frame, scan, tabs, ent, ri, kind, bad, h_inv),
         fin.bad(frame, scan, tabs, ent, ri, kind, facts))
     case Jpeg.Stop{}:
       fin.after(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad},
@@ -785,6 +814,10 @@ def sofn.ph(
     case Jpeg.EntFF{}:
       Empty.absurd(fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{Jpeg.EntFF{}, frame, scan, tabs, ent, ri,
         kind, bad}, facts),
+        M1.false_true(h_inv))
+    case Jpeg.Rest{mark, acc}:
+      Empty.absurd(fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{Jpeg.Rest{mark, acc}, frame, scan, tabs, ent,
+        ri, kind, bad}, facts),
         M1.false_true(h_inv))
 
 # after the segments, a frame header other than SOF0 and SOF1 decodes to none, whatever the state's phase
@@ -859,13 +892,14 @@ def prec.mk(
   +ent: List<&2, U32>,
   +ri: U32,
   +kind: U32,
-  +bad: U32
+  +bad: U32,
+  hk: {U32.is_eq(kind, 0) == True{} : Bool}
 ) -> PrecMk(Laws.sof.byte(ext), body, frame, scan, tabs, ent, ri, kind, bad):
   match ext:
     case True{}:
-      ({==}, ({==}, {==}))
+      ({==}, ({==}, ent.none(Laws.sof.byte(ext), frame, scan, tabs, ent, ri, kind, bad, hk)))
     case False{}:
-      ({==}, ({==}, {==}))
+      ({==}, ({==}, ent.none(Laws.sof.byte(ext), frame, scan, tabs, ent, ri, kind, bad, hk)))
 
 # after the segments, an SOF0 or SOF1 segment whose precision is not 8 decodes to none
 def prec.ph(
@@ -959,6 +993,10 @@ def prec.ph(
       fin.after(prec.bytes(mm, hi, lo, pp, body, rest), Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad},
         frame, scan, tabs, ent, ri, kind, bad, facts, {==}, fin.none(frame, scan, tabs, ent, ri, kind, bad, facts,
           Empty.absurd({U32.is_eq(kind, 0) == True{} : Bool}, M1.false_true(h_inv))))
+    case Jpeg.Rest{_mark, _acc}:
+      fin.after(prec.bytes(mm, hi, lo, pp, body, rest), Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, bad},
+        frame, scan, tabs, ent, ri, kind, bad, facts, {==}, fin.none(frame, scan, tabs, ent, ri, kind, bad, facts,
+          Empty.absurd({U32.is_eq(kind, 0) == True{} : Bool}, M1.false_true(h_inv))))
 
 # after the segments, an SOF0 or SOF1 segment whose precision is not 8 decodes to none, whatever the state's phase
 def prec.st(
@@ -987,7 +1025,8 @@ def prec.st(
           scan, tabs, ent, ri, kind, bad}), facts), ph, ph.norm(ph), ph.norm.eq(ph, M1.and_left(M1.ph.ok(ph),
           U32.is_eq(kind, 0), h_st))),
         prec.ph(ph, mm, hi, lo, pp, body, rest, frame, scan, tabs, ent, ri, kind, bad, facts, h_len, h_pp,
-          prec.mk(ext, pp <> body, frame, scan, tabs, ent, ri, kind, bad), h_st))
+          prec.mk(ext, pp <> body, frame, scan, tabs, ent, ri, kind, bad, M1.and_right(M1.ph.ok(ph),
+          U32.is_eq(kind, 0), h_st)), h_st))
 
 def Laws.jpeg_refuse_precision(segs, h_fit, ext, hi, lo, pp, body, h_len, h_pp, rest):
   lead.none(segs, prec.bytes(Laws.sof.byte(ext), hi, lo, pp, body, rest), h_fit,

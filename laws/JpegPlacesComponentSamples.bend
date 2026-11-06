@@ -9,7 +9,9 @@
 # the decoder keeps samples it 1 by 1, whatever factors 1 to 4 its SOF names;
 # a factor outside 1 to 4 (T.81 B.2.2) makes `decode_jpeg` none. The sample
 # values themselves are not proved: decoding them is trusted in
-# src/jpeg.bend. This covers every sampling layout the frame parser accepts.
+# src/jpeg.bend. This covers every sampling layout the frame parser accepts,
+# for a frame coded in one scan; a frame coded in several is read scan by scan
+# (laws/JpegReadsScansInTurn.bend).
 import Base
 import ../main.bend as Img
 import ../src/jpeg.bend as Jpeg
