@@ -469,6 +469,13 @@ def decode_png(+bytes: List<&2, U32>) -> Maybe<&2, Raster>:
 # is 2^28 samples or more: below that bound every count the encoder keeps is
 # exact and its one IDAT chunk is shorter than PNG's 2^31 - 1 byte limit, and
 # decode_png reads every encoding back (laws/PngRoundTrips.bend).
+#
+# Not compressed: every row has filter type None and the zlib stream is
+# stored (uncompressed) DEFLATE blocks, so a file is the h (k w + 1)
+# filtered bytes (k = 3 or 4 channels), 5 more bytes per 65535 of them, and
+# about 60 bytes of chunks. A 320x260 RGB picture is about 250 KB, where
+# zlib at level 6 makes about 33 KB of it. The round-trip proof rests on
+# the stored blocks; re-compress the file elsewhere when size matters.
 def encode_png(img: Raster) -> Maybe<&2, List<&2, U32>>:
   match img:
     case Raster{+w, +h, +px}:

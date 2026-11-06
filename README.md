@@ -63,7 +63,15 @@ reading other encoders' files, is said on the code that assumes it. The plan
 and the audit behind them are in [docs/rfc/ezimg-spec.md](docs/rfc/ezimg-spec.md).
 
 Scope today: PNG decode reads 8-bit colour types 0, 2, 3, 4 and 6 without
-interlace, and refuses anything else; PNG encode writes colour type 2 or 6.
-JPEG decode reads baseline sequential frames and refuses progressive and
-arithmetic ones; JPEG encode writes baseline 4:4:4. Full codec conformance is
-not claimed.
+interlace, and refuses anything else; PNG encode writes colour type 2 or 6,
+for rasters of fewer than 2^28 samples. JPEG decode reads baseline
+sequential frames and refuses progressive and arithmetic ones; JPEG encode
+writes baseline 4:4:4. Full codec conformance is not claimed.
+
+PNG encode does not compress. Every row has filter type None and the zlib
+stream is stored (uncompressed) DEFLATE blocks, so a file is about the size
+of its samples: `h * (k * w + 1)` bytes for `k` = 3 (RGB) or 4 (RGBA)
+channels, plus 5 bytes per 65535 of them and about 60 bytes of chunks. A
+320x260 RGB picture is about 250 KB, where zlib at level 6 makes about
+33 KB of the same picture. The round-trip proof rests on the stored blocks;
+re-compress the file with another tool when size matters.
