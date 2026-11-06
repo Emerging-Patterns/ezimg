@@ -124,6 +124,116 @@ def anc.step(
     Png.tag.ihdr(), hb, {==}), neq(tt, Png.tag.idat(), hb, {==}), neq(tt, Png.tag.iend(), hb, {==}), neq(tt,
     Png.tag.plte(), hb, {==}), ht, hb)
 
+# the walker's dispatch on tRNS after an IDAT: the chunk is ignored and closes the IDAT run
+def anc.step.trns(
+  zt: Bool,
+  +tt: U32,
+  +data: List<&2, U32>,
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  +plte: Maybe<&2, List<&2, U32>>,
+  +trns: Maybe<&2, List<&2, U32>>,
+  +idat: List<&2, U32>,
+  +done: Bool,
+  +hb: {Laws.spec.anc.bit(tt) == True{} : Bool},
+  +ez: {U32.is_eq(tt, 1951551059) == zt : Bool}
+) -> {Png.png.apply(tt, data, sd(ww, hh, cc, plte, trns, idat, True{}, done)) == Png.NMore{sd(ww, hh, cc, plte, trns,
+  idat, True{}, Bool.or(True{}, done))} : Png.Nx}:
+  match zt:
+    case False{}:
+      anc.step(tt, data, ww, hh, cc, plte, trns, idat, True{}, done, hb, ez)
+    case True{}:
+      Equal.trans(Png.Nx, Png.png.apply(tt, data, sd(ww, hh, cc, plte, trns, idat, True{}, done)),
+        Png.png.apply(1951551059, data, sd(ww, hh, cc, plte, trns, idat, True{}, done)),
+        Png.NMore{sd(ww, hh, cc, plte, trns, idat, True{}, Bool.or(True{}, done))},
+        Equal.cong(U32, Png.Nx, uu => Png.png.apply(uu, data, sd(ww, hh, cc, plte, trns, idat, True{}, done)), tt,
+          1951551059, M1.ueq(tt, 1951551059, ez)),
+        {==})
+
+# an ancillary chunk after the IDAT chunks, tRNS too when an IDAT came: the walker closes the run and goes on
+def anc.step.late(
+  sid: Bool,
+  +tt: U32,
+  +data: List<&2, U32>,
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  +plte: Maybe<&2, List<&2, U32>>,
+  +trns: Maybe<&2, List<&2, U32>>,
+  +idat: List<&2, U32>,
+  +done: Bool,
+  +hb: {Laws.spec.anc.bit(tt) == True{} : Bool},
+  ht: Laws.spec.trns.after(sid, tt)
+) -> {Png.png.apply(tt, data, sd(ww, hh, cc, plte, trns, idat, sid, done)) == Png.NMore{sd(ww, hh, cc, plte, trns,
+  idat, sid, Bool.or(sid, done))} : Png.Nx}:
+  match sid:
+    case False{}:
+      anc.step(tt, data, ww, hh, cc, plte, trns, idat, False{}, done, hb, ht)
+    case True{}:
+      anc.step.trns(U32.is_eq(tt, 1951551059), tt, data, ww, hh, cc, plte, trns, idat, done, hb, {==})
+
+# ancillary chunks after the IDAT chunks: the walker skips them, closing the IDAT run if one came
+def anc.walk.late(
+  cs: List<&2, Laws.Anc>,
+  +rest: List<&2, U32>,
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  +plte: Maybe<&2, List<&2, U32>>,
+  +trns: Maybe<&2, List<&2, U32>>,
+  +idat: List<&2, U32>,
+  +sid: Bool,
+  +done: Bool,
+  hc: Laws.spec.ancs.after(sid, cs)
+) -> {Png.png.go(Laws.spec.ancs(cs, rest), Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh, cc, plte, trns, idat, sid,
+  done)) == Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh, cc, plte, trns, idat, sid, M1.dn(cs, sid,
+  done))) : Maybe<&2, Png.Pic>}:
+  match cs:
+    case Nil{}:
+      {==}
+    case Laws.Anc{+tt, +data} <> +tl:
+      (hb, (ht, (hf, htl))) = hc
+      +r1 = Laws.spec.ancs(tl, rest)
+      +pg = sd(ww, hh, cc, plte, trns, idat, sid, done)
+      +pg2 = sd(ww, hh, cc, plte, trns, idat, sid, Bool.or(sid, done))
+      +ea = {Equal.trans(Png.Nx, Png.png.apply(Png.be.u32(M2.bt3(tt), M2.bt2(tt), M2.bt1(tt), M2.bt0(tt)),
+        List.reverse(&2, U32, data), pg), Png.png.apply(tt, List.reverse(&2, U32, data), pg), Png.NMore{pg2},
+        Equal.cong(U32, Png.Nx, uu => Png.png.apply(uu, List.reverse(&2, U32, data), pg), Png.be.u32(M2.bt3(tt),
+        M2.bt2(tt), M2.bt1(tt), M2.bt0(tt)), tt, M2.prt.be.back(tt)), anc.step.late(sid, tt, List.reverse(&2, U32,
+        data), ww, hh, cc, plte, trns, idat, done, hb, ht)) : {Png.png.apply(Png.be.u32(M2.bt3(tt), M2.bt2(tt),
+        M2.bt1(tt), M2.bt0(tt)), List.reverse(&2, U32, data), pg) == Png.NMore{pg2} : Png.Nx}}
+      Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(D1.spec.chunk([M2.bt3(tt), M2.bt2(tt), M2.bt1(tt), M2.bt0(tt)], data,
+        r1), Png.ZLen{}, False{}, 0, 0, [], [], pg), Png.png.go(r1, Png.ZLen{}, False{}, 0, 0, [], [], pg2),
+        Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], sd(ww, hh, cc, plte, trns, idat, sid, M1.dn(tl, sid,
+        Bool.or(sid, done)))),
+        M2.chunk.more(M2.bt3(tt), M2.bt2(tt), M2.bt1(tt), M2.bt0(tt), data, r1, pg, pg2, hf, ea),
+        anc.walk.late(tl, rest, ww, hh, cc, plte, trns, idat, sid, Bool.or(sid, done), htl))
+
+# chunks fit for after an IDAT fit there with or without one known
+def after.or_true(
+  bb: Bool,
+  +cs: List<&2, Laws.Anc>,
+  hh: Laws.spec.ancs.after(True{}, cs)
+) -> Laws.spec.ancs.after(Bool.or(bb, True{}), cs):
+  match bb:
+    case True{}:
+      hh
+    case False{}:
+      hh
+
+# the law's hypothesis, as the walk over the IDAT chunks starts it
+def after.or_false(
+  bb: Bool,
+  +cs: List<&2, Laws.Anc>,
+  hh: Laws.spec.ancs.after(bb, cs)
+) -> Laws.spec.ancs.after(Bool.or(bb, False{}), cs):
+  match bb:
+    case True{}:
+      hh
+    case False{}:
+      hh
+
 # before any IDAT, ancillary chunks leave the run open
 def dn.ff(cs: List<&2, Laws.Anc>) -> {M1.dn(cs, False{}, False{}) == False{} : Bool}:
   match cs:
@@ -207,7 +317,7 @@ def pfin.walk.idats(
   +sid: Bool,
   +h_nd: {M1.need(cc, plte) == True{} : Bool},
   hf: D1.spec.fits.all(ds),
-  ha: Laws.spec.ancs.ok(a3)
+  ha: Laws.spec.ancs.after(Bool.or(Bool.not(List.is_empty(&2, List<&2, U32>, ds)), sid), a3)
 ) -> {Png.png.go(D1.spec.idats(ds, Laws.spec.ancs(a3, D1.spec.chunk([73, 69, 78, 68], [], []))), Png.ZLen{},
   False{}, 0, 0, [], [], M1.st(ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid)) ==
   Png.png.samples(Inf.inflate(List.append(&2, U32, done, List.concat(&2, U32, ds))), ww, hh, cc,
@@ -222,7 +332,7 @@ def pfin.walk.idats(
         cc,
         plte, trns, List.reverse(&2, U32, done), sid, False{})), Png.png.go(ie, Png.ZLen{}, False{}, 0, 0, [], [], pg),
         Png.png.samples(Inf.inflate(List.append(&2, U32, done, [])), ww, hh, cc, pl, tr),
-        anc.walk(a3, ie, ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid, False{}, ha),
+        anc.walk.late(a3, ie, ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid, False{}, ha),
         Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(ie, Png.ZLen{}, False{}, 0, 0, [], [], pg),
           Png.png.finish(Png.pg.iend(pg)), Png.png.samples(Inf.inflate(List.append(&2, U32, done, [])), ww, hh, cc, pl,
           tr),
@@ -267,7 +377,8 @@ def pfin.walk.idats(
             Png.png.samples(Inf.inflate(List.append(&2, U32, d2, List.concat(&2, U32, tl))), ww, hh, cc, pl, tr),
             Png.png.samples(Inf.inflate(List.append(&2, U32, done, List.append(&2, U32, dd, List.concat(&2, U32, tl)))),
               ww, hh, cc, pl, tr),
-            pfin.walk.idats(tl, ww, hh, cc, plte, trns, a3, d2, True{}, h_nd, htl, ha),
+            pfin.walk.idats(tl, ww, hh, cc, plte, trns, a3, d2, True{}, h_nd, htl,
+              after.or_true(Bool.not(List.is_empty(&2, List<&2, U32>, tl)), a3, ha)),
             Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate(xs), ww, hh, cc, pl, tr),
               List.append(&2, U32, d2, List.concat(&2, U32, tl)), List.append(&2, U32, done, List.append(&2, U32, dd,
               List.concat(&2, U32, tl))), M1.app_assoc(done, dd, List.concat(&2, U32, tl))))))
@@ -392,7 +503,7 @@ def pfin.walk.png(
   h_a0: Laws.spec.ancs.ok(a0),
   h_a1: Laws.spec.ancs.ok(a1),
   h_a2: Laws.spec.ancs.ok(a2),
-  h_a3: Laws.spec.ancs.ok(a3)
+  h_a3: Laws.spec.ancs.after(Bool.not(List.is_empty(&2, List<&2, U32>, idats)), a3)
 ) -> {Png.decode(D1.spec.chunk([73, 72, 68, 82], D1.spec.ihdr.data(ww, hh, cc), Laws.spec.ancs(a0,
   Laws.spec.mid(late, plte, a1, trns, Laws.spec.ancs(a2, D1.spec.idats(idats, Laws.spec.ancs(a3,
   D1.spec.chunk([73, 69, 78, 68], [], [])))))))) == Png.png.samples(Inf.inflate(List.concat(&2, U32, idats)), ww,
@@ -416,7 +527,8 @@ def pfin.walk.png(
         h_a1),
         Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(q2, Png.ZLen{}, False{}, 0, 0, [], [], s2), Png.png.go(r3,
           Png.ZLen{}, False{}, 0, 0, [], [], s2), out, anc.pre(a2, r3, ww, hh, cc, plte, trns, h_a2),
-          pfin.walk.idats(idats, ww, hh, cc, plte, trns, a3, [], False{}, M2.need.ok(cc, plte, h_pl), h_fi, h_a3)))))
+          pfin.walk.idats(idats, ww, hh, cc, plte, trns, a3, [], False{}, M2.need.ok(cc, plte, h_pl), h_fi,
+            after.or_false(Bool.not(List.is_empty(&2, List<&2, U32>, idats)), a3, h_a3))))))
 
 # laws/PngSamplesFollowColourType.bend and laws/DecodedSamplesPackArgb.bend: ancillary chunks where PNG section 5.6
 # allows them leave what the walker hands the pixel
