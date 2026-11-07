@@ -5,6 +5,7 @@ import ../src/crc.bend as Crc
 import ../src/inflate.bend as Inf
 import ../src/png.bend as Png
 import ../laws/InflateReadsStoredBlocks.bend as L1
+import ../laws/InflateUptoReadsStoredBlocks.bend as L5
 import ../laws/PngRefusesBadRasters.bend as L2
 import ../laws/PngRoundTrips.bend as Laws
 import ../laws/PngSamplesFollowColourType.bend as L3
@@ -23,6 +24,7 @@ import ./lemmas/StoredBlockReader.bend as M9
 import ./lemmas/SubtractionAndHuffmanWalk.bend as M10
 import ./lemmas/WordAddition.bend as M11
 import ./lemmas/ZlibStoredStream.bend as M12
+import ./InflateUptoReadsStoredBlocks.bend as P5
 
 # a + b - a is b
 law sub_add_cancel:
@@ -968,25 +970,53 @@ def frow(
           L4.flt.next(prev), xx <> hist, bb <> phist), tl, frow(tl, bpp, L4.flt.next(prev), xx <> hist,
           bb <> phist, ht)))
 
+# rows written with filter None, as encode_png writes them
+def nones(rows: List<&2, List<&2, U32>>) -> List<&2, L4.Row>:
+  match rows:
+    case Nil{}:
+      Nil{}
+    case row <> tl:
+      L4.Row{L4.FNone{}, row} <> nones(tl)
+
+# the bytes of rows written with filter None are the rows
+def nones.data(rows: List<&2, List<&2, U32>>) -> {L4.flt.data(nones(rows)) == rows : List<&2, List<&2, U32>>}:
+  match rows:
+    case Nil{}:
+      {==}
+    case +row <> tl:
+      Equal.cong(List<&2, List<&2, U32>>, List<&2, List<&2, U32>>, ys => row <> ys, L4.flt.data(nones(tl)), tl,
+        nones.data(tl))
+
+# as many rows written with filter None as rows
+def nones.len(
+  rows: List<&2, List<&2, U32>>
+) -> {List.length(&2, L4.Row, nones(rows)) == List.length(&2, List<&2, U32>, rows) : Nat}:
+  match rows:
+    case Nil{}:
+      {==}
+    case _row <> tl:
+      Equal.cong(Nat, Nat, nn => 1n+nn, List.length(&2, L4.Row, nones(tl)), List.length(&2, List<&2, U32>, tl),
+        nones.len(tl))
+
 # filter None over masked rows: the scanlines
 def frows(
   +rows: List<&2, List<&2, U32>>,
   +bpp: U32,
   +prev: List<&2, U32>,
   hm: masked.rows(rows)
-) -> {L4.flt.rows(rows, L4.FNone{}, bpp, prev) == M1.scan(rows) : List<&2, U32>}:
+) -> {L4.flt.rows(nones(rows), bpp, prev) == M1.scan(rows) : List<&2, U32>}:
   match rows:
     case Nil{}:
       {==}
     case +row <> +tl:
       (hr, ht) = hm
       Equal.trans(List<&2, U32>, 0 <> List.append(&2, U32, L4.flt.row(row, L4.FNone{}, bpp, prev, [], []),
-        L4.flt.rows(tl, L4.FNone{}, bpp, row)), 0 <> List.append(&2, U32, row, L4.flt.rows(tl, L4.FNone{}, bpp,
+        L4.flt.rows(nones(tl), bpp, row)), 0 <> List.append(&2, U32, row, L4.flt.rows(nones(tl), bpp,
         row)), 0 <> List.append(&2, U32, row, M1.scan(tl)),
-        Equal.cong(List<&2, U32>, List<&2, U32>, ys => 0 <> List.append(&2, U32, ys, L4.flt.rows(tl, L4.FNone{},
+        Equal.cong(List<&2, U32>, List<&2, U32>, ys => 0 <> List.append(&2, U32, ys, L4.flt.rows(nones(tl),
           bpp, row)), L4.flt.row(row, L4.FNone{}, bpp, prev, [], []), row, frow(row, bpp, prev, [], [], hr)),
-        Equal.cong(List<&2, U32>, List<&2, U32>, ys => 0 <> List.append(&2, U32, row, ys), L4.flt.rows(tl,
-          L4.FNone{}, bpp, row), M1.scan(tl), frows(tl, bpp, row, ht)))
+        Equal.cong(List<&2, U32>, List<&2, U32>, ys => 0 <> List.append(&2, U32, row, ys), L4.flt.rows(nones(tl),
+          bpp, row), M1.scan(tl), frows(tl, bpp, row, ht)))
 
 # a masked byte is below 256
 def byte.lt(+xx: U32, ex: {U32.and(255, xx) == xx : U32}) -> {U32.is_lt(xx, 256) == True{} : Bool}:
@@ -1319,7 +1349,8 @@ def fits.small(
   +cap2: U32,
   el: {List.length(&2, U32, xs) == 11n+nn : Nat},
   hh: {Nat.is_le(nn, U32.to_nat(cap)) == True{} : Bool},
-  hc: {Nat.is_le(11n+U32.to_nat(cap), U32.to_nat(cap2)) == True{} : Bool}
+  hc: {Nat.is_le(11n+U32.to_nat(cap), U32.to_nat(cap2)) == True{} : Bool},
+  hc2: {D2.below(31n, U32.to_nat(cap2)) == True{} : Bool}
 ) -> D1.spec.fits(xs):
   +ll = List.length(&2, U32, xs)
   +cn = U32.to_nat(cap)
@@ -1329,7 +1360,7 @@ def fits.small(
     Bool}}
   +h3 = {M1.le_rw_l(Nat.add(11n, nn), ll, c2, Equal.sym(Nat, ll, 11n+nn, el), h2) : {Nat.is_le(ll, c2) == True{} :
     Bool}}
-  nat.fits(ll, cap2, h3)
+  (nat.fits(ll, cap2, h3), M5.below.le(31n, ll, c2, h3, hc2))
 
 # a U32 worth 0 is zero
 def zero.is(+uu: U32, e0: {U32.to_nat(uu) == 0n : Nat}) -> {U32.is_zero(uu) == True{} : Bool}:
@@ -4904,8 +4935,46 @@ def rt.pix(
         rgb.back(px, hao))
     case False{}:
       Equal.trans(Maybe<&2, List<&2, U32>>, Png.px.of(6, chans.all(False{}, px), [], []),
-        L3.spec.rgba(chans.all(False{}, px)), Some{px}, L3.png_px_rgba(chans.all(False{}, px), []),
+        L3.spec.rgba(chans.all(False{}, px)), Some{px}, L3.png_px_rgba(chans.all(False{}, px), [], []),
         rgba.back(px))
+
+# a true sample-count check keeps the raster
+def rt.keep.at(
+  ok: Bool,
+  eo: {ok == True{} : Bool},
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>
+) -> {D1.spec.raster.keep(ok, ww, hh, px) == Some{Img.raster(ww, hh, px)} : Maybe<&2, Img.Raster>}:
+  match ok:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd({D1.spec.raster.keep(False{}, ww, hh, px) == Some{Img.raster(ww, hh, px)}
+        : Maybe<&2, Img.Raster>}, M1.false_true(eo))
+
+# the round trip's raster has h * w samples, so spec.raster keeps it
+def rt.keep(
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>,
+  +wp: Nat,
+  +hp: Nat,
+  +e_w: {U32.to_nat(ww) == 1n+wp : Nat},
+  +e_h: {U32.to_nat(hh) == 1n+hp : Nat},
+  +hl: {List.length(&2, U32, px) == Nat.mul(1n+hp, 1n+wp) : Nat}
+) -> {D1.spec.raster(Some{px}, ww, hh) == Some{Img.raster(ww, hh, px)} : Maybe<&2, Img.Raster>}:
+  +area = Nat.mul(U32.to_nat(hh), U32.to_nat(ww))
+  +nb = Nat.mul(1n+hp, 1n+wp)
+  +e_a = {Equal.trans(Nat, area, Nat.mul(1n+hp, U32.to_nat(ww)), nb,
+    Equal.cong(Nat, Nat, kk => Nat.mul(kk, U32.to_nat(ww)), U32.to_nat(hh), 1n+hp, e_h),
+    Equal.cong(Nat, Nat, kk => Nat.mul(1n+hp, kk), U32.to_nat(ww), 1n+wp, e_w)) : {area == nb : Nat}}
+  +e_ok = {Equal.trans(Bool, Nat.is_eq(List.length(&2, U32, px), area), Nat.is_eq(nb, area), True{},
+    Equal.cong(Nat, Bool, kk => Nat.is_eq(kk, area), List.length(&2, U32, px), nb, hl),
+    Equal.trans(Bool, Nat.is_eq(nb, area), Nat.is_eq(nb, nb), True{},
+      Equal.cong(Nat, Bool, kk => Nat.is_eq(nb, kk), area, nb, e_a), M1.nat_eq_refl(nb)))
+    : {Nat.is_eq(List.length(&2, U32, px), area) == True{} : Bool}}
+  rt.keep.at(Nat.is_eq(List.length(&2, U32, px), area), e_ok, ww, hh, px)
 
 # the pixel stage: the scanlines unfilter to the rows, and the rows pack to the samples
 def rt.px(
@@ -4928,7 +4997,7 @@ def rt.px(
   +bp = Png.png.bpp(ct)
   +rows = rows.of(hh1, ww1, op, px)
   +ss = M1.sc(px, 0n, ww1, op)
-  +fr = L4.flt.rows(rows, L4.FNone{}, bp, [])
+  +fr = L4.flt.rows(nones(rows), bp, [])
   +e_s = {Equal.trans(List<&2, U32>, ss, M1.scan(rows), fr, sc.rows(hh1, wp, op, px, hl), Equal.sym(List<&2, U32>,
     fr, M1.scan(rows), frows(rows, bp, [], masked.rows.of(hh1, ww1, op, px)))) : {ss == fr : List<&2, U32>}}
   +h_ww = gt.pos(ww, wp, e_w)
@@ -4945,8 +5014,19 @@ def rt.px(
     L4.flt.fit(rows, Nat.mul(ww1, Laws.spec.nch(op)), True{}), True{}, Equal.cong(Nat, Bool, kk => L4.flt.fit(rows,
     kk, True{}), Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), Nat.mul(ww1, Laws.spec.nch(op)), e_nb), fit.rows(hh1, ww1,
     op, px, hl)) : {L4.flt.fit(rows, Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), True{}) == True{} : Bool}}
-  +e_un = {L4.unfilter_filter(L4.FNone{}, ww, hh, bp, rows, rt.dims(ww, hh, op, h_ww, h_hh), rt.wrap(ww, op, e_m),
-    h_rows, h_fit) : {Png.unfilter(fr, ww, hh, bp) == Some{List.concat(&2, U32, rows)} : Maybe<&2, List<&2, U32>>}}
+  +nr = nones(rows)
+  +e_nd = {nones.data(rows) : {L4.flt.data(nr) == rows : List<&2, List<&2, U32>>}}
+  +h_nrows = {Equal.trans(Nat, List.length(&2, L4.Row, nr), List.length(&2, List<&2, U32>, rows), U32.to_nat(hh),
+    nones.len(rows), h_rows) : {List.length(&2, L4.Row, nr) == U32.to_nat(hh) : Nat}}
+  +h_nfit = {Equal.trans(Bool, L4.flt.fit(L4.flt.data(nr), Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), True{}),
+    L4.flt.fit(rows, Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), True{}), True{}, Equal.cong(List<&2, List<&2, U32>>,
+    Bool, rr => L4.flt.fit(rr, Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), True{}), L4.flt.data(nr), rows, e_nd), h_fit)
+    : {L4.flt.fit(L4.flt.data(nr), Nat.mul(U32.to_nat(ww), U32.to_nat(bp)), True{}) == True{} : Bool}}
+  +e_un = {Equal.trans(Maybe<&2, List<&2, U32>>, Png.unfilter(fr, ww, hh, bp), Some{List.concat(&2, U32,
+    L4.flt.data(nr))}, Some{List.concat(&2, U32, rows)}, L4.unfilter_filter(ww, hh, bp, nr, rt.dims(ww, hh, op, h_ww,
+    h_hh), rt.wrap(ww, op, e_m), h_nrows, h_nfit), Equal.cong(List<&2, List<&2, U32>>, Maybe<&2, List<&2, U32>>,
+    rr => Some{List.concat(&2, U32, rr)}, L4.flt.data(nr), rows, e_nd)) : {Png.unfilter(fr, ww, hh, bp) ==
+    Some{List.concat(&2, U32, rows)} : Maybe<&2, List<&2, U32>>}}
   +e_cat = {rows.cat(hh1, ww1, op, px, hl) : {List.concat(&2, U32, rows) == chans.all(op, px) : List<&2, U32>}}
   Equal.trans(Maybe<&2, Img.Raster>,
     D1.spec.raster(D1.spec.px.then(Png.unfilter(ss, ww, hh, bp), ct, [], []), ww, hh),
@@ -4960,8 +5040,58 @@ def rt.px(
         Equal.trans(Maybe<&2, List<&2, U32>>, Png.unfilter(fr, ww, hh, bp), Some{List.concat(&2, U32, rows)},
           Some{chans.all(op, px)}, e_un, Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, xs => Some{xs},
           List.concat(&2, U32, rows), chans.all(op, px), e_cat)))),
-    Equal.cong(Maybe<&2, List<&2, U32>>, Maybe<&2, Img.Raster>, mm => D1.spec.raster(mm, ww, hh),
-      Png.px.of(ct, chans.all(op, px), [], []), Some{px}, rt.pix(op, px, hao)))
+    Equal.trans(Maybe<&2, Img.Raster>, D1.spec.raster(Png.px.of(ct, chans.all(op, px), [], []), ww, hh),
+      D1.spec.raster(Some{px}, ww, hh), Some{Img.raster(ww, hh, px)},
+      Equal.cong(Maybe<&2, List<&2, U32>>, Maybe<&2, Img.Raster>, mm => D1.spec.raster(mm, ww, hh),
+        Png.px.of(ct, chans.all(op, px), [], []), Some{px}, rt.pix(op, px, hao)),
+      rt.keep(ww, hh, px, wp, hp, e_w, e_h, hl)))
+
+# the bytes per pixel of the colour type encode_png writes are its channels
+def bpp.nch(op: Bool) -> {Laws.spec.nch(op) == U32.to_nat(Png.png.bpp(Png.enc.ct(op))) : Nat}:
+  match op:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# a nonzero side below 2^31 is a side spec.side takes
+def side.from(
+  +nn: U32,
+  hg: {U32.is_gt(nn, 0) == True{} : Bool},
+  hb: {D2.below(31n, U32.to_nat(nn)) == True{} : Bool}
+) -> {D1.spec.side(nn) == True{} : Bool}:
+  Equal.trans(Bool, D1.spec.side(nn), Bool.and(True{}, D2.below(31n, U32.to_nat(nn))), True{},
+    Equal.cong(Bool, Bool, bb => Bool.and(bb, D2.below(31n, U32.to_nat(nn))), U32.is_gt(nn, 0), True{}, hg), hb)
+
+# one side, the other side 1 + p, the area below 2^28: the side is at most
+# the area, so below 2^31
+def side.short(
+  +aa: Nat,
+  +bb: Nat,
+  +pb: Nat,
+  e_b: {bb == 1n+pb : Nat},
+  hb: {D2.below(28n, Nat.mul(bb, aa)) == True{} : Bool}
+) -> {D2.below(31n, aa) == True{} : Bool}:
+  +h1 = {Equal.trans(Bool, D2.below(28n, Nat.mul(1n+pb, aa)), D2.below(28n, Nat.mul(bb, aa)), True{},
+    Equal.cong(Nat, Bool, kk => D2.below(28n, Nat.mul(kk, aa)), 1n+pb, bb, Equal.sym(Nat, bb, 1n+pb, e_b)), hb) :
+    {D2.below(28n, Nat.add(aa, Nat.mul(pb, aa))) == True{} : Bool}}
+  M5.below_up(30n, aa, M5.below_up(29n, aa, M5.below_up(28n, aa, M5.below_mono(28n, aa, Nat.mul(pb, aa), h1))))
+
+# both sides of a raster whose area h w is below 2^28 are below 2^31
+def sides.short(
+  +ww: U32,
+  +hh: U32,
+  +wp: Nat,
+  +hp: Nat,
+  e_w: {U32.to_nat(ww) == 1n+wp : Nat},
+  e_h: {U32.to_nat(hh) == 1n+hp : Nat},
+  +hb: {D2.below(28n, Nat.mul(U32.to_nat(hh), U32.to_nat(ww))) == True{} : Bool}
+) -> {D2.below(31n, U32.to_nat(ww)) == True{} : Bool} & {D2.below(31n, U32.to_nat(hh)) == True{} : Bool}:
+  +hn = U32.to_nat(hh)
+  +wn = U32.to_nat(ww)
+  (side.short(wn, hn, hp, e_h, hb), side.short(hn, wn, wp, e_w, Equal.trans(Bool, D2.below(28n, Nat.mul(wn, hn)),
+    D2.below(28n, Nat.mul(hn, wn)), True{}, Equal.cong(Nat, Bool, kk => D2.below(28n, kk), Nat.mul(wn, hn),
+    Nat.mul(hn, wn), M1.mul_comm(wn, hn)), hb)))
 
 # the pixel stage after the layout: the one-block layout around any zlib stream of the scanlines that inflates to
 # them decodes to the raster. The layout is stated stuck on zb, which is False
@@ -4980,7 +5110,9 @@ def rt.tail(
   +hl: {List.length(&2, U32, px) == Nat.mul(1n+hp, 1n+wp) : Nat},
   e_m: {U32.to_nat(U32.mul(ww, Png.enc.nch(op))) == Nat.mul(U32.to_nat(ww), U32.to_nat(Png.enc.nch(op))) : Nat},
   h_fz: D1.spec.fits(Png.enc.zlib(M1.sc(px, 0n, 1n+wp, op), Png.enc.len(M1.sc(px, 0n, 1n+wp, op), 0))),
-  +h_nl: {U32.to_nat(Png.enc.len(M1.sc(px, 0n, 1n+wp, op), 0)) == List.length(&2, U32, M1.sc(px, 0n, 1n+wp, op)) : Nat}
+  +h_nl: {U32.to_nat(Png.enc.len(M1.sc(px, 0n, 1n+wp, op), 0)) == List.length(&2, U32, M1.sc(px, 0n, 1n+wp, op)) : Nat},
+  h_bw: {D2.below(31n, U32.to_nat(ww)) == True{} : Bool},
+  h_bh: {D2.below(31n, U32.to_nat(hh)) == True{} : Bool}
 ) -> {Img.decode_png(Png.enc.seal.at(zb, ww, hh, op, M1.sc(px, 0n, 1n+wp, op), Png.enc.len(M1.sc(px, 0n, 1n+wp, op),
   0))) == Some{Img.raster(ww, hh, px)} : Maybe<&2, Img.Raster>}:
   +ww1 = {1n+wp : Nat}
@@ -4993,13 +5125,31 @@ def rt.tail(
   +h_by = {Equal.trans(Bool, D1.bytes(ss), D1.bytes.go(M1.scan(rows), True{}), True{}, Equal.cong(List<&2, U32>,
     Bool, xs => D1.bytes.go(xs, True{}), ss, M1.scan(rows), e_s), bytes.scan(rows, masked.rows.of(hh1, ww1, op,
     px))) : {D1.bytes(ss) == True{} : Bool}}
-  +e_inf = {L1.inflate_enc_zlib(ss, h_by, h_nl) : {Inf.inflate(zz) == Some{ss} : Maybe<&2, List<&2, U32>>}}
   +ct = Png.enc.ct(op)
-  +h_ww = gt.pos(ww, wp, e_w)
-  +h_hh = gt.pos(hh, hp, e_h)
+  +bud = D1.spec.budget(ww, hh, ct)
+  +nn = Nat.mul(hh1, 1n+Nat.mul(ww1, Laws.spec.nch(op)))
+  +e_ls = {Equal.trans(Nat, List.length(&2, U32, ss), List.length(&2, U32, M1.scan(rows)), nn, Equal.cong(List<&2, U32>,
+    Nat, xs => List.length(&2, U32, xs), ss, M1.scan(rows), e_s), len.scan(hh1, ww1, op, px, hl)) :
+    {List.length(&2, U32, ss) == nn : Nat}}
+  +e_bud = {Equal.trans(Nat, nn, Nat.mul(U32.to_nat(hh), 1n+Nat.mul(ww1, Laws.spec.nch(op))), bud,
+    Equal.cong(Nat, Nat, kk => Nat.mul(kk, 1n+Nat.mul(ww1, Laws.spec.nch(op))), hh1, U32.to_nat(hh), Equal.sym(Nat,
+      U32.to_nat(hh), hh1, e_h)),
+    Equal.trans(Nat, Nat.mul(U32.to_nat(hh), 1n+Nat.mul(ww1, Laws.spec.nch(op))), Nat.mul(U32.to_nat(hh),
+      1n+Nat.mul(U32.to_nat(ww), Laws.spec.nch(op))), bud,
+      Equal.cong(Nat, Nat, kk => Nat.mul(U32.to_nat(hh), 1n+Nat.mul(kk, Laws.spec.nch(op))), ww1, U32.to_nat(ww),
+        Equal.sym(Nat, U32.to_nat(ww), ww1, e_w)),
+      Equal.cong(Nat, Nat, kk => Nat.mul(U32.to_nat(hh), 1n+Nat.mul(U32.to_nat(ww), kk)), Laws.spec.nch(op),
+        U32.to_nat(Png.png.bpp(ct)), bpp.nch(op)))) : {nn == bud : Nat}}
+  +h_lim = {M1.le_rw_r(List.length(&2, U32, ss), nn, bud, e_bud, M1.le_rw_l(nn, List.length(&2, U32, ss), nn,
+    Equal.sym(Nat, List.length(&2, U32, ss), nn, e_ls), M1.le_refl(nn))) :
+    {Nat.is_le(List.length(&2, U32, ss), bud) == True{} : Bool}}
+  +e_inf = {L5.upto_enc_zlib(bud, ss, h_by, h_nl, h_lim) : {Inf.inflate.upto(bud, zz) == Some{ss} :
+    Maybe<&2, List<&2, U32>>}}
+  +h_ww = side.from(ww, gt.pos(ww, wp, e_w), h_bw)
+  +h_hh = side.from(hh, gt.pos(hh, hp, e_h), h_bh)
   +a6 = Img.decode_png(Png.enc.seal.at(zb, ww, hh, op, ss, ll))
   +a8 = Img.decode_png(D1.spec.png(ww, hh, ct, None{}, None{}, [zz]))
-  +a9 = D1.spec.decoded(Inf.inflate(List.concat(&2, U32, [zz])), ww, hh, ct, [], [])
+  +a9 = D1.spec.decoded(Inf.inflate.upto(bud, List.concat(&2, U32, [zz])), ww, hh, ct, [], [])
   +a10 = D1.spec.decoded(Some{ss}, ww, hh, ct, [], [])
   Equal.trans(Maybe<&2, Img.Raster>, a6, a8, Some{Img.raster(ww, hh, px)},
     Equal.trans(Maybe<&2, Img.Raster>, a6, Img.decode_png(Png.enc.seal.one(ww, hh, op, ss, ll)), a8,
@@ -5010,14 +5160,14 @@ def rt.tail(
     Equal.trans(Maybe<&2, Img.Raster>, a8, a9, Some{Img.raster(ww, hh, px)},
       L3.png_walk(ww, hh, ct, None{}, None{}, [zz], h_ww, h_hh, rt.col(op), rt.plte(op), {==}, Unit{}, Unit{},
         (h_fz, Unit{})),
-      Equal.trans(Maybe<&2, Img.Raster>, a9, D1.spec.decoded(Inf.inflate(zz), ww, hh, ct, [], []),
+      Equal.trans(Maybe<&2, Img.Raster>, a9, D1.spec.decoded(Inf.inflate.upto(bud, zz), ww, hh, ct, [], []),
         Some{Img.raster(ww, hh, px)},
-        Equal.cong(List<&2, U32>, Maybe<&2, Img.Raster>, xs => D1.spec.decoded(Inf.inflate(xs), ww, hh, ct, [],
-          []), List.append(&2, U32, zz, []), zz, M1.app_nil(zz)),
-        Equal.trans(Maybe<&2, Img.Raster>, D1.spec.decoded(Inf.inflate(zz), ww, hh, ct, [], []), a10,
+        Equal.cong(List<&2, U32>, Maybe<&2, Img.Raster>, xs => D1.spec.decoded(Inf.inflate.upto(bud, xs), ww, hh, ct,
+          [], []), List.append(&2, U32, zz, []), zz, M1.app_nil(zz)),
+        Equal.trans(Maybe<&2, Img.Raster>, D1.spec.decoded(Inf.inflate.upto(bud, zz), ww, hh, ct, [], []), a10,
           Some{Img.raster(ww, hh, px)},
           Equal.cong(Maybe<&2, List<&2, U32>>, Maybe<&2, Img.Raster>, mm => D1.spec.decoded(mm, ww, hh, ct, [],
-            []), Inf.inflate(zz), Some{ss}, e_inf),
+            []), Inf.inflate.upto(bud, zz), Some{ss}, e_inf),
           rt.px(ww, hh, px, op, wp, hp, hao, e_w, e_h, hl, e_m)))))
 
 # the one-block round trip, with the width and height 1 + w' and 1 + h', and
@@ -5041,7 +5191,10 @@ def rt.go(
   +cap: U32,
   +cap2: U32,
   +ec: {cap == 65535 : U32},
-  hc: {Nat.is_le(11n+U32.to_nat(cap), U32.to_nat(cap2)) == True{} : Bool}
+  hc: {Nat.is_le(11n+U32.to_nat(cap), U32.to_nat(cap2)) == True{} : Bool},
+  hc2: {D2.below(31n, U32.to_nat(cap2)) == True{} : Bool},
+  h_bw: {D2.below(31n, U32.to_nat(ww)) == True{} : Bool},
+  h_bh: {D2.below(31n, U32.to_nat(hh)) == True{} : Bool}
 ) -> {Laws.spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} :
   Maybe<&2, Img.Raster>}:
   +ww1 = {1n+wp : Nat}
@@ -5106,7 +5259,7 @@ def rt.go(
   +f_ll = {Equal.trans(Bool, U32.is_gt(ll, 65535), U32.is_gt(ll, cap), False{}, Equal.cong(U32, Bool, cu =>
     U32.is_gt(ll, cu), 65535, cap, Equal.sym(U32, cap, 65535, ec)), gt.no(ll, cap, nn, t_l, h_n)) :
     {U32.is_gt(ll, 65535) == False{} : Bool}}
-  h_fz = {fits.small(zz, ls, cap, cap2, zlib.len(ss, ll, le_l), h_ls, hc) :
+  h_fz = {fits.small(zz, ls, cap, cap2, zlib.len(ss, ll, le_l), h_ls, hc, hc2) :
     D1.spec.fits(zz)}
   +h_nl = {Equal.trans(Nat, U32.to_nat(ll), nn, ls, t_l, Equal.sym(Nat, ls, nn, e_ls)) : {U32.to_nat(ll) == ls : Nat}}
   +a2 = Img.decode_png(Png.enc.paint(ww, hh, op, px))
@@ -5136,7 +5289,29 @@ def rt.go(
               r0, ss, M1.inf.rev_rev(ss)),
             Equal.cong(U32, Maybe<&2, Img.Raster>, uu => Img.decode_png(Png.enc.seal(ww, hh, op, (ss, uu))), m0, ll,
               e_m0))),
-        rt.tail(U32.is_gt(ll, 65535), ww, hh, px, op, wp, hp, f_ll, hao, e_w, e_h, hl, e_m, h_fz, h_nl))))
+        rt.tail(U32.is_gt(ll, 65535), ww, hh, px, op, wp, hp, f_ll, hao, e_w, e_h, hl, e_m, h_fz, h_nl, h_bw,
+          h_bh))))
+
+# rt.go with the sides' bounds taken out of their pair
+def rt.go.at(
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>,
+  +nb: U32,
+  +wp: Nat,
+  +hp: Nat,
+  e_good: {Png.enc.good(ww, hh, px) == True{} : Bool},
+  +e_w: {U32.to_nat(ww) == 1n+wp : Nat},
+  +e_h: {U32.to_nat(hh) == 1n+hp : Nat},
+  +hl: {List.length(&2, U32, px) == Nat.mul(1n+hp, 1n+wp) : Nat},
+  h_nb: {U32.to_nat(nb) == Nat.mul(1n+hp, 1n+Nat.mul(1n+wp, Laws.spec.nch(D1.all_opaque(px)))) : Nat},
+  h_one: {U32.is_le(nb, 65535) == True{} : Bool},
+  sides: {D2.below(31n, U32.to_nat(ww)) == True{} : Bool} & {D2.below(31n, U32.to_nat(hh)) == True{} : Bool}
+) -> {Laws.spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} :
+  Maybe<&2, Img.Raster>}:
+  (h_bw, h_bh) = sides
+  rt.go(ww, hh, px, nb, D1.all_opaque(px), wp, hp, M1.opaque.all(px, True{}), {==}, e_good, e_w, e_h, hl, h_nb, h_one,
+    65535, 65546, {==}, {==}, {==}, h_bw, h_bh)
 
 # the width and height as successors
 def rt.pos(
@@ -5148,6 +5323,7 @@ def rt.pos(
   +hl: {List.length(&2, U32, px) == Nat.mul(U32.to_nat(hh), U32.to_nat(ww)) : Nat},
   h_nb: {U32.to_nat(nb) == Laws.spec.scan.len(ww, hh, D1.all_opaque(px)) : Nat},
   h_one: {U32.is_le(nb, 65535) == True{} : Bool},
+  hb28: {D2.below(28n, Nat.mul(U32.to_nat(hh), U32.to_nat(ww))) == True{} : Bool},
   pw: &wp: Nat -> {U32.to_nat(ww) == 1n+wp : Nat},
   ph: &hp: Nat -> {U32.to_nat(hh) == 1n+hp : Nat}
 ) -> {Laws.spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} :
@@ -5168,8 +5344,7 @@ def rt.pos(
     Nat.mul(xx, 1n+Nat.mul(U32.to_nat(ww), kk)), U32.to_nat(hh), 1n+hp, e_h), Equal.cong(Nat, Nat, xx => Nat.mul(1n+hp,
     1n+Nat.mul(xx, kk)), U32.to_nat(ww), 1n+wp, e_w))) : {U32.to_nat(nb) == Nat.mul(1n+hp, 1n+Nat.mul(1n+wp, kk)) :
     Nat}}
-  rt.go(ww, hh, px, nb, op, wp, hp, M1.opaque.all(px, True{}), {==}, e_good, e_w, e_h, e_l2, e_n2, h_one, 65535, 65546,
-    {==}, {==})
+  rt.go.at(ww, hh, px, nb, wp, hp, e_good, e_w, e_h, e_l2, e_n2, h_one, sides.short(ww, hh, wp, hp, e_w, e_h, hb28))
 
 # laws/PngRoundTrips.bend for one stored block
 def Laws.png_roundtrip_one(ww, hh, px, nb, h_ok, h_nb, h_one):
@@ -5178,15 +5353,16 @@ def Laws.png_roundtrip_one(ww, hh, px, nb, h_ok, h_nb, h_one):
   +nw = Bool.not(Nat.is_eq(U32.to_nat(ww), 0n))
   +nh = Bool.not(Nat.is_eq(U32.to_nat(hh), 0n))
   +ok = {h_ok : {D2.png_ok(ww, hh, px) == True{} : Bool}}
-  +e_sides = {M1.and_left(Bool.and(nw, nh), Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)), ok) :
+  +e_sides = {M1.and_left(Bool.and(nw, nh), Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)), ok) :
     {Bool.and(nw, nh) == True{} : Bool}}
-  +e_r = {M1.and_right(Bool.and(nw, nh), Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)), ok) :
-    {Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)) == True{} : Bool}}
-  +e_la = {M5.nat_eq_true(ll, aa, M1.and_right(D2.below(32n, aa), Nat.is_eq(ll, aa), e_r)) : {ll == aa : Nat}}
+  +e_r = {M1.and_right(Bool.and(nw, nh), Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)), ok) :
+    {Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)) == True{} : Bool}}
+  +e_la = {M5.nat_eq_true(ll, aa, M1.and_right(D2.below(28n, aa), Nat.is_eq(ll, aa), e_r)) : {ll == aa : Nat}}
   +z_w = M5.not.true(Nat.is_eq(U32.to_nat(ww), 0n), M1.and_left(nw, nh, e_sides))
   +z_h = M5.not.true(Nat.is_eq(U32.to_nat(hh), 0n), M1.and_right(nw, nh, e_sides))
   +e_good = rt.good.at(Png.enc.good(ww, hh, px), ww, hh, px, L2.png_encodes(ww, hh, px, ok))
-  rt.pos(ww, hh, px, nb, e_good, e_la, h_nb, h_one, M5.nat_pos(U32.to_nat(ww), z_w), M5.nat_pos(U32.to_nat(hh), z_h))
+  rt.pos(ww, hh, px, nb, e_good, e_la, h_nb, h_one, M1.and_left(D2.below(28n, aa), Nat.is_eq(ll, aa), e_r),
+    M5.nat_pos(U32.to_nat(ww), z_w), M5.nat_pos(U32.to_nat(hh), z_h))
 
 # laws/PngRoundTrips.bend when the scanlines fit one stored block: png_roundtrip_one, with the scanline count a word's
 # value
@@ -5240,7 +5416,10 @@ def rt2.wide(
   +e_t: {U32.to_nat(a8) == Nat.mul(8n, Nat.mul(1n+hp, 1n+wp)) : Nat},
   +h5: {Nat.is_le(snn(hp, wp, opq(px)), Nat.mul(Nat.mul(1n+hp, 1n+wp), 5n)) == True{} : Bool},
   +h_n: {Nat.is_le(snn(hp, wp, opq(px)), U32.to_nat(a8)) == True{} : Bool},
-  +hbn: {U32.is_le(Png.enc.nbytes(Png.enc.opaque(px, True{}), ww, hh), 65535) == False{} : Bool}
+  +hbn: {U32.is_le(Png.enc.nbytes(Png.enc.opaque(px, True{}), ww, hh), 65535) == False{} : Bool},
+  hb8: {D2.below(31n, U32.to_nat(a8)) == True{} : Bool},
+  h_bw: {D2.below(31n, U32.to_nat(ww)) == True{} : Bool},
+  h_bh: {D2.below(31n, U32.to_nat(hh)) == True{} : Bool}
 ) -> {Laws.spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} : Maybe<&2,
   Img.Raster>}:
   +op = Png.enc.opaque(px, True{})
@@ -5270,16 +5449,20 @@ def rt2.wide(
   +zf = Nat.is_lt(ls, 0n)
   +ef = {Equal.sym(Bool, False{}, zf, M1.lt_zero_false(ls)) : {zf == False{} : Bool}}
   +kz = Nat.add(Nat.add(ls, Nat.mul(U32.to_nat(Png.enc.nblk(ll)), 5n)), 6n)
-  h_fz = {nat.fits(List.length(&2, U32, Png.enc.zlib(ss, ll)), a8, M1.le_rw_l(kz, List.length(&2, U32,
-    L1.zlib.stored(65535, ss)), U32.to_nat(a8), Equal.sym(Nat, List.length(&2, U32, L1.zlib.stored(65535, ss)), kz,
-    pfin.zlib.len(ss, 65535, {==}, hn, hbig)), h_tu)) : D1.spec.fits(Png.enc.zlib(ss, ll))}
+  +lz = List.length(&2, U32, Png.enc.zlib(ss, ll))
+  +h_zl = {M1.le_rw_l(kz, List.length(&2, U32, L1.zlib.stored(65535, ss)), U32.to_nat(a8), Equal.sym(Nat,
+    List.length(&2, U32, L1.zlib.stored(65535, ss)), kz, pfin.zlib.len(ss, 65535, {==}, hn, hbig)), h_tu) :
+    {Nat.is_le(lz, U32.to_nat(a8)) == True{} : Bool}}
+  h_fz = {(nat.fits(lz, a8, h_zl), M5.below.le(31n, lz, U32.to_nat(a8), h_zl, hb8)) :
+    D1.spec.fits(Png.enc.zlib(ss, ll))}
   Equal.trans(Maybe<&2, Img.Raster>, Laws.spec.png.back(Png.enc.open(Png.enc.good(ww, hh, px), ww, hh, px)),
     Laws.spec.png.back(Some{Png.enc.seal.at(zf, ww, hh, op, ss, ll)}), Some{Img.raster(ww, hh, px)},
     Equal.cong(Maybe<&2, List<&2, U32>>, Maybe<&2, Img.Raster>, mm => Laws.spec.png.back(mm),
       Png.enc.open(Png.enc.good(ww,
       hh, px), ww, hh, px), Some{Png.enc.seal.at(zf, ww, hh, op, ss, ll)}, wide.rt(zf, ww, hh, px, wp, a8, ef,
       e_good, e_w, e_nbl, hn, hbig, h_by, h_tu)),
-    rt.tail(zf, ww, hh, px, op, wp, hp, ef, hao, e_w, e_h, hl, nb.em(ww, op, wp, hp, a8, e_w, h_n), h_fz, hn))
+    rt.tail(zf, ww, hh, px, op, wp, hp, ef, hao, e_w, e_h, hl, nb.em(ww, op, wp, hp, a8, e_w, h_n), h_fz, hn, h_bw,
+      h_bh))
 
 # laws/PngRoundTrips.bend: split on how the scanline count compares with 65535
 def rt2.at(
@@ -5300,7 +5483,10 @@ def rt2.at(
   +e_t: {U32.to_nat(a8) == Nat.mul(8n, Nat.mul(1n+hp, 1n+wp)) : Nat},
   +h5: {Nat.is_le(snn(hp, wp, opq(px)), Nat.mul(Nat.mul(1n+hp, 1n+wp), 5n)) == True{} : Bool},
   +h_n: {Nat.is_le(snn(hp, wp, opq(px)), U32.to_nat(a8)) == True{} : Bool},
-  +ec: {U32.cmp(Png.enc.nbytes(Png.enc.opaque(px, True{}), ww, hh), 65535) == cc : Cmp}
+  +ec: {U32.cmp(Png.enc.nbytes(Png.enc.opaque(px, True{}), ww, hh), 65535) == cc : Cmp},
+  hb8: {D2.below(31n, U32.to_nat(a8)) == True{} : Bool},
+  h_bw: {D2.below(31n, U32.to_nat(ww)) == True{} : Bool},
+  h_bh: {D2.below(31n, U32.to_nat(hh)) == True{} : Bool}
 ) -> {Laws.spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} : Maybe<&2,
   Img.Raster>}:
   match cc:
@@ -5312,7 +5498,34 @@ def rt2.at(
         U32.cmp(Png.enc.nbytes(Png.enc.opaque(px, True{}), ww, hh), 65535), EQ{}, ec))
     case GT{}:
       rt2.wide(ww, hh, px, a8, wp, hp, e_good, hao, e_w, e_h, hl, t_nb, e_t, h5, h_n, Equal.cong(Cmp, Bool, xc =>
-        Cmp.is_le(xc), U32.cmp(Png.enc.nbytes(Png.enc.opaque(px, True{}), ww, hh), 65535), GT{}, ec))
+        Cmp.is_le(xc), U32.cmp(Png.enc.nbytes(Png.enc.opaque(px, True{}), ww, hh), 65535), GT{}, ec), hb8, h_bw, h_bh)
+
+# rt2.at with the sides' bounds taken out of their pair
+def rt2.at.sides(
+  cc: Cmp,
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>,
+  +a8: U32,
+  +wp: Nat,
+  +hp: Nat,
+  h_ok: {D2.png_ok(ww, hh, px) == True{} : Bool},
+  e_good: {Png.enc.good(ww, hh, px) == True{} : Bool},
+  +hao: {D1.all_opaque(px) == Png.enc.opaque(px, True{}) : Bool},
+  +e_w: {U32.to_nat(ww) == 1n+wp : Nat},
+  +e_h: {U32.to_nat(hh) == 1n+hp : Nat},
+  +hl: {List.length(&2, U32, px) == Nat.mul(1n+hp, 1n+wp) : Nat},
+  +t_nb: {U32.to_nat(Png.enc.nbytes(opq(px), ww, hh)) == snn(hp, wp, opq(px)) : Nat},
+  +e_t: {U32.to_nat(a8) == Nat.mul(8n, Nat.mul(1n+hp, 1n+wp)) : Nat},
+  +h5: {Nat.is_le(snn(hp, wp, opq(px)), Nat.mul(Nat.mul(1n+hp, 1n+wp), 5n)) == True{} : Bool},
+  +h_n: {Nat.is_le(snn(hp, wp, opq(px)), U32.to_nat(a8)) == True{} : Bool},
+  +ec: {U32.cmp(Png.enc.nbytes(Png.enc.opaque(px, True{}), ww, hh), 65535) == cc : Cmp},
+  hb8: {D2.below(31n, U32.to_nat(a8)) == True{} : Bool},
+  sides: {D2.below(31n, U32.to_nat(ww)) == True{} : Bool} & {D2.below(31n, U32.to_nat(hh)) == True{} : Bool}
+) -> {Laws.spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} : Maybe<&2,
+  Img.Raster>}:
+  (h_bw, h_bh) = sides
+  rt2.at(cc, ww, hh, px, a8, wp, hp, h_ok, e_good, hao, e_w, e_h, hl, t_nb, e_t, h5, h_n, ec, hb8, h_bw, h_bh)
 
 # laws/PngRoundTrips.bend with the width and height as successors: the sizes from the bound 8 w h
 def rt2.pos(
@@ -5324,6 +5537,8 @@ def rt2.pos(
   e_good: {Png.enc.good(ww, hh, px) == True{} : Bool},
   +hl: {List.length(&2, U32, px) == Nat.mul(U32.to_nat(hh), U32.to_nat(ww)) : Nat},
   +h_a8: {U32.to_nat(a8) == Nat.mul(8n, Nat.mul(U32.to_nat(hh), U32.to_nat(ww))) : Nat},
+  +hb28: {D2.below(28n, Nat.mul(U32.to_nat(hh), U32.to_nat(ww))) == True{} : Bool},
+  hb8: {D2.below(31n, U32.to_nat(a8)) == True{} : Bool},
   pw: &wp: Nat -> {U32.to_nat(ww) == 1n+wp : Nat},
   ph: &hp: Nat -> {U32.to_nat(hh) == 1n+hp : Nat}
 ) -> {Laws.spec.png.back(Img.encode_png(Img.raster(ww, hh, px))) == Some{Img.raster(ww, hh, px)} : Maybe<&2,
@@ -5350,22 +5565,85 @@ def rt2.pos(
     M1.le_trans(nn, Nat.mul(aa, 5n), Nat.mul(8n, aa), h5, five.eight(aa))) : {Nat.is_le(nn, U32.to_nat(a8)) ==
     True{} : Bool}}
   +t_nb = {nb.val(ww, hh, op, wp, hp, a8, e_w, e_h, h_n) : {U32.to_nat(Png.enc.nbytes(op, ww, hh)) == nn : Nat}}
-  rt2.at(U32.cmp(Png.enc.nbytes(op, ww, hh), 65535), ww, hh, px, a8, wp, hp, h_ok, e_good, hao, e_w, e_h, e_l2, t_nb,
-    e_t, h5, h_n, {==})
+  rt2.at.sides(U32.cmp(Png.enc.nbytes(op, ww, hh), 65535), ww, hh, px, a8, wp, hp, h_ok, e_good, hao, e_w, e_h, e_l2,
+    t_nb, e_t, h5, h_n, {==}, hb8, sides.short(ww, hh, wp, hp, e_w, e_h, hb28))
 
-# laws/PngRoundTrips.bend: one stored block when the scanlines fit, the stored blocks of 65535 bytes otherwise
-def Laws.png_roundtrip(ww, hh, px, a8, h_ok, h_a8):
+# a natural number below 2^32, taken in a word, keeps its value
+def nat.word(xx: Nat, +hb: {D2.below(32n, xx) == True{} : Bool}) -> {U32.to_nat(U32.from_nat(xx)) == xx : Nat}:
+  match xx:
+    case 0n:
+      {==}
+    case 1n+(+pp):
+      +up = U32.from_nat(pp)
+      +hp = {M5.below_mono(32n, pp, 1n, Equal.trans(Bool, D2.below(32n, Nat.add(pp, 1n)), D2.below(32n, 1n+pp), True{},
+        Equal.cong(Nat, Bool, kk => D2.below(32n, kk), Nat.add(pp, 1n), 1n+pp, add.one.nat(pp)), hb)) :
+        {D2.below(32n, pp) == True{} : Bool}}
+      +ih = {nat.word(pp, hp) : {U32.to_nat(up) == pp : Nat}}
+      +hb1 = {Equal.trans(Bool, D2.below(32n, 1n+U32.to_nat(up)), D2.below(32n, 1n+pp), True{},
+        Equal.cong(Nat, Bool, kk => D2.below(32n, 1n+kk), U32.to_nat(up), pp, ih), hb) :
+        {D2.below(32n, 1n+U32.to_nat(up)) == True{} : Bool}}
+      Equal.trans(Nat, U32.to_nat(U32.inc(up)), U32.to_nat(U32.add(up, 1)), 1n+pp,
+        Equal.cong(U32, Nat, uu => U32.to_nat(uu), U32.inc(up), U32.add(up, 1), Equal.sym(U32, U32.add(up, 1),
+          U32.inc(up), add.one(up))),
+        Equal.trans(Nat, U32.to_nat(U32.add(up, 1)), 1n+U32.to_nat(up), 1n+pp, M5.u32_inc_nat(up, hb1),
+          Equal.cong(Nat, Nat, kk => 1n+kk, U32.to_nat(up), pp, ih)))
+
+# eight times a is a doubled three times
+def eight(+aa: Nat) -> {Nat.mul(8n, aa) == Nat.double(Nat.double(Nat.double(aa))) : Nat}:
+  Equal.trans(Nat, Nat.mul(8n, aa), Nat.double(Nat.mul(4n, aa)), Nat.double(Nat.double(Nat.double(aa))),
+    M7.mul_double(4n, aa),
+    Equal.cong(Nat, Nat, kk => Nat.double(kk), Nat.mul(4n, aa), Nat.double(Nat.double(aa)),
+      Equal.trans(Nat, Nat.mul(4n, aa), Nat.double(Nat.mul(2n, aa)), Nat.double(Nat.double(aa)), M7.mul_double(2n, aa),
+        Equal.cong(Nat, Nat, kk => Nat.double(kk), Nat.mul(2n, aa), Nat.double(aa),
+          Equal.trans(Nat, Nat.mul(2n, aa), Nat.double(Nat.mul(1n, aa)), Nat.double(aa), M7.mul_double(1n, aa),
+            Equal.cong(Nat, Nat, kk => Nat.double(kk), Nat.mul(1n, aa), aa, M1.nat_add_zero(aa)))))))
+
+# fewer than 2^28 samples: 8 w h is below 2^32
+def eight.fits(
+  +aa: Nat,
+  hb: {D2.below(28n, aa) == True{} : Bool}
+) -> {D2.below(32n, Nat.mul(8n, aa)) == True{} : Bool}:
+  +d1 = Nat.double(aa)
+  +d2 = Nat.double(d1)
+  +d3 = Nat.double(d2)
+  Equal.trans(Bool, D2.below(32n, Nat.mul(8n, aa)), D2.below(32n, d3), True{},
+    Equal.cong(Nat, Bool, kk => D2.below(32n, kk), Nat.mul(8n, aa), d3, eight(aa)),
+    M5.below_up(31n, d3, M5.below.dbl(30n, d2, M5.below.dbl(29n, d1, M5.below.dbl(28n, aa, hb)))))
+
+# fewer than 2^28 samples: 8 w h is below 2^31
+def eight.short(
+  +aa: Nat,
+  hb: {D2.below(28n, aa) == True{} : Bool}
+) -> {D2.below(31n, Nat.mul(8n, aa)) == True{} : Bool}:
+  +d1 = Nat.double(aa)
+  +d2 = Nat.double(d1)
+  +d3 = Nat.double(d2)
+  Equal.trans(Bool, D2.below(31n, Nat.mul(8n, aa)), D2.below(31n, d3), True{},
+    Equal.cong(Nat, Bool, kk => D2.below(31n, kk), Nat.mul(8n, aa), d3, eight(aa)),
+    M5.below.dbl(30n, d2, M5.below.dbl(29n, d1, M5.below.dbl(28n, aa, hb))))
+
+# laws/PngRoundTrips.bend: one stored block when the scanlines fit, the stored blocks of 65535 bytes otherwise. The
+# bound below 2^28 samples gives a8, a word whose value is 8 w h, which the stored-block arithmetic takes
+def Laws.png_roundtrip(ww, hh, px, h_ok):
   +aa = Nat.mul(U32.to_nat(hh), U32.to_nat(ww))
   +ll = List.length(&2, U32, px)
   +nw = Bool.not(Nat.is_eq(U32.to_nat(ww), 0n))
   +nh = Bool.not(Nat.is_eq(U32.to_nat(hh), 0n))
   +ok = {h_ok : {D2.png_ok(ww, hh, px) == True{} : Bool}}
-  +e_sides = {M1.and_left(Bool.and(nw, nh), Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)), ok) :
+  +e_sides = {M1.and_left(Bool.and(nw, nh), Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)), ok) :
     {Bool.and(nw, nh) == True{} : Bool}}
-  +e_r = {M1.and_right(Bool.and(nw, nh), Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)), ok) :
-    {Bool.and(D2.below(32n, aa), Nat.is_eq(ll, aa)) == True{} : Bool}}
-  +e_la = {M5.nat_eq_true(ll, aa, M1.and_right(D2.below(32n, aa), Nat.is_eq(ll, aa), e_r)) : {ll == aa : Nat}}
+  +e_r = {M1.and_right(Bool.and(nw, nh), Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)), ok) :
+    {Bool.and(D2.below(28n, aa), Nat.is_eq(ll, aa)) == True{} : Bool}}
+  +e_la = {M5.nat_eq_true(ll, aa, M1.and_right(D2.below(28n, aa), Nat.is_eq(ll, aa), e_r)) : {ll == aa : Nat}}
   +z_w = M5.not.true(Nat.is_eq(U32.to_nat(ww), 0n), M1.and_left(nw, nh, e_sides))
   +z_h = M5.not.true(Nat.is_eq(U32.to_nat(hh), 0n), M1.and_right(nw, nh, e_sides))
   +e_good = rt.good.at(Png.enc.good(ww, hh, px), ww, hh, px, L2.png_encodes(ww, hh, px, ok))
-  rt2.pos(ww, hh, px, a8, ok, e_good, e_la, h_a8, M5.nat_pos(U32.to_nat(ww), z_w), M5.nat_pos(U32.to_nat(hh), z_h))
+  +a8 = U32.from_nat(Nat.mul(8n, aa))
+  +h_a8 = {nat.word(Nat.mul(8n, aa), eight.fits(aa, M1.and_left(D2.below(28n, aa), Nat.is_eq(ll, aa), e_r))) :
+    {U32.to_nat(a8) == Nat.mul(8n, aa) : Nat}}
+  +hb28 = {M1.and_left(D2.below(28n, aa), Nat.is_eq(ll, aa), e_r) : {D2.below(28n, aa) == True{} : Bool}}
+  +hb8 = {Equal.trans(Bool, D2.below(31n, U32.to_nat(a8)), D2.below(31n, Nat.mul(8n, aa)), True{},
+    Equal.cong(Nat, Bool, kk => D2.below(31n, kk), U32.to_nat(a8), Nat.mul(8n, aa), h_a8), eight.short(aa, hb28)) :
+    {D2.below(31n, U32.to_nat(a8)) == True{} : Bool}}
+  rt2.pos(ww, hh, px, a8, ok, e_good, e_la, h_a8, hb28, hb8,
+    M5.nat_pos(U32.to_nat(ww), z_w), M5.nat_pos(U32.to_nat(hh), z_h))

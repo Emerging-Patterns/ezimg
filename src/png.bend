@@ -1,6 +1,7 @@
 # src/png: PNG decode and encode (ISO/IEC 15948 / W3C PNG). Chunks, IHDR,
-# zlib method 0, and filter method 0. Decode reads 8-bit colour types 0, 2, 3,
-# 4, and 6. Encode writes colour type 2 or 6, filter None, and a stored IDAT.
+# zlib method 0, and filter method 0. Decode reads every colour type and bit
+# depth of PNG table 11.1, interlace methods 0 and Adam7. Encode writes colour
+# type 2 or 6, filter None, and a stored IDAT.
 import Base
 import ./crc.bend as Crc
 import ./inflate.bend as Inf
@@ -40,12 +41,26 @@ type Uf is Data:
   UBody{}
   UBad{}
 
-# transparency key carried by tRNS
+# transparency key carried by tRNS, at the samples' full width
 type Key is Data:
   KNone{}
-  KBad{}
   KGrey{+g: U32}
   KRgb{+r: U32, +g: U32, +b: U32}
+
+# a palette for lookup by index: none, one entry, the entries at even and at
+# odd positions (an index's low bit picks one, the rest of it the entry
+# there), or, past the fuel, the list itself
+type Pt is Data:
+  PNone{}
+  POne{+v: U32}
+  PTwo{ev: Pt, od: Pt}
+  PList{xs: List<&2, U32>}
+
+# a pass read from the front of the inflated data: its pixel rows and the
+# bytes after it, or refused
+type Pass is Data:
+  PBad{}
+  PGot{rows: List<&2, List<&2, U32>>, rest: List<&2, U32>}
 
 # big-endian unsigned 32
 def be.u32(+aa: U32, +bb: U32, +cc: U32, +dd: U32) -> U32:
@@ -75,20 +90,47 @@ def tag.trns() -> U32:
 def tag.anc(+typ: U32) -> Bool:
   U32.is_eq(((typ >> 24n : U32) .&. 32 : U32), 32)
 
-# colour types this decoder accepts
-def png.col(+cc: U32) -> Bool:
-  Bool.or(
-    Bool.or(U32.is_eq(cc, 0), U32.is_eq(cc, 2)),
-    Bool.or(U32.is_eq(cc, 3), Bool.or(U32.is_eq(cc, 4), U32.is_eq(cc, 6)))
-  )
+# the bit depths of gray: 1, 2, 4, 8 and 16
+def png.d.grey(+dd: U32) -> Bool:
+  Bool.or(U32.is_eq(dd, 1), Bool.or(U32.is_eq(dd, 2), Bool.or(U32.is_eq(dd, 4), Bool.or(U32.is_eq(dd, 8),
+    U32.is_eq(dd, 16)))))
 
-# IHDR constraints for the supported subset
+# the bit depths of RGB, gray and alpha, and RGBA: 8 and 16
+def png.d.wide(+dd: U32) -> Bool:
+  Bool.or(U32.is_eq(dd, 8), U32.is_eq(dd, 16))
+
+# the bit depths of indexed colour: 1, 2, 4 and 8
+def png.d.index(+dd: U32) -> Bool:
+  Bool.or(U32.is_eq(dd, 1), Bool.or(U32.is_eq(dd, 2), Bool.or(U32.is_eq(dd, 4), U32.is_eq(dd, 8))))
+
+# a colour type and bit depth PNG table 11.1 allows. The depth is asked
+# first in each arm, so at a known depth the test is one about the colour
+def png.depth.ok(+cc: U32, +dd: U32) -> Bool:
+  Bool.or(Bool.and(png.d.grey(dd), U32.is_eq(cc, 0)), Bool.or(Bool.and(png.d.wide(dd), U32.is_eq(cc, 2)),
+    Bool.or(Bool.and(png.d.index(dd), U32.is_eq(cc, 3)), Bool.or(Bool.and(png.d.wide(dd), U32.is_eq(cc, 4)),
+      Bool.and(png.d.wide(dd), U32.is_eq(cc, 6))))))
+
+# interlace method 0 (none) or 1 (Adam7)
+def png.inter.ok(+ii: U32) -> Bool:
+  Bool.or(U32.is_zero(ii), U32.is_eq(ii, 1))
+
+# below 2^31: the bound PNG section 7.1 puts on a chunk's length and
+# section 11.2.1 on the width and height (each at most 2^31 - 1)
+def png.short(+nn: U32) -> Bool:
+  U32.is_zero(U32.shrn(nn, 31n))
+
+# a width or height IHDR may give: from 1 to 2^31 - 1
+def png.side(+nn: U32) -> Bool:
+  Bool.and(U32.is_gt(nn, 0), png.short(nn))
+
+# IHDR constraints: sides from 1 to 2^31 - 1, a colour type and bit depth of
+# table 11.1, compression and filter method 0, and interlace method 0 or 1
 def png.good(+ww: U32, +hh: U32, +dd: U32, +cc: U32, +comp: U32, +ff: U32, +ii: U32) -> Bool:
   Bool.and(
-    Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)),
+    Bool.and(png.side(ww), png.side(hh)),
     Bool.and(
-      Bool.and(U32.is_eq(dd, 8), png.col(cc)),
-      Bool.and(U32.is_zero(comp), Bool.and(U32.is_zero(ff), U32.is_zero(ii)))
+      png.depth.ok(cc, dd),
+      Bool.and(U32.is_zero(comp), Bool.and(U32.is_zero(ff), png.inter.ok(ii)))
     )
   )
 
@@ -402,14 +444,84 @@ def px.rgba(xs: List<&2, U32>, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
     case _other:
       None{}
 
-def px.at(xs: List<&2, U32>, zz: Bool, +ii: U32) -> Maybe<&2, U32>:
-  match xs zz:
-    case Nil{} _z:
+# ---- the palette, for lookup by index ----
+
+# every other entry, from the first when `keep` and from the second otherwise
+def pt.alt(xs: List<&2, U32>, keep: Bool) -> List<&2, U32>:
+  match xs keep:
+    case Nil{} _keep:
+      []
+    case +hd <> tl True{}:
+      {hd <> pt.alt(tl, False{}) : List<&2, U32>}
+    case _hd <> tl False{}:
+      pt.alt(tl, True{})
+
+# the tree once the fuel is spent: no entry, one, or the list itself
+def pt.leaf(xs: List<&2, U32>) -> Pt:
+  match xs:
+    case Nil{}:
+      PNone{}
+    case +hd <> tl:
+      match tl:
+        case Nil{}:
+          POne{hd}
+        case +yy <> rr:
+          PList{{hd <> {yy <> rr : List<&2, U32>} : List<&2, U32>}}
+
+# a lookup tree of the entries: an index's low bit picks the half its entry
+# is in, so a palette of 256 entries is found in eight steps, not 256
+def pt.build(fuel: Nat, xs: List<&2, U32>) -> Pt:
+  match fuel:
+    case 0n:
+      pt.leaf(xs)
+    case 1n+(+ff):
+      match xs:
+        case Nil{}:
+          PNone{}
+        case +hd <> tl:
+          match tl:
+            case Nil{}:
+              POne{hd}
+            case +yy <> rr:
+              +all = {hd <> {yy <> rr : List<&2, U32>} : List<&2, U32>}
+              PTwo{pt.build(ff, pt.alt(all, True{})), pt.build(ff, pt.alt(all, False{}))}
+
+# the lookup tree of a list: as many halvings as there are entries is more
+# fuel than the halving needs, so the tree never falls back on the list
+def pt.tree(+xs: List<&2, U32>) -> Pt:
+  pt.build(List.length(&2, U32, xs), xs)
+
+# the entry at an index of a list the fuel ran out on: never reached from
+# pt.tree, there for a tree built with too little fuel
+def pt.list(xs: List<&2, U32>, +ix: U32) -> Maybe<&2, U32>:
+  List.get(&2, U32, xs, U32.to_nat(ix))
+
+# the entry when the index left is zero
+def pt.hit(zz: Bool, +vv: U32) -> Maybe<&2, U32>:
+  match zz:
+    case True{}:
+      Some{vv}
+    case False{}:
       None{}
-    case +h <> _t True{}:
-      Some{h}
-    case _h <> t False{}:
-      px.at(t, U32.is_zero((ii - 1 : U32)), (ii - 1 : U32))
+
+# whether an index is even: its low bit is clear
+def pt.even(+ix: U32) -> Bool:
+  U32.is_zero(U32.and(1, ix))
+
+# the entry at an index, none past the last; `even` is pt.even(ix), which
+# picks the half of a split the entry is in
+def pt.at(tr: Pt, even: Bool, +ix: U32) -> Maybe<&2, U32>:
+  match tr even:
+    case PNone{} _even:
+      None{}
+    case POne{+vv} _even:
+      pt.hit(U32.is_zero(ix), vv)
+    case PTwo{ev, _od} True{}:
+      pt.at(ev, pt.even(U32.shr(ix)), U32.shr(ix))
+    case PTwo{_ev, od} False{}:
+      pt.at(od, pt.even(U32.shr(ix)), U32.shr(ix))
+    case PList{xs} _even:
+      pt.list(xs, ix)
 
 def px.use(mm: Maybe<&2, U32>, kk: U32 -> Maybe<&2, List<&2, U32>>) -> Maybe<&2, List<&2, U32>>:
   match mm:
@@ -418,104 +530,76 @@ def px.use(mm: Maybe<&2, U32>, kk: U32 -> Maybe<&2, List<&2, U32>>) -> Maybe<&2,
     case Some{+c}:
       kk(c)
 
-def px.idx(xs: List<&2, U32>, +pal: List<&2, U32>, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+def px.idx(xs: List<&2, U32>, +pal: Pt, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match xs:
     case Nil{}:
       Some{List.reverse(&2, U32, acc)}
     case +i <> t:
-      px.use(px.at(pal, U32.is_zero(i), i), c => px.idx(t, pal, {c <> acc : List<&2, U32>}))
+      px.use(pt.at(pal, pt.even(i), i), c => px.idx(t, pal, {c <> acc : List<&2, U32>}))
 
 # the palette's entries, 0xAARRGGBB, each alpha from tRNS while it lasts and
-# 255 after; none when PLTE is not whole entries
-def pal.make(xs: List<&2, U32>, als: List<&2, U32>, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+# 255 after; a last entry cut short is no entry
+def pal.make(xs: List<&2, U32>, als: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
   match xs als:
     case Nil{} _als:
-      Some{List.reverse(&2, U32, acc)}
+      List.reverse(&2, U32, acc)
     case +r <> +g <> +b <> t Nil{}:
       pal.make(t, [], {px.pack(255, r, g, b) <> acc : List<&2, U32>})
     case +r <> +g <> +b <> t +a <> at:
       pal.make(t, at, {px.pack(a, r, g, b) <> acc : List<&2, U32>})
     case _xs _als:
-      None{}
+      List.reverse(&2, U32, acc)
 
-def png.le(xs: List<&2, U32>, ys: List<&2, U32>) -> Bool:
-  U32.is_le(U32.from_nat(List.length(&2, U32, xs)), U32.from_nat(List.length(&2, U32, ys)))
-
-# the palette, when tRNS has no more entries than it
-def pal.gate(zz: Bool, pxs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+# tRNS's alphas when it has no more entries than PLTE; none otherwise, as
+# libpng ignores a palette tRNS longer than the palette
+def pal.alphas(zz: Bool, als: List<&2, U32>) -> List<&2, U32>:
   match zz:
-    case False{}:
-      None{}
     case True{}:
-      Some{pxs}
+      als
+    case False{}:
+      []
 
-# check tRNS against the palette's length
-def pal.ready(mm: Maybe<&2, List<&2, U32>>, +als: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  match mm:
-    case None{}:
-      None{}
-    case Some{+pxs}:
-      pal.gate(png.le(als, pxs), pxs)
+# the palette's lookup tree, with alphas from tRNS
+def pal.tree(+plte: List<&2, U32>, +trns: List<&2, U32>) -> Pt:
+  +fits = Nat.is_le(List.length(&2, U32, trns), Nat.div(List.length(&2, U32, plte), 3n))
+  pt.tree(pal.make(plte, pal.alphas(fits, trns), []))
 
-def px.indexed.at(mm: Maybe<&2, List<&2, U32>>, samples: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  match mm:
-    case None{}:
-      None{}
-    case Some{pal}:
-      px.idx(samples, pal, [])
+def px.indexed(samples: List<&2, U32>, +plte: List<&2, U32>, +trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  px.idx(samples, pal.tree(plte, trns), [])
 
-def px.indexed(samples: List<&2, U32>, plte: List<&2, U32>, +trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  px.indexed.at(pal.ready(pal.make(plte, trns, []), trns), samples)
+# a 16-bit tRNS value from its two bytes, most significant first
+def key.u16(zz: Bool, +hi: U32, +lo: U32) -> U32:
+  match zz:
+    case True{}:
+      lo
+    case False{}:
+      ((hi << 8n : U32) .|. lo : U32)
 
+# a gray key: tRNS of exactly two bytes. Any other length is a faulty tRNS,
+# ignored (PNG section 13.1)
 def key.grey(xs: List<&2, U32>) -> Key:
   match xs:
-    case Nil{}:
-      KNone{}
-    case 0 <> +g <> Nil{}:
-      KGrey{g}
+    case +g1 <> +g0 <> Nil{}:
+      KGrey{key.u16(U32.is_zero(g1), g1, g0)}
     case _other:
-      KBad{}
+      KNone{}
 
+# an RGB key: tRNS of exactly six bytes; any other length is ignored
 def key.rgb(xs: List<&2, U32>) -> Key:
   match xs:
-    case Nil{}:
-      KNone{}
-    case 0 <> +r <> 0 <> +g <> 0 <> +b <> Nil{}:
-      KRgb{r, g, b}
+    case +r1 <> +r0 <> +g1 <> +g0 <> +b1 <> +b0 <> Nil{}:
+      KRgb{key.u16(U32.is_zero(r1), r1, r0), key.u16(U32.is_zero(g1), g1, g0), key.u16(U32.is_zero(b1), b1, b0)}
     case _other:
-      KBad{}
-
-def key.none(xs: List<&2, U32>) -> Key:
-  match xs:
-    case Nil{}:
       KNone{}
-    case _other:
-      KBad{}
-
-def px.ga.ok(key: Key, samples: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  match key:
-    case KNone{}:
-      px.ga(samples, [])
-    case _k:
-      None{}
-
-def px.rgba.ok(key: Key, samples: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  match key:
-    case KNone{}:
-      px.rgba(samples, [])
-    case _k:
-      None{}
-
-def px.rgba.go(samples: List<&2, U32>, trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
-  px.rgba.ok(key.none(trns), samples)
 
 def px.k4(z6: Bool, samples: List<&2, U32>, plte: List<&2, U32>, trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   match z6:
     case True{}:
-      px.rgba.go(samples, trns)
+      px.rgba(samples, [])
     case False{}:
       px.indexed(samples, plte, trns)
 
+# gray and alpha, and RGBA, carry their own alpha: a tRNS there is ignored
 def px.k3(
   z4: Bool,
   z6: Bool,
@@ -527,7 +611,7 @@ def px.k3(
     case False{}:
       px.k4(z6, samples, plte, trns)
     case True{}:
-      px.ga.ok(key.none(trns), samples)
+      px.ga(samples, [])
 
 def px.k2(
   z2: Bool,
@@ -558,6 +642,7 @@ def px.k0(
     case False{}:
       px.k2(z2, z4, z6, samples, plte, trns)
 
+# 8-bit samples to 0xAARRGGBB for a colour type
 def px.of(+colour: U32, samples: List<&2, U32>, plte: List<&2, U32>, trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
   px.k0(U32.is_eq(colour, 0), U32.is_eq(colour, 2), U32.is_eq(colour, 4), U32.is_eq(colour, 6), samples, plte, trns)
 
@@ -649,6 +734,16 @@ def png.on.plte(ihdr: Bool, saw_plte: Bool, saw_idat: Bool, +colour: U32, +data:
         pg.plte(pg, List.reverse(&2, U32, data))
       )
 
+# a tRNS the decoder takes: the first, before IDAT, for a colour type that
+# allows one. Any other is ignored as a faulty ancillary chunk (PNG section
+# 13.1; libpng's benign error), the way png.other.at passes an unknown one
+def png.trns.take(zz: Bool, data: List<&2, U32>, pg: Pg) -> Nx:
+  match zz:
+    case True{}:
+      NMore{pg.trns(pg, List.reverse(&2, U32, data))}
+    case False{}:
+      NMore{png.seal(pg)}
+
 def png.on.trns(
   ihdr: Bool,
   saw_trns: Bool,
@@ -662,10 +757,7 @@ def png.on.trns(
     case False{}:
       NBad{}
     case True{}:
-      png.allow(
-        Bool.and(Bool.not(saw_trns), Bool.and(Bool.not(saw_idat), png.trns.ok(colour, saw_plte))),
-        pg.trns(pg, List.reverse(&2, U32, data))
-      )
+      png.trns.take(Bool.and(Bool.not(saw_idat), Bool.and(Bool.not(saw_trns), png.trns.ok(colour, saw_plte))), data, pg)
 
 def png.iend.ok(zz: Bool, pg: Pg) -> Nx:
   match zz:
@@ -844,15 +936,6 @@ def png.judge.at(zz: Bool, +typ: U32, data: List<&2, U32>, pg: Pg) -> Nx:
 def png.judge(+got: U32, crc: List<&2, U32>, +typ: U32, data: List<&2, U32>, pg: Pg) -> Nx:
   png.judge.at(U32.is_eq(got, Crc.crc32(List.reverse(&2, U32, crc))), typ, data, pg)
 
-def png.pgof(nx: Nx) -> Pg:
-  match nx:
-    case NBad{}:
-      pg.empty()
-    case NEnd{pg}:
-      pg
-    case NMore{pg}:
-      pg
-
 def png.zp(zz: Bool) -> Pz:
   match zz:
     case True{}:
@@ -895,27 +978,648 @@ def png.samples(
     case Some{raw}:
       png.pack(unfilter(raw, ww, hh, png.bpp(colour)), ww, hh, colour, plte, trns)
 
+# ---- bit depths other than 8, and Adam7 ----
+
+# the bits of one pixel: the bit depth times the channels
+def png.bits(+dd: U32, +cc: U32) -> U32:
+  (dd * png.bpp(cc) : U32)
+
+def png.fbpp.at(zz: Bool, +nn: U32) -> U32:
+  match zz:
+    case True{}:
+      1
+    case False{}:
+      nn
+
+# the filters' bytes per pixel (PNG section 9.2): a pixel's whole bytes, at
+# least one
+def png.fbpp(+bits: U32) -> U32:
+  png.fbpp.at(U32.is_zero(U32.shrn(bits, 3n)), U32.shrn(bits, 3n))
+
+# a scanline's bytes after its filter byte, for pw pixels: ceil(pw * bits / 8)
+def png.stride(pw: Nat, +bits: U32) -> Nat:
+  Nat.div(Nat.add(Nat.mul(pw, U32.to_nat(bits)), 7n), 8n)
+
+def uf.rows.at(zz: Bool, raw: List<&2, U32>, +stride: U32, +hh: U32, +bpp: U32) -> Maybe<&2, List<&2, U32>>:
+  match zz:
+    case False{}:
+      None{}
+    case True{}:
+      uf.go(raw, UFilt{}, False{}, bpp, stride, U32.to_nat(hh), [], [], [], [], 0, 0)
+
+# undo the filters of hh rows of `stride` bytes each, `bpp` bytes per pixel
+# back (1 to 8): the scanlines of any bit depth, or of one Adam7 pass
+def unfilter.rows(raw: List<&2, U32>, +stride: U32, +hh: U32, +bpp: U32) -> Maybe<&2, List<&2, U32>>:
+  +ok = Bool.and(U32.is_gt(stride, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 8))))
+  uf.rows.at(ok, raw, stride, hh, bpp)
+
+# the samples of one byte at bit depth 1, 2 or 4, most significant first,
+# pushed onto acc newest first
+def unpack.byte(z1: Bool, z2: Bool, +bb: U32, acc: List<&2, U32>) -> List<&2, U32>:
+  match z1 z2:
+    case True{} _z2:
+      {U32.and(U32.shrn(bb, 0n), 1) <> {U32.and(U32.shrn(bb, 1n), 1) <> {U32.and(U32.shrn(bb, 2n), 1) <>
+        {U32.and(U32.shrn(bb, 3n), 1) <> {U32.and(U32.shrn(bb, 4n), 1) <> {U32.and(U32.shrn(bb, 5n), 1) <>
+        {U32.and(U32.shrn(bb, 6n), 1) <> {U32.and(U32.shrn(bb, 7n), 1) <> acc : List<&2, U32>} : List<&2, U32>}
+        : List<&2, U32>} : List<&2, U32>} : List<&2, U32>} : List<&2, U32>} : List<&2, U32>} : List<&2, U32>}
+    case False{} True{}:
+      {U32.and(U32.shrn(bb, 0n), 3) <> {U32.and(U32.shrn(bb, 2n), 3) <> {U32.and(U32.shrn(bb, 4n), 3) <>
+        {U32.and(U32.shrn(bb, 6n), 3) <> acc : List<&2, U32>} : List<&2, U32>} : List<&2, U32>} : List<&2, U32>}
+    case False{} False{}:
+      {U32.and(U32.shrn(bb, 0n), 15) <> {U32.and(U32.shrn(bb, 4n), 15) <> acc : List<&2, U32>} : List<&2, U32>}
+
+# every sample of a row's bytes at bit depth 1, 2 or 4, newest first
+def unpack.low(+dd: U32, row: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
+  match row:
+    case Nil{}:
+      acc
+    case +bb <> tl:
+      unpack.low(dd, tl, unpack.byte(U32.is_eq(dd, 1), U32.is_eq(dd, 2), bb, acc))
+
+# the 16-bit samples of a row, two bytes each, most significant first; newest first
+def unpack.wide(row: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
+  match row:
+    case +hi <> +lo <> tl:
+      unpack.wide(tl, {((hi << 8n : U32) .|. lo : U32) <> acc : List<&2, U32>})
+    case _other:
+      acc
+
+def unpack.row.at(z8: Bool, z16: Bool, +dd: U32, +count: Nat, row: List<&2, U32>) -> List<&2, U32>:
+  match z8 z16:
+    case True{} _z16:
+      row
+    case False{} True{}:
+      List.reverse(&2, U32, unpack.wide(row, []))
+    case False{} False{}:
+      List.take(&2, U32, List.reverse(&2, U32, unpack.low(dd, row, [])), count)
+
+# the samples of one scanline, in order: count samples of dd bits (PNG
+# section 7.2: packed most significant bit first, 16-bit samples most
+# significant byte first), the unused bits at the end of a row dropped
+def unpack.row(+dd: U32, +count: Nat, row: List<&2, U32>) -> List<&2, U32>:
+  unpack.row.at(U32.is_eq(dd, 8), U32.is_eq(dd, 16), dd, count, row)
+
+# the samples of a pass's unfiltered rows, `stride` bytes each, in order
+def pass.samples(
+  rows: Nat,
+  +dd: U32,
+  +bytes: List<&2, U32>,
+  +stride: Nat,
+  +count: Nat,
+  acc: List<&2, U32>
+) -> List<&2, U32>:
+  match rows:
+    case 0n:
+      List.reverse(&2, U32, acc)
+    case 1n+rr:
+      pass.samples(rr, dd, List.drop(&2, U32, bytes, stride), stride, count,
+        List.reverse.go(&2, U32, unpack.row(dd, count, List.take(&2, U32, bytes, stride)), acc))
+
+# a 16-bit sample reduced to 8 bits: its high byte
+def px.hi(+vv: U32) -> U32:
+  U32.shrn(vv, 8n)
+
+# a sample of bit depth 1, 2 or 4 scaled to 8 bits as libpng and Pillow do,
+# v * 255 / (2^d - 1): bit replication (PNG section 13.12)
+def px.up(+mx: U32, +vv: U32) -> U32:
+  U32.div((vv * 255 : U32), mx)
+
+# 16-bit gray, the key compared at 16 bits
+def px.grey16(xs: List<&2, U32>, key: Key, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match xs key:
+    case Nil{} _k:
+      Some{List.reverse(&2, U32, acc)}
+    case +g <> t KNone{}:
+      px.grey16(t, KNone{}, {px.pack(255, px.hi(g), px.hi(g), px.hi(g)) <> acc : List<&2, U32>})
+    case +g <> t KGrey{+k}:
+      px.grey16(t, KGrey{k}, {px.pack(px.hit(g, k), px.hi(g), px.hi(g), px.hi(g)) <> acc : List<&2, U32>})
+    case _xs _k:
+      None{}
+
+# 16-bit RGB, the key compared at 16 bits
+def px.rgb16(xs: List<&2, U32>, key: Key, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match xs key:
+    case Nil{} _k:
+      Some{List.reverse(&2, U32, acc)}
+    case +r <> +g <> +b <> t KNone{}:
+      px.rgb16(t, KNone{}, {px.pack(255, px.hi(r), px.hi(g), px.hi(b)) <> acc : List<&2, U32>})
+    case +r <> +g <> +b <> t KRgb{+kr, +kg, +kb}:
+      px.rgb16(t, KRgb{kr, kg, kb}, {px.pack(px.rgb.hit(r, g, b, kr, kg, kb), px.hi(r), px.hi(g), px.hi(b)) <> acc
+        : List<&2, U32>})
+    case _xs _k:
+      None{}
+
+# every 16-bit sample reduced to its high byte
+def px.his(xs: List<&2, U32>) -> List<&2, U32>:
+  match xs:
+    case Nil{}:
+      []
+    case +vv <> tl:
+      {px.hi(vv) <> px.his(tl) : List<&2, U32>}
+
+# gray of bit depth 1, 2 or 4 (mx = 2^d - 1), the key compared unscaled
+def px.grey.low(+mx: U32, xs: List<&2, U32>, key: Key, acc: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match xs key:
+    case Nil{} _k:
+      Some{List.reverse(&2, U32, acc)}
+    case +g <> t KNone{}:
+      px.grey.low(mx, t, KNone{}, {px.pack(255, px.up(mx, g), px.up(mx, g), px.up(mx, g)) <> acc : List<&2, U32>})
+    case +g <> t KGrey{+k}:
+      px.grey.low(mx, t, KGrey{k}, {px.pack(px.hit(g, k), px.up(mx, g), px.up(mx, g), px.up(mx, g)) <> acc
+        : List<&2, U32>})
+    case _xs _k:
+      None{}
+
+def px.w2(z2: Bool, z4: Bool, samples: List<&2, U32>, trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match z2 z4:
+    case True{} _z4:
+      px.rgb16(samples, key.rgb(trns), [])
+    case False{} True{}:
+      px.ga(px.his(samples), [])
+    case False{} False{}:
+      px.rgba(px.his(samples), [])
+
+def px.wide.at(zz: Bool, +cc: U32, samples: List<&2, U32>, trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match zz:
+    case True{}:
+      px.grey16(samples, key.grey(trns), [])
+    case False{}:
+      px.w2(U32.is_eq(cc, 2), U32.is_eq(cc, 4), samples, trns)
+
+# 16-bit samples to 0xAARRGGBB for a colour type (0, 2, 4 or 6)
+def px.wide(+cc: U32, samples: List<&2, U32>, trns: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  px.wide.at(U32.is_zero(cc), cc, samples, trns)
+
+def px.low.at(
+  zz: Bool,
+  +dd: U32,
+  samples: List<&2, U32>,
+  plte: List<&2, U32>,
+  trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match zz:
+    case True{}:
+      px.grey.low(U32.sub(U32.shln(1, U32.to_nat(dd)), 1), samples, key.grey(trns), [])
+    case False{}:
+      px.indexed(samples, plte, trns)
+
+# samples of bit depth 1, 2 or 4 to 0xAARRGGBB: gray scaled up, or palette
+# indices
+def px.low(
+  +cc: U32,
+  +dd: U32,
+  samples: List<&2, U32>,
+  plte: List<&2, U32>,
+  trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  px.low.at(U32.is_zero(cc), dd, samples, plte, trns)
+
+def px.deep.at(
+  z8: Bool,
+  z16: Bool,
+  +cc: U32,
+  +dd: U32,
+  samples: List<&2, U32>,
+  plte: List<&2, U32>,
+  trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match z8 z16:
+    case True{} _z16:
+      px.of(cc, samples, plte, trns)
+    case False{} True{}:
+      px.wide(cc, samples, trns)
+    case False{} False{}:
+      px.low(cc, dd, samples, plte, trns)
+
+# samples of any bit depth to 0xAARRGGBB for a colour type
+def px.deep(
+  +cc: U32,
+  +dd: U32,
+  samples: List<&2, U32>,
+  plte: List<&2, U32>,
+  trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  px.deep.at(U32.is_eq(dd, 8), U32.is_eq(dd, 16), cc, dd, samples, plte, trns)
+
+# rows of nn samples each, `rows` of them
+def rows.split(rows: Nat, +xs: List<&2, U32>, +nn: Nat) -> List<&2, List<&2, U32>>:
+  match rows:
+    case 0n:
+      []
+    case 1n+rr:
+      {List.take(&2, U32, xs, nn) <> rows.split(rr, List.drop(&2, U32, xs, nn), nn) : List<&2, List<&2, U32>>}
+
+def pass.rows(mm: Maybe<&2, List<&2, U32>>, rest: List<&2, U32>, +pw: U32, +ph: U32) -> Pass:
+  match mm:
+    case None{}:
+      PBad{}
+    case Some{+px}:
+      PGot{rows.split(U32.to_nat(ph), px, U32.to_nat(pw)), rest}
+
+def pass.px(
+  mm: Maybe<&2, List<&2, U32>>,
+  rest: List<&2, U32>,
+  +sn: Nat,
+  +pw: U32,
+  +ph: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Pass:
+  match mm:
+    case None{}:
+      PBad{}
+    case Some{+bytes}:
+      +count = Nat.mul(U32.to_nat(pw), U32.to_nat(png.bpp(cc)))
+      pass.rows(px.deep(cc, dd, pass.samples(U32.to_nat(ph), dd, bytes, sn, count, []), plte, trns), rest, pw, ph)
+
+def pass.fit(
+  zz: Bool,
+  +raw: List<&2, U32>,
+  +sn: Nat,
+  +pw: U32,
+  +ph: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Pass:
+  match zz:
+    case False{}:
+      PBad{}
+    case True{}:
+      +nn = Nat.mul(U32.to_nat(ph), 1n+sn)
+      +bits = png.bits(dd, cc)
+      pass.px(unfilter.rows(List.take(&2, U32, raw, nn), U32.from_nat(sn), ph, png.fbpp(bits)),
+        List.drop(&2, U32, raw, nn), sn, pw, ph, dd, cc, plte, trns)
+
+def pass.open(
+  zz: Bool,
+  +raw: List<&2, U32>,
+  +pw: U32,
+  +ph: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Pass:
+  match zz:
+    case True{}:
+      PGot{[], raw}
+    case False{}:
+      +sn = png.stride(U32.to_nat(pw), png.bits(dd, cc))
+      pass.fit(Nat.is_eq(U32.to_nat(U32.from_nat(sn)), sn), raw, sn, pw, ph, dd, cc, plte, trns)
+
+# a pass of pw by ph pixels, its scanlines filtered on their own (PNG section
+# 8.2); a pass with a side 0 is empty and has no bytes
+def pass.read(
+  +raw: List<&2, U32>,
+  +pw: U32,
+  +ph: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Pass:
+  pass.open(Bool.or(U32.is_zero(pw), U32.is_zero(ph)), raw, pw, ph, dd, cc, plte, trns)
+
+# ceil(n / 2)
+def png.up(+nn: U32) -> U32:
+  (U32.shr(nn) + U32.and(1, nn) : U32)
+
+# floor(n / 2)
+def png.dn(+nn: U32) -> U32:
+  U32.shr(nn)
+
+# a's samples at even places and b's at odd: a0 b0 a1 b1 and so on, to the
+# end of a
+def ilv.px(aa: List<&2, U32>, bb: List<&2, U32>) -> List<&2, U32>:
+  match aa:
+    case Nil{}:
+      []
+    case +ha <> ta:
+      match bb:
+        case Nil{}:
+          [ha]
+        case +hb <> tb:
+          {ha <> {hb <> ilv.px(ta, tb) : List<&2, U32>} : List<&2, U32>}
+
+# a's rows at even places and b's at odd
+def ilv.rows(aa: List<&2, List<&2, U32>>, bb: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
+  match aa:
+    case Nil{}:
+      []
+    case ha <> ta:
+      match bb:
+        case Nil{}:
+          [ha]
+        case hb <> tb:
+          {ha <> {hb <> ilv.rows(ta, tb) : List<&2, List<&2, U32>>} : List<&2, List<&2, U32>>}
+
+# the first row, or an empty one when there is none
+def rows.head(bb: List<&2, List<&2, U32>>) -> List<&2, U32>:
+  match bb:
+    case Nil{}:
+      []
+    case rb <> _tb:
+      rb
+
+# the rows after the first
+def rows.tail(bb: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
+  match bb:
+    case Nil{}:
+      []
+    case _rb <> tb:
+      tb
+
+# each row of a with b's row of the same place, a's samples at even columns
+# and b's at odd; a row b lacks is empty
+def ilv.cols(aa: List<&2, List<&2, U32>>, +bb: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
+  match aa:
+    case Nil{}:
+      []
+    case ra <> ta:
+      {ilv.px(ra, rows.head(bb)) <> ilv.cols(ta, rows.tail(bb)) : List<&2, List<&2, U32>>}
+
+# the picture's samples, when the data held exactly the passes
+def a7.end(zz: Bool, rows: List<&2, List<&2, U32>>) -> Maybe<&2, List<&2, U32>>:
+  match zz:
+    case True{}:
+      Some{List.concat(&2, U32, rows)}
+    case False{}:
+      None{}
+
+# the seven passes put back together (PNG section 8.2), by halves: pass 7
+# holds the odd rows and passes 1 to 6 the even ones; of those, pass 6 holds
+# the odd columns and passes 1 to 5 the even ones; and so on down to pass 1,
+# every eighth sample of every eighth row. Each step interleaves rows
+# (ilv.rows) or columns (ilv.cols)
+def a7.merge(
+  r1: List<&2, List<&2, U32>>,
+  +r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  +r4: List<&2, List<&2, U32>>,
+  r5: List<&2, List<&2, U32>>,
+  +r6: List<&2, List<&2, U32>>,
+  r7: List<&2, List<&2, U32>>
+) -> List<&2, List<&2, U32>>:
+  ilv.rows(ilv.cols(ilv.rows(ilv.cols(ilv.rows(ilv.cols(r1, r2), r3), r4), r5), r6), r7)
+
+def a7.s7(
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  r4: List<&2, List<&2, U32>>,
+  r5: List<&2, List<&2, U32>>,
+  r6: List<&2, List<&2, U32>>,
+  pp: Pass
+) -> Maybe<&2, List<&2, U32>>:
+  match pp:
+    case PBad{}:
+      None{}
+    case PGot{r7, t7}:
+      a7.end(List.is_empty(&2, U32, t7), a7.merge(r1, r2, r3, r4, r5, r6, r7))
+
+def a7.s6(
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  r4: List<&2, List<&2, U32>>,
+  r5: List<&2, List<&2, U32>>,
+  pp: Pass,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match pp:
+    case PBad{}:
+      None{}
+    case PGot{r6, t6}:
+      a7.s7(r1, r2, r3, r4, r5, r6, pass.read(t6, ww, png.dn(hh), dd, cc, plte, trns))
+
+def a7.s5(
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  r4: List<&2, List<&2, U32>>,
+  pp: Pass,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match pp:
+    case PBad{}:
+      None{}
+    case PGot{r5, t5}:
+      a7.s6(r1, r2, r3, r4, r5, pass.read(t5, png.dn(ww), png.up(hh), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+
+def a7.s4(
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  r3: List<&2, List<&2, U32>>,
+  pp: Pass,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match pp:
+    case PBad{}:
+      None{}
+    case PGot{r4, t4}:
+      +w1 = png.up(ww)
+      a7.s5(r1, r2, r3, r4, pass.read(t4, w1, png.dn(png.up(hh)), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+
+def a7.s3(
+  r1: List<&2, List<&2, U32>>,
+  r2: List<&2, List<&2, U32>>,
+  pp: Pass,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match pp:
+    case PBad{}:
+      None{}
+    case PGot{r3, t3}:
+      +w1 = png.up(ww)
+      +h2 = png.up(png.up(hh))
+      a7.s4(r1, r2, r3, pass.read(t3, png.dn(w1), h2, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+
+def a7.s2(
+  r1: List<&2, List<&2, U32>>,
+  pp: Pass,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match pp:
+    case PBad{}:
+      None{}
+    case PGot{r2, t2}:
+      +w2 = png.up(png.up(ww))
+      +h2 = png.up(png.up(hh))
+      a7.s3(r1, r2, pass.read(t2, w2, png.dn(h2), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+
+def a7.s1(
+  pp: Pass,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match pp:
+    case PBad{}:
+      None{}
+    case PGot{r1, t1}:
+      +w2 = png.up(png.up(ww))
+      +h3 = png.up(png.up(png.up(hh)))
+      a7.s2(r1, pass.read(t1, png.dn(w2), h3, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+
+# Adam7 (PNG section 8.2): seven passes in order, each a picture of its own,
+# read at the sizes png.a7.len counts and put back together by a7.merge
+def a7.go(
+  +raw: List<&2, U32>,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  +w3 = png.up(png.up(png.up(ww)))
+  +h3 = png.up(png.up(png.up(hh)))
+  a7.s1(pass.read(raw, w3, h3, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+
+# the filtered bytes of a pass of pw by ph pixels: a filter byte and a
+# scanline for each row, none for an empty pass
+def png.pass.len.at(zz: Bool, +pw: U32, +ph: U32, +bits: U32) -> Nat:
+  match zz:
+    case True{}:
+      0n
+    case False{}:
+      Nat.mul(U32.to_nat(ph), 1n+png.stride(U32.to_nat(pw), bits))
+
+def png.pass.len(+pw: U32, +ph: U32, +bits: U32) -> Nat:
+  png.pass.len.at(Bool.or(U32.is_zero(pw), U32.is_zero(ph)), pw, ph, bits)
+
+# the filtered bytes of the seven Adam7 passes, as a7.go reads them
+def png.a7.len(+ww: U32, +hh: U32, +bits: U32) -> Nat:
+  +w1 = png.up(ww)
+  +w2 = png.up(w1)
+  +h1 = png.up(hh)
+  +h2 = png.up(h1)
+  Nat.add(png.pass.len(png.up(w2), png.up(h2), bits), Nat.add(png.pass.len(png.dn(w2), png.up(h2), bits),
+    Nat.add(png.pass.len(w2, png.dn(h2), bits), Nat.add(png.pass.len(png.dn(w1), h2, bits),
+    Nat.add(png.pass.len(w1, png.dn(h1), bits), Nat.add(png.pass.len(png.dn(ww), h1, bits),
+    png.pass.len(ww, png.dn(hh), bits)))))))
+
+def png.budget.at(zz: Bool, +ww: U32, +hh: U32, +bits: U32) -> Nat:
+  match zz:
+    case True{}:
+      png.pass.len(ww, hh, bits)
+    case False{}:
+      png.a7.len(ww, hh, bits)
+
+# the exact length the inflated IDAT data must have for the header: what
+# unfilter reads, so the inflater can stop as soon as a stream passes it
+def png.budget(+ww: U32, +hh: U32, +dd: U32, +cc: U32, +ii: U32) -> Nat:
+  png.budget.at(U32.is_zero(ii), ww, hh, png.bits(dd, cc))
+
+# a picture without interlacing: one pass of the whole size
+def png.flat(pp: Pass) -> Maybe<&2, List<&2, U32>>:
+  match pp:
+    case PBad{}:
+      None{}
+    case PGot{rows, rest}:
+      a7.end(List.is_empty(&2, U32, rest), rows)
+
+def png.deep.at(
+  zz: Bool,
+  +raw: List<&2, U32>,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +plte: List<&2, U32>,
+  +trns: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match zz:
+    case True{}:
+      png.flat(pass.read(raw, ww, hh, dd, cc, plte, trns))
+    case False{}:
+      a7.go(raw, ww, hh, dd, cc, plte, trns)
+
+# the picture of any bit depth and interlace method from the inflated data
+def png.deep(
+  mm: Maybe<&2, List<&2, U32>>,
+  +ww: U32,
+  +hh: U32,
+  +dd: U32,
+  +cc: U32,
+  +ii: U32,
+  plte: List<&2, U32>,
+  trns: List<&2, U32>
+) -> Maybe<&2, Pic>:
+  match mm:
+    case None{}:
+      None{}
+    case Some{+raw}:
+      png.pic(png.deep.at(U32.is_zero(ii), raw, ww, hh, dd, cc, plte, trns), ww, hh)
+
+# the filtered bytes of 8-bit samples without interlacing: h rows, each a
+# filter byte and w pixels of bpp bytes. png.budget at bit depth 8 and
+# interlace method 0, in the form the round trip reads
+def png.budget8(+ww: U32, +hh: U32, +cc: U32) -> Nat:
+  Nat.mul(U32.to_nat(hh), 1n+Nat.mul(U32.to_nat(ww), U32.to_nat(png.bpp(cc))))
+
+# 8-bit samples without interlacing take png.samples; any other bit depth,
+# or Adam7, png.deep. Either way the inflater stops once the data passes the
+# length the header implies
 def png.finish.go(
   zenc: Bool,
   +ww: U32,
   +hh: U32,
+  +dd: U32,
   +colour: U32,
+  +ii: U32,
   idat: List<&2, U32>,
   plte: List<&2, U32>,
   trns: List<&2, U32>
 ) -> Maybe<&2, Pic>:
   match zenc:
-    case False{}:
-      None{}
     case True{}:
-      png.samples(Inf.inflate(List.reverse(&2, U32, idat)), ww, hh, colour, plte, trns)
+      png.samples(Inf.inflate.upto(png.budget8(ww, hh, colour), List.reverse(&2, U32, idat)), ww, hh, colour, plte,
+        trns)
+    case False{}:
+      png.deep(Inf.inflate.upto(png.budget(ww, hh, dd, colour, ii), List.reverse(&2, U32, idat)), ww, hh, dd,
+        colour, ii, plte, trns)
 
 def png.finish.at(
   zz: Bool,
   zenc: Bool,
   +ww: U32,
   +hh: U32,
+  +dd: U32,
   +colour: U32,
+  +ii: U32,
   idat: List<&2, U32>,
   plte: List<&2, U32>,
   trns: List<&2, U32>
@@ -924,24 +1628,50 @@ def png.finish.at(
     case False{}:
       None{}
     case True{}:
-      png.finish.go(zenc, ww, hh, colour, idat, plte, trns)
+      png.finish.go(zenc, ww, hh, dd, colour, ii, idat, plte, trns)
 
 def png.finish(pg: Pg) -> Maybe<&2, Pic>:
   match pg:
     case Pg{+w, +h, +d, +colour, +comp, +f, +i, idat, plte, trns, ihdr, _sp, _si, _sd, _st, iend}:
       png.finish.at(Bool.and(ihdr, iend), Bool.and(U32.is_eq(d, 8), Bool.and(U32.is_zero(comp), Bool.and(U32.is_zero(f),
-        U32.is_zero(i)))), w, h, colour, idat, plte, trns)
+        U32.is_zero(i)))), w, h, d, colour, i, idat, plte, trns)
 
-def png.crc(nx: Nx, empty: Bool, more: Maybe<&2, Pic>) -> Maybe<&2, Pic>:
-  match nx empty:
-    case NBad{} _e:
+# after a judged chunk: none when it was refused, the picture when it was
+# IEND (whatever bytes follow it, as libpng and other decoders stop reading
+# there), and the walk over the rest otherwise. The walk is started only in
+# that last case: a refusal or IEND reads nothing more
+# the state a judged chunk leaves; any state for one refused
+def png.pgof(nx: Nx) -> Pg:
+  match nx:
+    case NBad{}:
+      pg.empty()
+    case NEnd{pg}:
+      pg
+    case NMore{pg}:
+      pg
+
+# after a judged chunk: none when it was refused, the picture when it was
+# IEND (whatever bytes follow it, as libpng and other decoders stop reading
+# there), and the walk over the rest otherwise. The walk is a thunk, forced
+# only in that last case: after a refusal or IEND nothing more is read
+def png.crc(nx: Nx, more: Unit -> Maybe<&2, Pic>) -> Maybe<&2, Pic>:
+  match nx:
+    case NBad{}:
       None{}
-    case NEnd{_pg} False{}:
-      None{}
-    case NEnd{pg} True{}:
+    case NEnd{pg}:
       png.finish(pg)
-    case NMore{_pg} _e:
-      more
+    case NMore{_pg}:
+      more(Unit{})
+
+# after a chunk's length field: the walk over the rest when the length is
+# below 2^31 (PNG section 7.1), none otherwise. The walk is a thunk, forced
+# only when the length is taken
+def png.len.ok(zz: Bool, more: Unit -> Maybe<&2, Pic>) -> Maybe<&2, Pic>:
+  match zz:
+    case True{}:
+      more(Unit{})
+    case False{}:
+      None{}
 
 # one byte of a PNG chunk stream. `zlast` is the last data byte of the chunk.
 def png.go(
@@ -958,7 +1688,8 @@ def png.go(
     case Nil{} _pz _z:
       None{}
     case +a <> +b <> +c <> +d <> rest ZLen{} _z:
-      png.go(rest, ZTyp{}, False{}, be.u32(a, b, c, d), 0, [], [], pg)
+      +n = be.u32(a, b, c, d)
+      png.len.ok(png.short(n), _u => png.go(rest, ZTyp{}, False{}, n, 0, [], [], pg))
     case _xs ZLen{} _z:
       None{}
     case +a <> +b <> +c <> +d <> rest ZTyp{} _z:
@@ -970,9 +1701,9 @@ def png.go(
     case +b <> rest ZDat{} False{}:
       +n = (left - 1 : U32)
       png.go(rest, ZDat{}, U32.is_eq(n, 1), n, typ, {b <> crc : List<&2, U32>}, {b <> data : List<&2, U32>}, pg)
-    case +a <> +b <> +c <> +d <> +rest ZCrc{} _z:
+    case +a <> +b <> +c <> +d <> rest ZCrc{} _z:
       +nx = png.judge(be.u32(a, b, c, d), crc, typ, data, pg)
-      png.crc(nx, List.is_empty(&2, U32, rest), png.go(rest, ZLen{}, False{}, 0, 0, [], [], png.pgof(nx)))
+      png.crc(nx, _u => png.go(rest, ZLen{}, False{}, 0, 0, [], [], png.pgof(nx)))
     case _xs _pz _z:
       None{}
 
@@ -1579,14 +2310,28 @@ def enc.rows(
       +h2 = (hh - 1 : U32)
       enc.rows(rest, U32.is_zero(h2), U32.is_lt(c2, ww), ww, h2, c2)
 
-# a positive area whose sample list covers it: both sides above 0, and the
-# sample count, taken in a word, is w * h. A count that is w * h is below
-# 2^32, so the area is too.
+# fewer than 2^28 samples: the count's top four bits are clear
+def enc.small(+nn: U32) -> Bool:
+  U32.is_zero((nn >> 28n : U32))
+
+# a positive area whose sample list covers it, below 2^28 samples: both
+# sides above 0, the sample count, taken in a word, is w * h, and that count
+# is below 2^28.
+#
+# The bound keeps every count the encoder takes in a word exact and the one
+# IDAT chunk inside PNG's chunk-length limit (ISO/IEC 15948 5.3, 2^31 - 1
+# bytes): below 2^28 samples the filtered bytes h (k w + 1), k at most 4,
+# are at most 5 * 2^28 - 5, and with a 5-byte header per 65535-byte stored
+# block and 6 bytes of zlib framing the IDAT data stays below 1.35e9 bytes.
+# That margin is computed here, not proved; the round trip
+# (laws/PngRoundTrips.bend) is proved for every raster this accepts.
 def enc.good(+ww: U32, +hh: U32, +px: List<&2, U32>) -> Bool:
   +n = enc.len(px, 0)
-  Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)), enc.rows(px, U32.is_zero(hh), U32.is_lt(n, ww), ww, hh, n))
+  Bool.and(Bool.and(U32.is_gt(ww, 0), U32.is_gt(hh, 0)),
+    Bool.and(enc.rows(px, U32.is_zero(hh), U32.is_lt(n, ww), ww, hh, n), enc.small(n)))
 
-# filtered bytes: one per row, plus the channels of every sample
+# filtered bytes: one per row, plus the channels of every sample. enc.good's
+# bound keeps the product below 2^31, so the word does not wrap.
 def enc.nbytes(op: Bool, +ww: U32, +hh: U32) -> U32:
   (hh * ((ww * enc.nch(op) : U32) + 1 : U32) : U32)
 

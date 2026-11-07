@@ -2,7 +2,9 @@
 # decode_png makes of a file: after IHDR, PLTE, tRNS and the IDAT chunks,
 # and with tRNS before PLTE where the decoder takes that order, the file
 # decodes to the raster the colour type packs from the unfiltered inflated
-# IDAT data, with the PLTE and tRNS data.
+# IDAT data, with the PLTE and tRNS data. After the IDAT chunks a tRNS is one
+# of them too: misplaced, it is ignored (laws/PngIgnoresFaultyTrns.bend);
+# until 2026-11 it refused the image.
 import Base
 import ../main.bend as Img
 import ../src/inflate.bend as Inf
@@ -33,6 +35,23 @@ def spec.ancs.ok(cs: List<&2, Anc>) -> Type:
     case Anc{+typ, +data} <> tl:
       {spec.anc.bit(typ) == True{} : Bool} & ({U32.is_eq(typ, 1951551059) == False{} : Bool} & (D1.spec.fits(data) &
         spec.ancs.ok(tl)))
+
+# a chunk type after the IDAT chunks: any, when there was an IDAT; not tRNS otherwise
+def spec.trns.after(idat: Bool, +typ: U32) -> Type:
+  match idat:
+    case True{}:
+      Unit
+    case False{}:
+      {U32.is_eq(typ, 1951551059) == False{} : Bool}
+
+# each chunk is ancillary and has fewer than 2^32 data bytes; tRNS is among them only when an IDAT came before
+def spec.ancs.after(idat: Bool, cs: List<&2, Anc>) -> Type:
+  match cs:
+    case Nil{}:
+      Unit
+    case Anc{+typ, +data} <> tl:
+      {spec.anc.bit(typ) == True{} : Bool} & (spec.trns.after(idat, typ) & (D1.spec.fits(data) &
+        spec.ancs.after(idat, tl)))
 
 # PLTE, ancillary chunks a1 and tRNS, then rest; with late, tRNS comes first, an order the decoder also takes when
 # the colour type allows tRNS with no PLTE yet
@@ -69,9 +88,9 @@ def spec.png.anc(
     []))))))))
 
 # LAW: ancillary chunks where PNG section 5.6 allows them leave what decode_png makes of a file: the file png_walk
-# reads, with ancillary chunks after IHDR, PLTE, tRNS and the IDAT chunks, and with tRNS before PLTE where the decoder
-# takes that order (late), decodes to the raster px.of packs from the unfiltered inflated IDAT data, with the IHDR
-# colour type and the PLTE and tRNS data
+# reads, with ancillary chunks after IHDR, PLTE, tRNS and the IDAT chunks (tRNS among the last when there is an
+# IDAT), and with tRNS before PLTE where the decoder takes that order (late), decodes to the raster px.of packs from
+# the unfiltered IDAT data, inflated under spec.budget, with the IHDR colour type and the PLTE and tRNS data
 law png_walk_anc:
   for +ww: U32
   for +hh: U32
@@ -84,8 +103,8 @@ law png_walk_anc:
   for +a2: List<&2, Anc>
   for +idats: List<&2, List<&2, U32>>
   for +a3: List<&2, Anc>
-  for h_ww: {U32.is_gt(ww, 0) == True{} : Bool}
-  for h_hh: {U32.is_gt(hh, 0) == True{} : Bool}
+  for h_ww: {D1.spec.side(ww) == True{} : Bool}
+  for h_hh: {D1.spec.side(hh) == True{} : Bool}
   for h_cc: {D1.spec.colour.ok(cc) == True{} : Bool}
   for h_pl: {D1.spec.plte.ok(cc, plte) == True{} : Bool}
   for h_tr: {D1.spec.trns.ok(cc, plte, trns) == True{} : Bool}
@@ -96,6 +115,7 @@ law png_walk_anc:
   for h_a0: spec.ancs.ok(a0)
   for h_a1: spec.ancs.ok(a1)
   for h_a2: spec.ancs.ok(a2)
-  for h_a3: spec.ancs.ok(a3)
-  {Img.decode_png(spec.png.anc(ww, hh, cc, late, a0, plte, a1, trns, a2, idats, a3)) == D1.spec.decoded(Inf.inflate(
+  for h_a3: spec.ancs.after(Bool.not(List.is_empty(&2, List<&2, U32>, idats)), a3)
+  {Img.decode_png(spec.png.anc(ww, hh, cc, late, a0, plte, a1, trns, a2, idats, a3)) ==
+    D1.spec.decoded(Inf.inflate.upto(D1.spec.budget(ww, hh, cc),
     List.concat(&2, U32, idats)), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Img.Raster>}

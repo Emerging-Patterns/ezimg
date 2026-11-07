@@ -7,6 +7,8 @@ import ../../src/png.bend as Png
 import ../../laws/defs/PngSpecification.bend as D1
 import ./BasicFacts.bend as M1
 import ./CrcReference.bend as M2
+import ./PngEncoderArithmetic.bend as M3
+import ../../laws/defs/SizeBounds.bend as D2
 
 # a bit or'd with false once, twice and three times: what is left of a bit
 # the checker cannot compute after be.u32 puts it back in place
@@ -262,8 +264,8 @@ def bt0(+nn: U32) -> U32:
 
 # the walker applies the chunk to its state, then goes on with the bytes after
 def chunk.next(+typ: U32, +data: List<&2, U32>, +rest: List<&2, U32>, +pg: Png.Pg) -> Maybe<&2, Png.Pic>:
-  Png.png.crc(Png.png.apply(typ, data, pg), List.is_empty(&2, U32, rest), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0,
-    [], [], Png.png.pgof(Png.png.apply(typ, data, pg))))
+  Png.png.crc(Png.png.apply(typ, data, pg), _u => Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [],
+    Png.png.pgof(Png.png.apply(typ, data, pg))))
 
 # one chunk laid out as spec.chunk: its length field counts the data and its
 # stored CRC is the CRC-32 of its type and data, so the walker applies it
@@ -278,6 +280,7 @@ def chunk.walk(
   hf: D1.spec.fits(data)
 ) -> {Png.png.go(D1.spec.chunk([t0, t1, t2, t3], data, rest), Png.ZLen{}, False{}, 0, 0, [], [], pg) ==
   chunk.next(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), rest, pg) : Maybe<&2, Png.Pic>}:
+  (+hfw, +hfs) = hf
   +nn = U32.from_nat(List.length(&2, U32, data))
   +sum = D1.crc.ref(t0 <> t1 <> t2 <> t3 <> data)
   +typ = Png.be.u32(t0, t1, t2, t3)
@@ -285,10 +288,18 @@ def chunk.walk(
   +dat = List.reverse.go(&2, U32, data, [])
   +got = Png.be.u32(bt3(sum), bt2(sum), bt1(sum), bt0(sum))
   +want = Crc.crc32(List.reverse(&2, U32, crc))
+  +ln = List.length(&2, U32, data)
   +hn = {Equal.trans(Nat, U32.to_nat(Png.be.u32(bt3(nn), bt2(nn), bt1(nn), bt0(nn))), U32.to_nat(nn),
-    List.length(&2, U32, data), Equal.cong(U32, Nat, uu => U32.to_nat(uu), Png.be.u32(bt3(nn), bt2(nn), bt1(nn),
-    bt0(nn)), nn, prt.be.back(nn)), hf) : {U32.to_nat(Png.be.u32(bt3(nn), bt2(nn), bt1(nn), bt0(nn))) ==
-    List.length(&2, U32, data) : Nat}}
+    ln, Equal.cong(U32, Nat, uu => U32.to_nat(uu), Png.be.u32(bt3(nn), bt2(nn), bt1(nn),
+    bt0(nn)), nn, prt.be.back(nn)), hfw) : {U32.to_nat(Png.be.u32(bt3(nn), bt2(nn), bt1(nn), bt0(nn))) ==
+    ln : Nat}}
+  +hs = {Equal.trans(Bool, Png.png.short(Png.be.u32(bt3(nn), bt2(nn), bt1(nn), bt0(nn))), Png.png.short(nn), True{},
+    Equal.cong(U32, Bool, uu => Png.png.short(uu), Png.be.u32(bt3(nn), bt2(nn), bt1(nn), bt0(nn)), nn,
+      prt.be.back(nn)),
+    Equal.trans(Bool, Png.png.short(nn), D2.below(31n, U32.to_nat(nn)), True{}, M3.short.nat(nn),
+      Equal.trans(Bool, D2.below(31n, U32.to_nat(nn)), D2.below(31n, ln), True{},
+        Equal.cong(Nat, Bool, kk => D2.below(31n, kk), U32.to_nat(nn), ln, hfw), hfs))) :
+    {Png.png.short(Png.be.u32(bt3(nn), bt2(nn), bt1(nn), bt0(nn))) == True{} : Bool}}
   +e_want = {Equal.trans(U32, want, Crc.crc32(t0 <> t1 <> t2 <> t3 <> data), sum,
     Equal.cong(List<&2, U32>, U32, xs => Crc.crc32(xs), List.reverse(&2, U32, crc), t0 <> t1 <> t2 <> t3 <> data,
       M2.crc_bytes(data, t0, t1, t2, t3)), M2.crc32_ref(t0 <> t1 <> t2 <> t3 <> data)) : {want == sum : U32}}
@@ -302,9 +313,9 @@ def chunk.walk(
     M2.at_crc(bt3(sum), bt2(sum), bt1(sum), bt0(sum), rest, typ, crc, dat, pg),
     chunk.next(typ, dat, rest, pg),
     M2.walk_chunk(bt3(nn), bt2(nn), bt1(nn), bt0(nn), t0, t1, t2, t3, data, bt3(sum), bt2(sum), bt1(sum), bt0(sum),
-      rest, pg, hn),
-    Equal.cong(Bool, Maybe<&2, Png.Pic>, zz => Png.png.crc(Png.png.judge.at(zz, typ, dat, pg), List.is_empty(&2, U32,
-      rest), Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(Png.png.judge.at(zz, typ, dat, pg)))),
+      rest, pg, hn, hs),
+    Equal.cong(Bool, Maybe<&2, Png.Pic>, zz => Png.png.crc(Png.png.judge.at(zz, typ, dat, pg),
+      _u => Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(Png.png.judge.at(zz, typ, dat, pg)))),
       U32.is_eq(got, want), True{}, e_eq))
 
 # a chunk the state takes, NMore: the walker goes on with the bytes after it
@@ -326,64 +337,66 @@ def chunk.more(
     chunk.next(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), rest, pg),
     Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [], [], pg2),
     chunk.walk(t0, t1, t2, t3, data, rest, pg, hf),
-    Equal.cong(Png.Nx, Maybe<&2, Png.Pic>, nx => Png.png.crc(nx, List.is_empty(&2, U32, rest), Png.png.go(rest,
+    Equal.cong(Png.Nx, Maybe<&2, Png.Pic>, nx => Png.png.crc(nx, _u => Png.png.go(rest,
       Png.ZLen{}, False{}, 0, 0, [], [], Png.png.pgof(nx))), Png.png.apply(Png.be.u32(t0, t1, t2, t3),
       List.reverse(&2, U32, data), pg), Png.NMore{pg2}, ea))
 
-# the last chunk, which ends the image, NEnd: the walker finishes the picture
+# the chunk that ends the image, NEnd: the walker finishes the picture,
+# whatever bytes follow
 def chunk.end(
   +t0: U32,
   +t1: U32,
   +t2: U32,
   +t3: U32,
   +data: List<&2, U32>,
+  +rest: List<&2, U32>,
   +pg: Png.Pg,
   +pg2: Png.Pg,
   hf: D1.spec.fits(data),
   ea: {Png.png.apply(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), pg) == Png.NEnd{pg2} : Png.Nx}
-) -> {Png.png.go(D1.spec.chunk([t0, t1, t2, t3], data, []), Png.ZLen{}, False{}, 0, 0, [], [], pg) ==
+) -> {Png.png.go(D1.spec.chunk([t0, t1, t2, t3], data, rest), Png.ZLen{}, False{}, 0, 0, [], [], pg) ==
   Png.png.finish(pg2) : Maybe<&2, Png.Pic>}:
   Equal.trans(Maybe<&2, Png.Pic>,
-    Png.png.go(D1.spec.chunk([t0, t1, t2, t3], data, []), Png.ZLen{}, False{}, 0, 0, [], [], pg),
-    chunk.next(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), [], pg),
+    Png.png.go(D1.spec.chunk([t0, t1, t2, t3], data, rest), Png.ZLen{}, False{}, 0, 0, [], [], pg),
+    chunk.next(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), rest, pg),
     Png.png.finish(pg2),
-    chunk.walk(t0, t1, t2, t3, data, [], pg, hf),
-    Equal.cong(Png.Nx, Maybe<&2, Png.Pic>, nx => Png.png.crc(nx, True{}, Png.png.go([], Png.ZLen{}, False{}, 0, 0, [],
+    chunk.walk(t0, t1, t2, t3, data, rest, pg, hf),
+    Equal.cong(Png.Nx, Maybe<&2, Png.Pic>, nx => Png.png.crc(nx, _u => Png.png.go(rest, Png.ZLen{}, False{}, 0, 0, [],
       [], Png.png.pgof(nx))), Png.png.apply(Png.be.u32(t0, t1, t2, t3), List.reverse(&2, U32, data), pg),
       Png.NEnd{pg2}, ea))
 
-# or regrouped to the right
-def or.right(aa: Bool, +bb: Bool, +rr: Bool) -> {Bool.or(Bool.or(aa, bb), rr) == Bool.or(aa, Bool.or(bb, rr)) : Bool}:
-  match aa:
-    case True{}:
-      {==}
-    case False{}:
-      {==}
+# the decoder's test of a side is spec.side
+law side.same:
+  for +nn: U32
+  {Png.png.side(nn) == D1.spec.side(nn) : Bool}
 
-# the colour types spec.colour.ok names are the ones png.col accepts
-def col.ok(+cc: U32, h_cc: {D1.spec.colour.ok(cc) == True{} : Bool}) -> {Png.png.col(cc) == True{} : Bool}:
-  Equal.trans(Bool, Png.png.col(cc), D1.spec.colour.ok(cc), True{},
-    or.right(U32.is_eq(cc, 0), U32.is_eq(cc, 2), Bool.or(U32.is_eq(cc, 3), Bool.or(U32.is_eq(cc, 4), U32.is_eq(cc,
-    6)))), h_cc)
+# the proof of side.same
+def side.same(nn):
+  Equal.cong(Bool, Bool, bb => Bool.and(U32.is_gt(nn, 0), bb), Png.png.short(nn), D2.below(31n, U32.to_nat(nn)),
+    M3.short.nat(nn))
 
-# png.good takes a nonzero width and height, bit depth 8, a colour type it
-# knows, and methods 0
+# a side spec.side takes, the decoder takes
+def side.ok(+nn: U32, hh: {D1.spec.side(nn) == True{} : Bool}) -> {Png.png.side(nn) == True{} : Bool}:
+  Equal.trans(Bool, Png.png.side(nn), D1.spec.side(nn), True{}, side.same(nn), hh)
+
+# png.good takes a width and height from 1 to 2^31 - 1, bit depth 8, a
+# colour type it knows, and methods 0
 def good.ok(
   +ww: U32,
   +hh: U32,
   +cc: U32,
-  h_ww: {U32.is_gt(ww, 0) == True{} : Bool},
-  h_hh: {U32.is_gt(hh, 0) == True{} : Bool},
+  h_ww: {D1.spec.side(ww) == True{} : Bool},
+  h_hh: {D1.spec.side(hh) == True{} : Bool},
   h_cc: {D1.spec.colour.ok(cc) == True{} : Bool}
 ) -> {Png.png.good(ww, hh, 8, cc, 0, 0, 0) == True{} : Bool}:
-  +e_c = col.ok(cc, h_cc)
-  %Equal.sym(Bool, U32.is_gt(ww, 0), True{}, h_ww) : {Bool.and(Bool.and(_, U32.is_gt(hh, 0)), Bool.and(Png.png.col(cc),
-    True{})) == True{} : Bool}
-  %Equal.sym(Bool, U32.is_gt(hh, 0), True{}, h_hh) : {Bool.and(Bool.and(True{}, _), Bool.and(Png.png.col(cc),
-    True{})) == True{} : Bool}
-  %Equal.sym(Bool, Png.png.col(cc), True{}, e_c) : {Bool.and(Bool.and(True{}, True{}), Bool.and(_, True{})) ==
-    True{} : Bool}
-  {==}
+  +sh = Png.png.side(hh)
+  +rr = Bool.and(D1.spec.colour.ok(cc), True{})
+  Equal.trans(Bool, Png.png.good(ww, hh, 8, cc, 0, 0, 0), Bool.and(Bool.and(True{}, sh), rr), True{},
+    Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(bb, sh), rr), Png.png.side(ww), True{}, side.ok(ww, h_ww)),
+    Equal.trans(Bool, Bool.and(Bool.and(True{}, sh), rr), Bool.and(Bool.and(True{}, True{}), rr), True{},
+      Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(True{}, bb), rr), sh, True{}, side.ok(hh, h_hh)),
+      Equal.cong(Bool, Bool, bb => Bool.and(Bool.and(True{}, True{}), Bool.and(bb, True{})), D1.spec.colour.ok(cc),
+        True{}, h_cc)))
 
 # an IHDR png.good takes starts the state
 def ihdr.ok.true(
@@ -406,8 +419,8 @@ def ihdr.step(
   +ww: U32,
   +hh: U32,
   +cc: U32,
-  h_ww: {U32.is_gt(ww, 0) == True{} : Bool},
-  h_hh: {U32.is_gt(hh, 0) == True{} : Bool},
+  h_ww: {D1.spec.side(ww) == True{} : Bool},
+  h_hh: {D1.spec.side(hh) == True{} : Bool},
   h_cc: {D1.spec.colour.ok(cc) == True{} : Bool}
 ) -> {Png.png.apply(Png.be.u32(73, 72, 68, 82), List.reverse(&2, U32, D1.spec.ihdr.data(ww, hh, cc)), Png.pg.empty())
   == Png.NMore{M1.st(ww, hh, cc, None{}, None{}, [], False{})} : Png.Nx}:
@@ -480,6 +493,20 @@ def walk.plte(
           None{},
         [], False{}), hf, plte.step(ww, hh, cc, pp, h_pl))
 
+# a tRNS the checks take is kept in the state
+def take.true(
+  zz: Bool,
+  +data: List<&2, U32>,
+  +pg: Png.Pg,
+  ez: {zz == True{} : Bool}
+) -> {Png.png.trns.take(zz, data, pg) == Png.NMore{Png.pg.trns(pg, List.reverse(&2, U32, data))} : Png.Nx}:
+  match zz:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd({Png.NMore{Png.png.seal(pg)} == Png.NMore{Png.pg.trns(pg, List.reverse(&2, U32, data))} : Png.Nx},
+        M1.false_true(ez))
+
 # the tRNS chunk after IHDR and PLTE, if any: its colour type allows it, so
 # the state keeps its data
 def trns.step(
@@ -494,10 +521,10 @@ def trns.step(
   == Png.NMore{M1.st(ww, hh, cc, plte, Some{tt}, [], False{})} : Png.Nx}:
   +ok = Png.png.trns.ok(cc, Maybe.is_some(&2, List<&2, U32>, plte))
   +pg0 = M1.st(ww, hh, cc, plte, None{}, [], False{})
-  Equal.trans(Png.Nx, Png.png.allow(ok, Png.pg.trns(pg0, List.reverse(&2, U32, List.reverse(&2, U32, tt)))),
+  Equal.trans(Png.Nx, Png.png.trns.take(ok, List.reverse(&2, U32, tt), pg0),
     Png.NMore{Png.pg.trns(pg0, List.reverse(&2, U32, List.reverse(&2, U32, tt)))},
     Png.NMore{M1.st(ww, hh, cc, plte, Some{tt}, [], False{})},
-    allow.true(ok, Png.pg.trns(pg0, List.reverse(&2, U32, List.reverse(&2, U32, tt))), h_tr),
+    take.true(ok, List.reverse(&2, U32, tt), pg0, h_tr),
     Equal.cong(List<&2, U32>, Png.Nx, xs => Png.NMore{Png.pg.trns(pg0, xs)}, List.reverse(&2, U32, List.reverse(&2, U32,
       tt)), tt, M1.inf.rev_rev(tt)))
 
@@ -620,6 +647,19 @@ def prt.rev_app(
       List.reverse(&2, U32, done)), List.append(&2, U32, List.reverse(&2, U32, dd), List.reverse(&2, U32, done)),
       revgo_app(done, dd, []), revgo_acc(dd, [], List.reverse(&2, U32, done))))
 
+# the code's sample-count check keeps what spec.raster's keeps
+def frame.keep(
+  ok: Bool,
+  +ww: U32,
+  +hh: U32,
+  +px: List<&2, U32>
+) -> {Img.decode_png.keep(ok, ww, hh, px) == D1.spec.raster.keep(ok, ww, hh, px) : Maybe<&2, Img.Raster>}:
+  match ok:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
 # the picture of px.of's samples, as a raster: spec.raster's
 def frame.px(
   mm: Maybe<&2, List<&2, U32>>,
@@ -629,8 +669,8 @@ def frame.px(
   match mm:
     case None{}:
       {==}
-    case Some{_px}:
-      {==}
+    case Some{+px}:
+      frame.keep(Nat.is_eq(List.length(&2, U32, px), Nat.mul(U32.to_nat(hh), U32.to_nat(ww))), ww, hh, px)
 
 # the unfiltered scanlines packed, as a raster
 def frame.scan(

@@ -3,6 +3,7 @@
 import Base
 import ../../main.bend as Img
 import ../../src/png.bend as Png
+import ./SizeBounds.bend as D2
 
 # ok, and every sample of px has alpha 255
 def all.opaque(px: List<&2, U32>, ok: Bool) -> Bool:
@@ -82,6 +83,23 @@ def spec.colour.ok(+cc: U32) -> Bool:
   Bool.or(U32.is_eq(cc, 0), Bool.or(U32.is_eq(cc, 2), Bool.or(U32.is_eq(cc, 3), Bool.or(U32.is_eq(cc, 4),
     U32.is_eq(cc, 6)))))
 
+# the colour types and bit depths of PNG table 11.1 (W3C PNG, third
+# edition, section 11.2.1): gray (0) at 1, 2, 4, 8 and 16 bits, RGB (2) at
+# 8 and 16, indexed colour (3) at 1, 2, 4 and 8, gray with alpha (4) at 8
+# and 16, and RGB with alpha (6) at 8 and 16. No other pairing is a PNG
+def spec.depth.ok(+cc: U32, +dd: U32) -> Bool:
+  +grey = Bool.or(U32.is_eq(dd, 1), Bool.or(U32.is_eq(dd, 2), Bool.or(U32.is_eq(dd, 4), Bool.or(U32.is_eq(dd, 8),
+    U32.is_eq(dd, 16)))))
+  +wide = Bool.or(U32.is_eq(dd, 8), U32.is_eq(dd, 16))
+  +index = Bool.or(U32.is_eq(dd, 1), Bool.or(U32.is_eq(dd, 2), Bool.or(U32.is_eq(dd, 4), U32.is_eq(dd, 8))))
+  Bool.or(Bool.and(grey, U32.is_eq(cc, 0)), Bool.or(Bool.and(wide, U32.is_eq(cc, 2)),
+    Bool.or(Bool.and(index, U32.is_eq(cc, 3)), Bool.or(Bool.and(wide, U32.is_eq(cc, 4)),
+      Bool.and(wide, U32.is_eq(cc, 6))))))
+
+# the interlace methods PNG section 8.1 defines: 0, none, and 1, Adam7
+def spec.inter.ok(+ii: U32) -> Bool:
+  Bool.or(U32.is_eq(ii, 0), U32.is_eq(ii, 1))
+
 # the samples of the unfiltered bytes, when the scanlines unfilter
 def spec.px.then(
   mm: Maybe<&2, List<&2, U32>>,
@@ -131,8 +149,23 @@ def spec.idats(ds: List<&2, List<&2, U32>>, rest: List<&2, U32>) -> List<&2, U32
 def spec.ihdr.data(+ww: U32, +hh: U32, +cc: U32) -> List<&2, U32>:
   List.append(&2, U32, spec.be4(ww), List.append(&2, U32, spec.be4(hh), [8, cc, 0, 0, 0]))
 
-# a PNG file in the order PNG section 5.6 gives: the signature, IHDR, PLTE if
-# there is one, tRNS if there is one, the IDAT chunks, and IEND
+# a PNG file in the order PNG section 5.6 gives, then rest: the signature,
+# IHDR, PLTE if there is one, tRNS if there is one, the IDAT chunks, IEND,
+# and the bytes of rest after IEND
+def spec.png.then(
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  plte: Maybe<&2, List<&2, U32>>,
+  trns: Maybe<&2, List<&2, U32>>,
+  idats: List<&2, List<&2, U32>>,
+  rest: List<&2, U32>
+) -> List<&2, U32>:
+  List.append(&2, U32, Img.png_sig(), spec.chunk([73, 72, 68, 82], spec.ihdr.data(ww, hh, cc),
+    spec.chunk.opt([80, 76, 84, 69], plte, spec.chunk.opt([116, 82, 78, 83], trns,
+      spec.idats(idats, spec.chunk([73, 69, 78, 68], [], rest))))))
+
+# a PNG file in the order PNG section 5.6 gives, with nothing after IEND
 def spec.png(
   +ww: U32,
   +hh: U32,
@@ -141,13 +174,23 @@ def spec.png(
   trns: Maybe<&2, List<&2, U32>>,
   idats: List<&2, List<&2, U32>>
 ) -> List<&2, U32>:
-  List.append(&2, U32, Img.png_sig(), spec.chunk([73, 72, 68, 82], spec.ihdr.data(ww, hh, cc),
-    spec.chunk.opt([80, 76, 84, 69], plte, spec.chunk.opt([116, 82, 78, 83], trns,
-      spec.idats(idats, spec.chunk([73, 69, 78, 68], [], []))))))
+  spec.png.then(ww, hh, cc, plte, trns, idats, [])
 
-# a list's length, counted in a U32, does not wrap: the list is shorter than 2^32
+# a list a chunk's data may be: its length, counted in a U32, does not wrap,
+# and it is below 2^31, the bound PNG section 7.1 puts on a chunk's length
 def spec.fits(xs: List<&2, U32>) -> Type:
-  {U32.to_nat(U32.from_nat(List.length(&2, U32, xs))) == List.length(&2, U32, xs) : Nat}
+  {U32.to_nat(U32.from_nat(List.length(&2, U32, xs))) == List.length(&2, U32, xs) : Nat} &
+    {D2.below(31n, List.length(&2, U32, xs)) == True{} : Bool}
+
+# the length the IDAT data of 8-bit samples without interlacing inflates to
+# (PNG sections 7.2 and 9.1): h scanlines, each a filter byte and w pixels
+# of the colour type's bytes per pixel. The decoder stops inflating past it
+def spec.budget(+ww: U32, +hh: U32, +cc: U32) -> Nat:
+  Nat.mul(U32.to_nat(hh), 1n+Nat.mul(U32.to_nat(ww), U32.to_nat(Png.png.bpp(cc))))
+
+# a width or height IHDR may give: from 1 to 2^31 - 1 (PNG section 11.2.1)
+def spec.side(+nn: U32) -> Bool:
+  Bool.and(U32.is_gt(nn, 0), D2.below(31n, U32.to_nat(nn)))
 
 # a chunk that may be left out fits
 def spec.fits.opt(mm: Maybe<&2, List<&2, U32>>) -> Type:
@@ -197,13 +240,22 @@ def spec.or.nil(mm: Maybe<&2, List<&2, U32>>) -> List<&2, U32>:
     case Some{xs}:
       xs
 
-# a raster of the samples, when there are some
+# a raster of the samples when there are exactly h * w of them, counted as
+# natural numbers: h rows of w
+def spec.raster.keep(ok: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> Maybe<&2, Img.Raster>:
+  match ok:
+    case True{}:
+      Some{Img.raster(ww, hh, px)}
+    case False{}:
+      None{}
+
+# a raster of the samples, when there are some and they are h * w
 def spec.raster(mm: Maybe<&2, List<&2, U32>>, +ww: U32, +hh: U32) -> Maybe<&2, Img.Raster>:
   match mm:
     case None{}:
       None{}
-    case Some{px}:
-      Some{Img.raster(ww, hh, px)}
+    case Some{+px}:
+      spec.raster.keep(Nat.is_eq(List.length(&2, U32, px), Nat.mul(U32.to_nat(hh), U32.to_nat(ww))), ww, hh, px)
 
 # the pixel stage's raster from the inflated data: the scanlines unfiltered,
 # then packed by px.of for the colour type, PLTE and tRNS; none when the data

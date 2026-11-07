@@ -882,22 +882,21 @@ def rows.at(
 
 # what rows_go proves
 def rows.ty(
-  +rows: List<&2, List<&2, U32>>,
+  +rows: List<&2, L1.Row>,
   +nr: Nat,
-  +ft: L1.Ft,
   +bpp: U32,
   +stride: U32,
   +prev: List<&2, U32>,
   +all: List<&2, U32>
 ) -> Type:
-  {rows.at(L1.flt.rows(rows, ft, bpp, prev), bpp, stride, nr, prev, all)
-    == Some{List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, rows), all))}
+  {rows.at(L1.flt.rows(rows, bpp, prev), bpp, stride, nr, prev, all)
+    == Some{List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, L1.flt.data(rows)), all))}
     : Maybe<&2, List<&2, U32>>}
 
 # one row of rows_go, the rows after it given by the hypothesis ih
 law rows.step:
   for +row: List<&2, U32>
-  for +rest: List<&2, List<&2, U32>>
+  for +rest: List<&2, L1.Row>
   for +nr: Nat
   for +ft: L1.Ft
   for +bpp: U32
@@ -906,15 +905,15 @@ law rows.step:
   for h_row: {L1.flt.bytes(row, U32.to_nat(stride), True{}) == True{} : Bool}
   for +prev: List<&2, U32>
   for +all: List<&2, U32>
-  for ih: rows.ty(rest, nr, ft, bpp, stride, row, List.reverse.go(&2, U32, row, all))
-  rows.ty(row <> rest, 1n+nr, ft, bpp, stride, prev, all)
+  for ih: rows.ty(rest, nr, bpp, stride, row, List.reverse.go(&2, U32, row, all))
+  rows.ty(L1.Row{ft, row} <> rest, 1n+nr, bpp, stride, prev, all)
 
 # the proof of rows.step
 def rows.step(row, rest, nr, ft, bpp, stride, en, h_row, prev, all, ih):
   match row:
     case Nil{}:
       +es = flt.u32_dec(stride, en)
-      Empty.absurd(rows.ty(Nil{} <> rest, 1n+nr, ft, bpp, stride, prev, all),
+      Empty.absurd(rows.ty(L1.Row{ft, Nil{}} <> rest, 1n+nr, bpp, stride, prev, all),
         M1.false_true(Equal.trans(Bool, False{}, L1.flt.bytes(Nil{}, U32.to_nat(stride), True{}), True{},
           Equal.sym(Bool, L1.flt.bytes(Nil{}, U32.to_nat(stride), True{}), False{},
             Equal.cong(Nat, Bool, nn => L1.flt.bytes(Nil{}, nn, True{}), U32.to_nat(stride),
@@ -930,12 +929,13 @@ def rows.step(row, rest, nr, ft, bpp, stride, en, h_row, prev, all, ih):
           Equal.cong(Nat, Bool, nn => L1.flt.bytes(xx <> rr, nn, True{}), U32.to_nat(stride), 1n+U32.to_nat(sl),
             es)),
         h_row)
-      +tail = L1.flt.rows(rest, ft, bpp, xx <> rr)
+      +tail = L1.flt.rows(rest, bpp, xx <> rr)
       +xs = List.append(&2, U32, L1.flt.row(xx <> rr, ft, bpp, prev, [], []), tail)
       +zz = U32.is_zero(sl)
       +cd = L1.ft.code(ft)
       +acc = List.reverse.go(&2, U32, xx <> rr, all)
-      +goal = {Some{List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, (xx <> rr) <> rest), all))}
+      +data = L1.flt.data(rest)
+      +goal = {Some{List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, (xx <> rr) <> data), all))}
         : Maybe<&2, List<&2, U32>>}
       Equal.trans(Maybe<&2, List<&2, U32>>,
         rows.ph(Png.uf.phase(U32.is_le(cd, 4)), xs, zz, bpp, stride, nr, prev, all, sl, cd),
@@ -952,48 +952,47 @@ def rows.step(row, rest, nr, ft, bpp, stride, en, h_row, prev, all, ih):
             Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, ll => rows.at(tail, bpp, stride, nr, ll, acc),
               List.reverse(&2, U32, List.reverse.go(&2, U32, xx <> rr, [])), xx <> rr, M1.flt.rev_rev(xx <> rr)),
             Equal.trans(Maybe<&2, List<&2, U32>>, rows.at(tail, bpp, stride, nr, xx <> rr, acc),
-              Some{List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, rest), acc))}, goal, ih,
+              Some{List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, data), acc))}, goal, ih,
               Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, ll => Some{List.reverse(&2, U32, ll)},
-                List.reverse.go(&2, U32, List.concat(&2, U32, rest), acc),
-                List.reverse.go(&2, U32, List.concat(&2, U32, (xx <> rr) <> rest), all),
-                Equal.sym(List<&2, U32>, List.reverse.go(&2, U32, List.concat(&2, U32, (xx <> rr) <> rest), all),
-                  List.reverse.go(&2, U32, List.concat(&2, U32, rest), acc),
-                  rev_app(xx <> rr, List.concat(&2, U32, rest), all)))))))
+                List.reverse.go(&2, U32, List.concat(&2, U32, data), acc),
+                List.reverse.go(&2, U32, List.concat(&2, U32, (xx <> rr) <> data), all),
+                Equal.sym(List<&2, U32>, List.reverse.go(&2, U32, List.concat(&2, U32, (xx <> rr) <> data), all),
+                  List.reverse.go(&2, U32, List.concat(&2, U32, data), acc),
+                  rev_app(xx <> rr, List.concat(&2, U32, data), all)))))))
 
 # unfilter reads every filtered row back: nr rows, each stride bytes below 256
 law rows_go:
-  for +rows: List<&2, List<&2, U32>>
+  for +rows: List<&2, L1.Row>
   for +nr: Nat
-  for h_n: {List.length(&2, List<&2, U32>, rows) == nr : Nat}
-  for +ft: L1.Ft
+  for h_n: {List.length(&2, L1.Row, rows) == nr : Nat}
   for +bpp: U32
   for +stride: U32
   for +en: {U32.is_zero(stride) == False{} : Bool}
   for +ok: Bool
-  for +h_fit: {L1.flt.fit(rows, U32.to_nat(stride), ok) == True{} : Bool}
+  for +h_fit: {L1.flt.fit(L1.flt.data(rows), U32.to_nat(stride), ok) == True{} : Bool}
   for +prev: List<&2, U32>
   for +all: List<&2, U32>
-  rows.ty(rows, nr, ft, bpp, stride, prev, all)
+  rows.ty(rows, nr, bpp, stride, prev, all)
 
 # the proof of rows_go
-def rows_go(rows, nr, h_n, ft, bpp, stride, en, ok, h_fit, prev, all):
+def rows_go(rows, nr, h_n, bpp, stride, en, ok, h_fit, prev, all):
   match rows nr:
     case Nil{} 0n:
       {==}
     case Nil{} 1n+(+pp):
-      Empty.absurd(rows.ty(Nil{}, 1n+pp, ft, bpp, stride, prev, all), flt.zero_succ(pp, h_n))
-    case +row <> +rest 0n:
-      Empty.absurd(rows.ty(row <> rest, 0n, ft, bpp, stride, prev, all),
-        flt.zero_succ(List.length(&2, List<&2, U32>, rest),
-          Equal.sym(Nat, 1n+List.length(&2, List<&2, U32>, rest), 0n, h_n)))
-    case +row <> +rest 1n+(+pp):
+      Empty.absurd(rows.ty(Nil{}, 1n+pp, bpp, stride, prev, all), flt.zero_succ(pp, h_n))
+    case +rw <> +rest 0n:
+      Empty.absurd(rows.ty(rw <> rest, 0n, bpp, stride, prev, all),
+        flt.zero_succ(List.length(&2, L1.Row, rest),
+          Equal.sym(Nat, 1n+List.length(&2, L1.Row, rest), 0n, h_n)))
+    case L1.Row{+ft, +row} <> +rest 1n+(+pp):
       +ok2 = Bool.and(ok, L1.flt.bytes(row, U32.to_nat(stride), True{}))
       rows.step(row, rest, pp, ft, bpp, stride, en,
         M1.and_right(ok, L1.flt.bytes(row, U32.to_nat(stride), True{}),
-          fit_acc(rest, U32.to_nat(stride), ok2, h_fit)),
+          fit_acc(L1.flt.data(rest), U32.to_nat(stride), ok2, h_fit)),
         prev, all,
-        rows_go(rest, pp, Equal.cong(Nat, Nat, nn => nat.dec(nn), 1n+List.length(&2, List<&2, U32>, rest), 1n+pp, h_n),
-          ft, bpp, stride, en, ok2, h_fit, row, List.reverse.go(&2, U32, row, all)))
+        rows_go(rest, pp, Equal.cong(Nat, Nat, nn => nat.dec(nn), 1n+List.length(&2, L1.Row, rest), 1n+pp, h_n),
+          bpp, stride, en, ok2, h_fit, row, List.reverse.go(&2, U32, row, all)))
 
 # a U32 whose Nat is a successor is not zero, once is_zero's answer is named
 law nz.of:
@@ -1040,29 +1039,55 @@ def stride_nz(ww, bpp, h_ww, h_bpp, h_wrap):
 law top.go:
   for zz: Bool
   for ez: {zz == True{} : Bool}
-  for +ft: L1.Ft
   for +ww: U32
   for +hh: U32
   for +bpp: U32
-  for +rows: List<&2, List<&2, U32>>
-  for main: rows.ty(rows, U32.to_nat(hh), ft, bpp, U32.mul(ww, bpp), [], [])
-  {Png.uf.start(zz, L1.flt.rows(rows, ft, bpp, []), ww, hh, bpp) == Some{List.concat(&2, U32, rows)}
+  for +rows: List<&2, L1.Row>
+  for main: rows.ty(rows, U32.to_nat(hh), bpp, U32.mul(ww, bpp), [], [])
+  {Png.uf.start(zz, L1.flt.rows(rows, bpp, []), ww, hh, bpp) == Some{List.concat(&2, U32, L1.flt.data(rows))}
     : Maybe<&2, List<&2, U32>>}
 
 # the proof of top.go
-def top.go(zz, ez, ft, ww, hh, bpp, rows, main):
+def top.go(zz, ez, ww, hh, bpp, rows, main):
   match zz:
     case False{}:
-      Empty.absurd({Png.uf.start(False{}, L1.flt.rows(rows, ft, bpp, []), ww, hh, bpp) == Some{List.concat(&2, U32,
-        rows)} : Maybe<&2, List<&2, U32>>}, M1.false_true(ez))
+      Empty.absurd({Png.uf.start(False{}, L1.flt.rows(rows, bpp, []), ww, hh, bpp) == Some{List.concat(&2, U32,
+        L1.flt.data(rows))} : Maybe<&2, List<&2, U32>>}, M1.false_true(ez))
     case True{}:
       Equal.trans(Maybe<&2, List<&2, U32>>,
-        rows.at(L1.flt.rows(rows, ft, bpp, []), bpp, U32.mul(ww, bpp), U32.to_nat(hh), [], []),
-        Some{List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, rows), []))},
-        Some{List.concat(&2, U32, rows)}, main,
+        rows.at(L1.flt.rows(rows, bpp, []), bpp, U32.mul(ww, bpp), U32.to_nat(hh), [], []),
+        Some{List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, L1.flt.data(rows)), []))},
+        Some{List.concat(&2, U32, L1.flt.data(rows))}, main,
         Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, ll => Some{ll},
-          List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, rows), [])), List.concat(&2, U32, rows),
-          M1.flt.rev_rev(List.concat(&2, U32, rows))))
+          List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, L1.flt.data(rows)), [])),
+          List.concat(&2, U32, L1.flt.data(rows)), M1.flt.rev_rev(List.concat(&2, U32, L1.flt.data(rows)))))
+
+# unfilter.rows past its size check, once the check's answer is named
+law top.rows:
+  for zz: Bool
+  for ez: {zz == True{} : Bool}
+  for +stride: U32
+  for +hh: U32
+  for +bpp: U32
+  for +rows: List<&2, L1.Row>
+  for main: rows.ty(rows, U32.to_nat(hh), bpp, stride, [], [])
+  {Png.uf.rows.at(zz, L1.flt.rows(rows, bpp, []), stride, hh, bpp) == Some{List.concat(&2, U32, L1.flt.data(rows))}
+    : Maybe<&2, List<&2, U32>>}
+
+# the proof of top.rows
+def top.rows(zz, ez, stride, hh, bpp, rows, main):
+  match zz:
+    case False{}:
+      Empty.absurd({Png.uf.rows.at(False{}, L1.flt.rows(rows, bpp, []), stride, hh, bpp) == Some{List.concat(&2, U32,
+        L1.flt.data(rows))} : Maybe<&2, List<&2, U32>>}, M1.false_true(ez))
+    case True{}:
+      Equal.trans(Maybe<&2, List<&2, U32>>,
+        rows.at(L1.flt.rows(rows, bpp, []), bpp, stride, U32.to_nat(hh), [], []),
+        Some{List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, L1.flt.data(rows)), []))},
+        Some{List.concat(&2, U32, L1.flt.data(rows))}, main,
+        Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, ll => Some{ll},
+          List.reverse(&2, U32, List.reverse.go(&2, U32, List.concat(&2, U32, L1.flt.data(rows)), [])),
+          List.concat(&2, U32, L1.flt.data(rows)), M1.flt.rev_rev(List.concat(&2, U32, L1.flt.data(rows)))))
 
 # the raw bytes enc.rgb.go's cursor has still to write, for a picture of
 # rows wn samples wide: a filter byte first at a row's start, red while the
@@ -1084,7 +1109,7 @@ def cur(filt: Bool, zred: Bool, zgrn: Bool, px: List<&2, U32>, +col: U32, +row: 
 
 # rows_go from the law's hypotheses: the stride is not zero, and the fit is
 # stated at the stride
-def L1.unfilter_filter(ft, ww, hh, bpp, rows, h_dims, h_wrap, h_rows, h_fit):
+def L1.unfilter_filter(ww, hh, bpp, rows, h_dims, h_wrap, h_rows, h_fit):
   +d_ww = M1.and_left(U32.is_gt(ww, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4))),
     h_dims)
   +d_rest = M1.and_right(U32.is_gt(ww, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4))),
@@ -1092,10 +1117,16 @@ def L1.unfilter_filter(ft, ww, hh, bpp, rows, h_dims, h_wrap, h_rows, h_fit):
   +d_bpp = M1.and_left(U32.is_gt(bpp, 0), U32.is_le(bpp, 4),
     M1.and_right(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0), U32.is_le(bpp, 4)), d_rest))
   +en = stride_nz(ww, bpp, d_ww, d_bpp, h_wrap)
-  +fit = Equal.trans(Bool, L1.flt.fit(rows, U32.to_nat(U32.mul(ww, bpp)), True{}),
-    L1.flt.fit(rows, Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)), True{}), True{},
-    Equal.cong(Nat, Bool, nn => L1.flt.fit(rows, nn, True{}), U32.to_nat(U32.mul(ww, bpp)),
+  +fit = Equal.trans(Bool, L1.flt.fit(L1.flt.data(rows), U32.to_nat(U32.mul(ww, bpp)), True{}),
+    L1.flt.fit(L1.flt.data(rows), Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)), True{}), True{},
+    Equal.cong(Nat, Bool, nn => L1.flt.fit(L1.flt.data(rows), nn, True{}), U32.to_nat(U32.mul(ww, bpp)),
       Nat.mul(U32.to_nat(ww), U32.to_nat(bpp)), h_wrap),
     h_fit)
-  top.go(Png.uf.ok(ww, hh, bpp), h_dims, ft, ww, hh, bpp, rows,
-    rows_go(rows, U32.to_nat(hh), h_rows, ft, bpp, U32.mul(ww, bpp), en, True{}, fit, [], []))
+  top.go(Png.uf.ok(ww, hh, bpp), h_dims, ww, hh, bpp, rows,
+    rows_go(rows, U32.to_nat(hh), h_rows, bpp, U32.mul(ww, bpp), en, True{}, fit, [], []))
+
+def L1.unfilter_rows_filter(stride, hh, bpp, rows, h_dims, h_rows, h_fit):
+  +en = gt_nonzero(stride, M1.and_left(U32.is_gt(stride, 0), Bool.and(U32.is_gt(hh, 0), Bool.and(U32.is_gt(bpp, 0),
+    U32.is_le(bpp, 8))), h_dims))
+  top.rows(L1.flt.dims.rows(stride, hh, bpp), h_dims, stride, hh, bpp, rows,
+    rows_go(rows, U32.to_nat(hh), h_rows, bpp, stride, en, True{}, h_fit, [], []))

@@ -1,15 +1,23 @@
 # src/jpeg_enc: baseline JPEG encode. Sequential 8-bit Huffman (SOF0) and JFIF APP0.
-# Colour is 4:4:4 YCbCr, no subsampling: one 8 by 8 block per component per MCU.
+# Colour is YCbCr, 4:4:4 (one 8 by 8 block per component per MCU) or 4:2:0 (a 16 by 16 MCU: four Y blocks, then
+# one Cb and one Cr block, each chrominance sample the mean of 2 by 2 samples, rounded with libjpeg's alternating
+# bias of 1 and 2, the edge samples repeated past the raster as libjpeg repeats them).
+# A raster whose every sample has red, green and blue the same is one gray
+# component (Y only, the luminance tables only), as libjpeg writes a grayscale
+# image: its samples are the luminance, exactly.
 # Samples are packed 0xAARRGGBB, the layout decode returns; the alpha byte is ignored.
-# Quantisation steps are all 1, so an integer coefficient is kept whole.
+# Quantisation is T.81 Annex K's tables K.1 (luminance) and K.2 (chrominance),
+# scaled for a quality of 1 to 100 as the IJG library scales them, so a file is
+# the size libjpeg writes at that quality. Y uses K.1 and the Annex K luminance
+# Huffman tables (K.3, K.5); Cb and Cr use K.2 and the chrominance tables (K.4, K.6).
 # The forward DCT (T.81 A.3.3) pairs samples that share a cosine weight, then
-# rounds once with the same fixed-point product as a matrix column.
-# Both components share the Annex K luminance Huffman tables.
-# A coefficient indexes its symbol. The scan does not walk the table.
-# A mixed MCU reads each pixel once and keeps the three level planes in arrays.
-# Quant steps are 1, so the mixed scan emits coefficients without dividing.
-# A neutral solid (R = G = B = 128) is an all-zero block and round-trips exactly.
-# Other colours are lossy. Progressive and arithmetic frames are not written.
+# rounds once with the same fixed-point product as a matrix column; the column
+# pass divides each coefficient by its quantisation step, rounding half away
+# from zero, as libjpeg does.
+# A coefficient indexes its symbol in a book written out from the Annex K tables. The scan does not walk the table.
+# An MCU reads each pixel once and keeps the three level planes in arrays.
+# A neutral plane (every sample 128) is an all-zero block, coded without the DCT.
+# The coding is lossy. Progressive and arithmetic frames are not written.
 # Width and height must sit in 1..65535; anything else is SOI then EOI.
 
 import Base
@@ -23,9 +31,9 @@ type Put is Data:
 type Kern is Data:
   Kern{k0: U32, k2: U32, k6: U32, o0: U32, o1: U32, o2: U32, o3: U32}
 
-# the cosine kernel, zigzag, and the all-ones quant table
+# the cosine kernel, the zigzag, and each table's quantisation steps, one Oct per frequency column
 type Ctx is Data:
-  Ctx{kern: Kern, zig: List<&2, U32>, quant: List<&2, U32>}
+  Ctx{kern: Kern, zig: List<&2, U32>, ql: List<&2, Oct>, qc: List<&2, Oct>}
 
 # DC and AC symbols indexed to a packed code: length in the high half, code in the low half
 type Book is Type:
@@ -43,11 +51,27 @@ type Oct is Data:
 type Planes is Type:
   Planes{src: Array<U32>, dst: Array<U32>, at: U32}
 
+# the frame the encoder writes: three components, Cb and Cr sampled as Y (4:4:4), or one gray component, or
+# three components with Cb and Cr sampled at half Y's rate each way (4:2:0)
+type Layout is Data:
+  K444{}
+  KGray{}
+  K420{}
+
+# a 4:2:0 quad's four samples: packed pixels, the level plane, whether it is the neutral level, and the
+# chrominance sums so far
+type Quad is Type:
+  Quad{pix: Array<U32>, ys: Array<U32>, fy: Bool, sb: U32, sr: U32}
+
+# one gray MCU: packed pixels, the level plane, and whether it is the neutral level
+type GTile is Type:
+  GTile{pix: Array<U32>, ys: Array<U32>, fy: Bool}
+
 # one MCU: packed pixels, three level planes, and whether each plane is the neutral level
 type Tile is Type:
   Tile{pix: Array<U32>, ys: Array<U32>, bs: Array<U32>, rs: Array<U32>, fy: Bool, fb: Bool, fr: Bool}
 
-# frequency plane, the open zero run, and the AC coder. Steps are 1, so no quant list.
+# frequency plane, the open zero run, and the AC coder
 type Scan is Type:
   Scan{arr: Array<U32>, run: U32, ac: Array<U32>, bit: Put}
 
@@ -64,24 +88,119 @@ def encode.seg(+mark: U32, +body: List<&2, U32>) -> List<&2, U32>:
 def encode.app0() -> List<&2, U32>:
   encode.seg(224, [74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0])
 
-def encode.quant() -> List<&2, U32>:
-  List.replicate(U32, 64n, 1)
+# the first value when bb holds, else the second
+def encode.either(bb: Bool, +aa: U32, +cc: U32) -> U32:
+  match bb:
+    case True{}:
+      +_c = cc
+      aa
+    case False{}:
+      +_a = aa
+      cc
 
-def encode.dqt() -> List<&2, U32>:
-  encode.seg(219, 0 <> encode.quant())
+# T.81 Annex K, Table K.1: the luminance quantisation table, row by row
+def encode.lumq() -> List<&2, U32>:
+  [16, 11, 10, 16, 24, 40, 51, 61, 12, 12, 14, 19, 26, 58, 60, 55, 14, 13, 16, 24, 40, 57, 69, 56, 14, 17, 22, 29, 51,
+    87, 80, 62, 18, 22, 37, 56, 68, 109, 103, 77, 24, 35, 55, 64, 81, 104, 113, 92, 49, 64, 78, 87, 103, 121, 120, 101,
+    72, 92, 95, 98, 112, 100, 103, 99]
 
-def encode.sofbody(+ww: U32, +hh: U32) -> List<&2, U32>:
-  [8, U32.shrn(hh, 8n), U32.and(hh, 255), U32.shrn(ww, 8n), U32.and(ww, 255), 3, 1, 17, 0, 2, 17, 0, 3, 17, 0]
+# T.81 Annex K, Table K.2: the chrominance quantisation table, row by row
+def encode.chrq() -> List<&2, U32>:
+  [17, 18, 24, 47, 99, 99, 99, 99, 18, 21, 26, 66, 99, 99, 99, 99, 24, 26, 56, 99, 99, 99, 99, 99, 47, 66, 99, 99, 99,
+    99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99,
+    99, 99, 99, 99, 99, 99]
 
-def encode.sof(+ww: U32, +hh: U32) -> List<&2, U32>:
-  encode.seg(192, encode.sofbody(ww, hh))
+# a quality below 1 is 1 and one above 100 is 100, as the IJG library takes it (jpeg_quality_scaling)
+def encode.qual(+qq: U32) -> U32:
+  encode.either(U32.is_lt(qq, 1), 1, encode.either(U32.is_gt(qq, 100), 100, qq))
 
+# the IJG percentage of the Annex K tables for a quality of 1 to 100: 5000 / q below 50, else 200 - 2 q
+def encode.qscale(+qq: U32) -> U32:
+  encode.either(U32.is_lt(qq, 50), U32.div(5000, qq), (200 - qq * 2 : U32))
+
+# one table entry at a percentage: (t s + 50) / 100, kept in 1 to 255 for a baseline table, as the IJG library
+# rounds and clamps it (jpeg_add_quant_table with force_baseline)
+def encode.qstep(+tt: U32, +ss: U32) -> U32:
+  +vv = U32.div((tt * ss + 50 : U32), 100)
+  encode.either(U32.is_lt(vv, 1), 1, encode.either(U32.is_gt(vv, 255), 255, vv))
+
+# each entry of a table at a percentage
+def encode.qnat(xs: List<&2, U32>, +ss: U32) -> List<&2, U32>:
+  match xs:
+    case Nil{}:
+      +_s = ss
+      Nil{}
+    case +tt <> rest:
+      encode.qstep(tt, ss) <> encode.qnat(rest, ss)
+
+# a table for a quality, row by row
+def encode.qrows(+base: List<&2, U32>, +qq: U32) -> List<&2, U32>:
+  encode.qnat(base, encode.qscale(encode.qual(qq)))
+
+# a table's entries in zigzag order, as DQT holds them (T.81 B.2.4.1)
+def encode.qzig(zig: List<&2, U32>, +qn: List<&2, U32>) -> List<&2, U32>:
+  match zig:
+    case Nil{}:
+      +_d = encode.len(qn)
+      Nil{}
+    case +gg <> rest:
+      Jpeg.decode.at(qn, gg) <> encode.qzig(rest, qn)
+
+# the DQT entries of a table for a quality
+def encode.qz(+base: List<&2, U32>, +qq: U32) -> List<&2, U32>:
+  encode.qzig(Jpeg.decode.zig(), encode.qrows(base, qq))
+
+# frequency column cc of a table, row by row
+def encode.qcol(+qn: List<&2, U32>, +cc: U32) -> Oct:
+  Oct{Jpeg.decode.at(qn, cc), Jpeg.decode.at(qn, (cc + 8 : U32)), Jpeg.decode.at(qn, (cc + 16 : U32)),
+    Jpeg.decode.at(qn, (cc + 24 : U32)), Jpeg.decode.at(qn, (cc + 32 : U32)), Jpeg.decode.at(qn, (cc + 40 : U32)),
+    Jpeg.decode.at(qn, (cc + 48 : U32)), Jpeg.decode.at(qn, (cc + 56 : U32))}
+
+# a table's eight frequency columns, as the column pass divides them
+def encode.qcols(+qn: List<&2, U32>) -> List<&2, Oct>:
+  [encode.qcol(qn, 0), encode.qcol(qn, 1), encode.qcol(qn, 2), encode.qcol(qn, 3), encode.qcol(qn, 4),
+    encode.qcol(qn, 5), encode.qcol(qn, 6), encode.qcol(qn, 7)]
+
+# the DQT body: luminance as table 0, chrominance as table 1; a gray frame's luminance table alone
+def encode.dqtbody(+kd: Layout, +qq: U32) -> List<&2, U32>:
+  match kd:
+    case K444{}:
+      0 <> encode.join(encode.qz(encode.lumq(), qq), 1 <> encode.qz(encode.chrq(), qq))
+    case KGray{}:
+      0 <> encode.qz(encode.lumq(), qq)
+    case K420{}:
+      0 <> encode.join(encode.qz(encode.lumq(), qq), 1 <> encode.qz(encode.chrq(), qq))
+
+def encode.dqt(+kd: Layout, +qq: U32) -> List<&2, U32>:
+  encode.seg(219, encode.dqtbody(kd, qq))
+
+# the SOF0 components: Y sampled 1 by 1 with table 0, Cb and Cr 1 by 1 with table 1; or Y alone; or Y sampled
+# 2 by 2, Cb and Cr 1 by 1
+def encode.sofcomps(+kd: Layout) -> List<&2, U32>:
+  match kd:
+    case K444{}:
+      [3, 1, 17, 0, 2, 17, 1, 3, 17, 1]
+    case KGray{}:
+      [1, 1, 17, 0]
+    case K420{}:
+      [3, 1, 34, 0, 2, 17, 1, 3, 17, 1]
+
+def encode.sofbody(+kd: Layout, +ww: U32, +hh: U32) -> List<&2, U32>:
+  8 <> (U32.shrn(hh, 8n) <> (U32.and(hh, 255) <> (U32.shrn(ww, 8n) <> (U32.and(ww, 255) <>
+    encode.sofcomps(kd)))))
+
+def encode.sof(+kd: Layout, +ww: U32, +hh: U32) -> List<&2, U32>:
+  encode.seg(192, encode.sofbody(kd, ww, hh))
+
+# T.81 Annex K, Table K.3: luminance DC code lengths
 def encode.dccounts() -> List<&2, U32>:
   [0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0]
 
+# the DC symbols of either table: sizes 0 to 11
 def encode.dcsyms() -> List<&2, U32>:
   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
+# Table K.5: luminance AC code lengths
 def encode.accounts() -> List<&2, U32>:
   [0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 125]
 
@@ -94,22 +213,71 @@ def encode.acsyms() -> List<&2, U32>:
     195, 196, 197, 198, 199, 200, 201, 202, 210, 211, 212, 213, 214, 215, 216, 217, 218, 225, 226, 227, 228, 229,
     230, 231, 232, 233, 234, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250]
 
-def encode.dht(+cls: U32, +counts: List<&2, U32>, +syms: List<&2, U32>) -> List<&2, U32>:
-  encode.seg(196, cls <> encode.join(counts, syms))
+# Table K.4: chrominance DC code lengths
+def encode.cdccounts() -> List<&2, U32>:
+  [0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]
 
-def encode.sos() -> List<&2, U32>:
-  encode.seg(218, [3, 1, 0, 2, 0, 3, 0, 0, 63, 0])
+# Table K.6: chrominance AC code lengths
+def encode.caccounts() -> List<&2, U32>:
+  [0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 119]
 
-def encode.header(
-  +ww: U32,
-  +hh: U32,
-  +dcc: List<&2, U32>,
-  +dcs: List<&2, U32>,
-  +acc: List<&2, U32>,
-  +acs: List<&2, U32>
+def encode.cacsyms() -> List<&2, U32>:
+  [0, 1, 2, 3, 17, 4, 5, 33, 49, 6, 18, 65, 81, 7, 97, 113, 19, 34, 50, 129, 8, 20, 66, 145, 161, 177, 193, 9, 35,
+    51, 82, 240, 21, 98, 114, 209, 10, 22, 36, 52, 225, 37, 241, 23, 24, 25, 26, 38, 39, 40, 41, 42, 53, 54, 55, 56,
+    57, 58, 67, 68, 69, 70, 71, 72, 73, 74, 83, 84, 85, 86, 87, 88, 89, 90, 99, 100, 101, 102, 103, 104, 105, 106,
+    115, 116, 117, 118, 119, 120, 121, 122, 130, 131, 132, 133, 134, 135, 136, 137, 138, 146, 147, 148, 149, 150, 151,
+    152, 153, 154, 162, 163, 164, 165, 166, 167, 168, 169, 170, 178, 179, 180, 181, 182, 183, 184, 185, 186, 194,
+    195, 196, 197, 198, 199, 200, 201, 202, 210, 211, 212, 213, 214, 215, 216, 217, 218, 226, 227, 228, 229, 230,
+    231, 232, 233, 234, 242, 243, 244, 245, 246, 247, 248, 249, 250]
+
+# one DHT segment holding a class's two tables: luminance as table 0, chrominance as table 1
+def encode.dht(
+  +cls: U32,
+  +lc: List<&2, U32>,
+  +ls: List<&2, U32>,
+  +cc: List<&2, U32>,
+  +cs: List<&2, U32>
 ) -> List<&2, U32>:
-  encode.join(Jpeg.soi(), encode.join(encode.app0(), encode.join(encode.dqt(), encode.join(encode.sof(ww, hh),
-    encode.join(encode.dht(0, dcc, dcs), encode.join(encode.dht(16, acc, acs), encode.sos()))))))
+  encode.seg(196, cls <> encode.join(encode.join(lc, ls), (cls + 1 : U32) <> encode.join(cc, cs)))
+
+# the DC DHT body: both DC tables; a gray frame's luminance table alone
+def encode.dcbody(+kd: Layout) -> List<&2, U32>:
+  match kd:
+    case K444{}:
+      0 <> encode.join(encode.join(encode.dccounts(), encode.dcsyms()), 1 <> encode.join(encode.cdccounts(),
+        encode.dcsyms()))
+    case KGray{}:
+      0 <> encode.join(encode.dccounts(), encode.dcsyms())
+    case K420{}:
+      0 <> encode.join(encode.join(encode.dccounts(), encode.dcsyms()), 1 <> encode.join(encode.cdccounts(),
+        encode.dcsyms()))
+
+# the AC DHT body: both AC tables; a gray frame's luminance table alone
+def encode.acbody(+kd: Layout) -> List<&2, U32>:
+  match kd:
+    case K444{}:
+      16 <> encode.join(encode.join(encode.accounts(), encode.acsyms()), 17 <> encode.join(encode.caccounts(),
+        encode.cacsyms()))
+    case KGray{}:
+      16 <> encode.join(encode.accounts(), encode.acsyms())
+    case K420{}:
+      16 <> encode.join(encode.join(encode.accounts(), encode.acsyms()), 17 <> encode.join(encode.caccounts(),
+        encode.cacsyms()))
+
+# the SOS body: Y with Huffman tables 0, Cb and Cr with tables 1; or Y alone
+def encode.sosbody(+kd: Layout) -> List<&2, U32>:
+  match kd:
+    case K444{}:
+      [3, 1, 0, 2, 17, 3, 17, 0, 63, 0]
+    case KGray{}:
+      [1, 1, 0, 0, 63, 0]
+    case K420{}:
+      [3, 1, 0, 2, 17, 3, 17, 0, 63, 0]
+
+def encode.header(+ww: U32, +hh: U32, +qq: U32, +kd: Layout) -> List<&2, U32>:
+  encode.join(Jpeg.soi(), encode.join(encode.app0(), encode.join(encode.dqt(kd, qq), encode.join(encode.sof(kd, ww,
+    hh), encode.join(encode.seg(196, encode.dcbody(kd)), encode.join(encode.seg(196, encode.acbody(kd)),
+    encode.seg(218, encode.sosbody(kd))))))))
 
 # C[0][0], C[0][2], C[0][6], and the first four weights of frequency 1
 def encode.kern(+cs: List<&2, U32>) -> Kern:
@@ -128,12 +296,10 @@ def encode.kern.drop(kern: Kern) -> U32:
       +a3 = (o3 - o3 : U32)
       (z0 + z2 + z6 + a0 + a1 + a2 + a3 : U32)
 
-def encode.ctx() -> Ctx:
-  Ctx{encode.kern(Jpeg.decode.cos()), Jpeg.decode.zig(), encode.quant()}
-
-# length sits above the 16-bit code
-def encode.word(+len: U32, +code: U32) -> U32:
-  U32.or(U32.shln(len, 16n), U32.and(code, 65535))
+# the cosine kernel, the zigzag, and the quantisation columns of both tables at a quality
+def encode.ctx(+qq: U32) -> Ctx:
+  Ctx{encode.kern(Jpeg.decode.cos()), Jpeg.decode.zig(), encode.qcols(encode.qrows(encode.lumq(), qq)),
+    encode.qcols(encode.qrows(encode.chrq(), qq))}
 
 def encode.bad.b(bw: Bool, bh: Bool) -> Bool:
   match bw:
@@ -223,40 +389,143 @@ def encode.pad(pp: Put) -> List<&2, U32>:
 def encode.drop(xs: List<&2, U32>) -> U32:
   Jpeg.decode.drop(xs)
 
-# one canonical table, stored so the symbol is the index
-def encode.fill(syms: List<&2, U32>, codes: List<&2, U32>, lens: List<&2, U32>, aa: Array<U32>) -> Array<U32>:
-  match syms:
-    case Nil{}:
-      +_c = encode.drop(codes)
-      +_l = encode.drop(lens)
-      aa
-    case +s <> st:
-      match codes:
-        case Nil{}:
-          +_s = encode.drop(st)
-          +_l = encode.drop(lens)
-          +_u = (s - s : U32)
-          aa
-        case +c <> ct:
-          match lens:
-            case Nil{}:
-              +_c = encode.drop(ct)
-              +_s = encode.drop(st)
-              +_u = (c + s : U32)
-              aa
-            case +l <> lt:
-              encode.fill(st, ct, lt, Array.set(U32, aa, s, encode.word(l, c)))
+# the codes of Annex K's tables, one word per symbol: a code's length in the high half, the code in the low half.
+# They are the canonical codes of the counts and symbols DHT carries (T.81 C, K.3 to K.6), written out once; for
+# every symbol, the decoder's table built from those counts decodes the book's code to the symbol
+# (laws/JpegRoundTripKeepsSize.bend, jpeg_huff_dc and jpeg_huff_ac)
+def encode.ldc() -> Array<U32>:
+  ANode{ANode{ANode{ANode{ALeaf{131072}, ALeaf{196610}}, ANode{ALeaf{196611}, ALeaf{196612}}},
+    ANode{ANode{ALeaf{196613}, ALeaf{196614}}, ANode{ALeaf{262158}, ALeaf{327710}}}}, ANode{ANode{ANode{ALeaf{393278},
+    ALeaf{458878}}, ANode{ALeaf{524542}, ALeaf{590334}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}
 
-def encode.huff.of(hh: Jpeg.Huff) -> Array<U32>:
-  match hh:
-    case Jpeg.Huff{codes, lens, syms}:
-      encode.fill(syms, codes, lens, Jpeg.decode.plane(256))
+def encode.lac() -> Array<U32>:
+  ANode{ANode{ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{262154}, ALeaf{131072}}, ANode{ALeaf{131073}, ALeaf{196612}}},
+    ANode{ANode{ALeaf{262155}, ALeaf{327706}}, ANode{ALeaf{458872}, ALeaf{524536}}}}, ANode{ANode{ANode{ALeaf{656374},
+    ALeaf{1113986}}, ANode{ALeaf{1113987}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}},
+    ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{262156}}, ANode{ALeaf{327707}, ALeaf{458873}}}, ANode{ANode{ALeaf{590326},
+    ALeaf{722934}}, ANode{ALeaf{1113988}, ALeaf{1113989}}}}, ANode{ANode{ANode{ALeaf{1113990}, ALeaf{1113991}},
+    ANode{ALeaf{1113992}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}},
+    ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{327708}}, ANode{ALeaf{524537}, ALeaf{656375}}},
+    ANode{ANode{ALeaf{790516}, ALeaf{1113993}}, ANode{ALeaf{1113994}, ALeaf{1113995}}}},
+    ANode{ANode{ANode{ALeaf{1113996}, ALeaf{1113997}}, ANode{ALeaf{1113998}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
+    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{393274}}, ANode{ALeaf{590327},
+    ALeaf{790517}}}, ANode{ANode{ALeaf{1113999}, ALeaf{1114000}}, ANode{ALeaf{1114001}, ALeaf{1114002}}}},
+    ANode{ANode{ANode{ALeaf{1114003}, ALeaf{1114004}}, ANode{ALeaf{1114005}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
+    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}, ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{393275}},
+    ANode{ALeaf{656376}, ALeaf{1114006}}}, ANode{ANode{ALeaf{1114007}, ALeaf{1114008}}, ANode{ALeaf{1114009},
+    ALeaf{1114010}}}}, ANode{ANode{ANode{ALeaf{1114011}, ALeaf{1114012}}, ANode{ALeaf{1114013}, ALeaf{0}}},
+    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{458874}},
+    ANode{ALeaf{722935}, ALeaf{1114014}}}, ANode{ANode{ALeaf{1114015}, ALeaf{1114016}}, ANode{ALeaf{1114017},
+    ALeaf{1114018}}}}, ANode{ANode{ANode{ALeaf{1114019}, ALeaf{1114020}}, ANode{ALeaf{1114021}, ALeaf{0}}},
+    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0},
+    ALeaf{458875}}, ANode{ALeaf{790518}, ALeaf{1114022}}}, ANode{ANode{ALeaf{1114023}, ALeaf{1114024}},
+    ANode{ALeaf{1114025}, ALeaf{1114026}}}}, ANode{ANode{ANode{ALeaf{1114027}, ALeaf{1114028}}, ANode{ALeaf{1114029},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0},
+    ALeaf{524538}}, ANode{ALeaf{790519}, ALeaf{1114030}}}, ANode{ANode{ALeaf{1114031}, ALeaf{1114032}},
+    ANode{ALeaf{1114033}, ALeaf{1114034}}}}, ANode{ANode{ANode{ALeaf{1114035}, ALeaf{1114036}}, ANode{ALeaf{1114037},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}},
+    ANode{ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{590328}}, ANode{ALeaf{1015744}, ALeaf{1114038}}},
+    ANode{ANode{ALeaf{1114039}, ALeaf{1114040}}, ANode{ALeaf{1114041}, ALeaf{1114042}}}},
+    ANode{ANode{ANode{ALeaf{1114043}, ALeaf{1114044}}, ANode{ALeaf{1114045}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
+    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{590329}}, ANode{ALeaf{1114046},
+    ALeaf{1114047}}}, ANode{ANode{ALeaf{1114048}, ALeaf{1114049}}, ANode{ALeaf{1114050}, ALeaf{1114051}}}},
+    ANode{ANode{ANode{ALeaf{1114052}, ALeaf{1114053}}, ANode{ALeaf{1114054}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
+    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{590330}},
+    ANode{ALeaf{1114055}, ALeaf{1114056}}}, ANode{ANode{ALeaf{1114057}, ALeaf{1114058}}, ANode{ALeaf{1114059},
+    ALeaf{1114060}}}}, ANode{ANode{ANode{ALeaf{1114061}, ALeaf{1114062}}, ANode{ALeaf{1114063}, ALeaf{0}}},
+    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{656377}},
+    ANode{ALeaf{1114064}, ALeaf{1114065}}}, ANode{ANode{ALeaf{1114066}, ALeaf{1114067}}, ANode{ALeaf{1114068},
+    ALeaf{1114069}}}}, ANode{ANode{ANode{ALeaf{1114070}, ALeaf{1114071}}, ANode{ALeaf{1114072}, ALeaf{0}}},
+    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}, ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0},
+    ALeaf{656378}}, ANode{ALeaf{1114073}, ALeaf{1114074}}}, ANode{ANode{ALeaf{1114075}, ALeaf{1114076}},
+    ANode{ALeaf{1114077}, ALeaf{1114078}}}}, ANode{ANode{ANode{ALeaf{1114079}, ALeaf{1114080}}, ANode{ALeaf{1114081},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0},
+    ALeaf{722936}}, ANode{ALeaf{1114082}, ALeaf{1114083}}}, ANode{ANode{ALeaf{1114084}, ALeaf{1114085}},
+    ANode{ALeaf{1114086}, ALeaf{1114087}}}}, ANode{ANode{ANode{ALeaf{1114088}, ALeaf{1114089}}, ANode{ALeaf{1114090},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0},
+    ALeaf{1114091}}, ANode{ALeaf{1114092}, ALeaf{1114093}}}, ANode{ANode{ALeaf{1114094}, ALeaf{1114095}},
+    ANode{ALeaf{1114096}, ALeaf{1114097}}}}, ANode{ANode{ANode{ALeaf{1114098}, ALeaf{1114099}}, ANode{ALeaf{1114100},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{722937},
+    ALeaf{1114101}}, ANode{ALeaf{1114102}, ALeaf{1114103}}}, ANode{ANode{ALeaf{1114104}, ALeaf{1114105}},
+    ANode{ALeaf{1114106}, ALeaf{1114107}}}}, ANode{ANode{ANode{ALeaf{1114108}, ALeaf{1114109}}, ANode{ALeaf{1114110},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}}}
 
-def encode.huff(+counts: List<&2, U32>, +syms: List<&2, U32>) -> Array<U32>:
-  encode.huff.of(Jpeg.decode.canon(272n, 0n, counts, syms, 0, 0, [], [], []))
+def encode.cdc() -> Array<U32>:
+  ANode{ANode{ANode{ANode{ALeaf{131072}, ALeaf{131073}}, ANode{ALeaf{131074}, ALeaf{196614}}},
+    ANode{ANode{ALeaf{262158}, ALeaf{327710}}, ANode{ALeaf{393278}, ALeaf{458878}}}}, ANode{ANode{ANode{ALeaf{524542},
+    ALeaf{590334}}, ANode{ALeaf{656382}, ALeaf{722942}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}
 
-def encode.book(+dcc: List<&2, U32>, +dcs: List<&2, U32>, +acc: List<&2, U32>, +acs: List<&2, U32>) -> Book:
-  Book{encode.huff(dcc, dcs), encode.huff(acc, acs)}
+def encode.cac() -> Array<U32>:
+  ANode{ANode{ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{131072}, ALeaf{131073}}, ANode{ALeaf{196612}, ALeaf{262154}}},
+    ANode{ANode{ALeaf{327704}, ALeaf{327705}}, ANode{ALeaf{393272}, ALeaf{458872}}}}, ANode{ANode{ANode{ALeaf{590324},
+    ALeaf{656374}}, ANode{ALeaf{790516}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}},
+    ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{262155}}, ANode{ALeaf{393273}, ALeaf{524534}}}, ANode{ANode{ALeaf{590325},
+    ALeaf{722934}}, ANode{ALeaf{790517}, ALeaf{1113992}}}}, ANode{ANode{ANode{ALeaf{1113993}, ALeaf{1113994}},
+    ANode{ALeaf{1113995}, ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}},
+    ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{327706}}, ANode{ALeaf{524535}, ALeaf{656375}}},
+    ANode{ANode{ALeaf{790518}, ALeaf{1015746}}, ANode{ALeaf{1113996}, ALeaf{1113997}}}},
+    ANode{ANode{ANode{ALeaf{1113998}, ALeaf{1113999}}, ANode{ALeaf{1114000}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
+    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{327707}}, ANode{ALeaf{524536},
+    ALeaf{656376}}}, ANode{ANode{ALeaf{790519}, ALeaf{1114001}}, ANode{ALeaf{1114002}, ALeaf{1114003}}}},
+    ANode{ANode{ANode{ALeaf{1114004}, ALeaf{1114005}}, ANode{ALeaf{1114006}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
+    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}, ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{393274}},
+    ANode{ALeaf{590326}, ALeaf{1114007}}}, ANode{ANode{ALeaf{1114008}, ALeaf{1114009}}, ANode{ALeaf{1114010},
+    ALeaf{1114011}}}}, ANode{ANode{ANode{ALeaf{1114012}, ALeaf{1114013}}, ANode{ALeaf{1114014}, ALeaf{0}}},
+    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{393275}},
+    ANode{ALeaf{656377}, ALeaf{1114015}}}, ANode{ANode{ALeaf{1114016}, ALeaf{1114017}}, ANode{ALeaf{1114018},
+    ALeaf{1114019}}}}, ANode{ANode{ANode{ALeaf{1114020}, ALeaf{1114021}}, ANode{ALeaf{1114022}, ALeaf{0}}},
+    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0},
+    ALeaf{458873}}, ANode{ALeaf{722935}, ALeaf{1114023}}}, ANode{ANode{ALeaf{1114024}, ALeaf{1114025}},
+    ANode{ALeaf{1114026}, ALeaf{1114027}}}}, ANode{ANode{ANode{ALeaf{1114028}, ALeaf{1114029}}, ANode{ALeaf{1114030},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0},
+    ALeaf{458874}}, ANode{ALeaf{722936}, ALeaf{1114031}}}, ANode{ANode{ALeaf{1114032}, ALeaf{1114033}},
+    ANode{ALeaf{1114034}, ALeaf{1114035}}}}, ANode{ANode{ANode{ALeaf{1114036}, ALeaf{1114037}}, ANode{ALeaf{1114038},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}},
+    ANode{ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{524537}}, ANode{ALeaf{1114039}, ALeaf{1114040}}},
+    ANode{ANode{ALeaf{1114041}, ALeaf{1114042}}, ANode{ALeaf{1114043}, ALeaf{1114044}}}},
+    ANode{ANode{ANode{ALeaf{1114045}, ALeaf{1114046}}, ANode{ALeaf{1114047}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
+    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{590327}}, ANode{ALeaf{1114048},
+    ALeaf{1114049}}}, ANode{ANode{ALeaf{1114050}, ALeaf{1114051}}, ANode{ALeaf{1114052}, ALeaf{1114053}}}},
+    ANode{ANode{ANode{ALeaf{1114054}, ALeaf{1114055}}, ANode{ALeaf{1114056}, ALeaf{0}}}, ANode{ANode{ALeaf{0},
+    ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{590328}},
+    ANode{ALeaf{1114057}, ALeaf{1114058}}}, ANode{ANode{ALeaf{1114059}, ALeaf{1114060}}, ANode{ALeaf{1114061},
+    ALeaf{1114062}}}}, ANode{ANode{ANode{ALeaf{1114063}, ALeaf{1114064}}, ANode{ALeaf{1114065}, ALeaf{0}}},
+    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0}, ALeaf{590329}},
+    ANode{ALeaf{1114066}, ALeaf{1114067}}}, ANode{ANode{ALeaf{1114068}, ALeaf{1114069}}, ANode{ALeaf{1114070},
+    ALeaf{1114071}}}}, ANode{ANode{ANode{ALeaf{1114072}, ALeaf{1114073}}, ANode{ALeaf{1114074}, ALeaf{0}}},
+    ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}, ANode{ANode{ANode{ANode{ANode{ANode{ALeaf{0},
+    ALeaf{590330}}, ANode{ALeaf{1114075}, ALeaf{1114076}}}, ANode{ANode{ALeaf{1114077}, ALeaf{1114078}},
+    ANode{ALeaf{1114079}, ALeaf{1114080}}}}, ANode{ANode{ANode{ALeaf{1114081}, ALeaf{1114082}}, ANode{ALeaf{1114083},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{0},
+    ALeaf{722937}}, ANode{ALeaf{1114084}, ALeaf{1114085}}}, ANode{ANode{ALeaf{1114086}, ALeaf{1114087}},
+    ANode{ALeaf{1114088}, ALeaf{1114089}}}}, ANode{ANode{ANode{ALeaf{1114090}, ALeaf{1114091}}, ANode{ALeaf{1114092},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}, ANode{ANode{ANode{ANode{ANode{ALeaf{0},
+    ALeaf{933856}}, ANode{ALeaf{1114093}, ALeaf{1114094}}}, ANode{ANode{ALeaf{1114095}, ALeaf{1114096}},
+    ANode{ALeaf{1114097}, ALeaf{1114098}}}}, ANode{ANode{ANode{ALeaf{1114099}, ALeaf{1114100}}, ANode{ALeaf{1114101},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}, ANode{ANode{ANode{ANode{ALeaf{656378},
+    ALeaf{1015747}}, ANode{ALeaf{1114102}, ALeaf{1114103}}}, ANode{ANode{ALeaf{1114104}, ALeaf{1114105}},
+    ANode{ALeaf{1114106}, ALeaf{1114107}}}}, ANode{ANode{ANode{ALeaf{1114108}, ALeaf{1114109}}, ANode{ALeaf{1114110},
+    ALeaf{0}}}, ANode{ANode{ALeaf{0}, ALeaf{0}}, ANode{ALeaf{0}, ALeaf{0}}}}}}}}}
+
+# a class's DC book: luminance, or chrominance when cls is set
+def encode.dcof(+cls: Bool) -> Array<U32>:
+  match cls:
+    case False{}:
+      encode.ldc()
+    case True{}:
+      encode.cdc()
+
+# a class's AC book
+def encode.acof(+cls: Bool) -> Array<U32>:
+  match cls:
+    case False{}:
+      encode.lac()
+    case True{}:
+      encode.cac()
+
+# a class's books
+def encode.bookof(+cls: Bool) -> Book:
+  Book{encode.dcof(cls), encode.acof(cls)}
 
 # the first of two sizes when the value is below the limit, else the second
 def encode.cat.pick(lt: Bool, +cc: U32, +rest: U32) -> U32:
@@ -516,23 +785,34 @@ def encode.add64(prod: U32 & U32, acc: U32 & U32) -> U32 & U32:
 def encode.mac(+coef: U32, +samp: U32, acc: U32 & U32) -> U32 & U32:
   encode.add64(Jpeg.decode.widemul(coef, samp), acc)
 
-# the same rounding the matrix product applies to a finished sum
-def encode.q17(acc: U32 & U32) -> U32:
+# a finished sum rounded as the decoder's passes round it: the row pass (fine) keeps four fraction bits, the
+# column pass takes them off, so a coefficient is rounded once
+def encode.q17(acc: U32 & U32, +fine: Bool) -> U32:
   match acc:
     case (+hi, +lo):
-      Jpeg.decode.q17(hi, lo)
+      Jpeg.decode.qs(hi, lo, fine)
 
-def encode.scale(+coef: U32, +samp: U32) -> U32:
-  encode.q17(Jpeg.decode.widemul(coef, samp))
+def encode.scale(+coef: U32, +samp: U32, +fine: Bool) -> U32:
+  encode.q17(Jpeg.decode.widemul(coef, samp), fine)
 
-def encode.two(+c0: U32, +x0: U32, +c1: U32, +x1: U32) -> U32:
-  encode.q17(encode.mac(c1, x1, Jpeg.decode.widemul(c0, x0)))
+def encode.two(+c0: U32, +x0: U32, +c1: U32, +x1: U32, +fine: Bool) -> U32:
+  encode.q17(encode.mac(c1, x1, Jpeg.decode.widemul(c0, x0)), fine)
 
-def encode.two.n(+c0: U32, +x0: U32, +c1: U32, +x1: U32) -> U32:
-  encode.q17(encode.mac(Jpeg.decode.neg32(c1), x1, Jpeg.decode.widemul(c0, x0)))
+def encode.two.n(+c0: U32, +x0: U32, +c1: U32, +x1: U32, +fine: Bool) -> U32:
+  encode.q17(encode.mac(Jpeg.decode.neg32(c1), x1, Jpeg.decode.widemul(c0, x0)), fine)
 
-def encode.four(+c0: U32, +s0: U32, +c1: U32, +s1: U32, +c2: U32, +s2: U32, +c3: U32, +s3: U32) -> U32:
-  encode.q17(encode.mac(c3, s3, encode.mac(c2, s2, encode.mac(c1, s1, Jpeg.decode.widemul(c0, s0)))))
+def encode.four(
+  +c0: U32,
+  +s0: U32,
+  +c1: U32,
+  +s1: U32,
+  +c2: U32,
+  +s2: U32,
+  +c3: U32,
+  +s3: U32,
+  +fine: Bool
+) -> U32:
+  encode.q17(encode.mac(c3, s3, encode.mac(c2, s2, encode.mac(c1, s1, Jpeg.decode.widemul(c0, s0)))), fine)
 
 # even frequencies: symmetric samples share one weight
 def encode.even(
@@ -546,7 +826,8 @@ def encode.even(
   +s7: U32,
   +k0: U32,
   +k2: U32,
-  +k6: U32
+  +k6: U32,
+  +fine: Bool
 ) -> Oct:
   +a0 = (s0 + s7 : U32)
   +a1 = (s1 + s6 : U32)
@@ -554,16 +835,26 @@ def encode.even(
   +a3 = (s3 + s4 : U32)
   +e0 = (a0 - a3 : U32)
   +e1 = (a1 - a2 : U32)
-  Oct{encode.scale(k0, (a0 + a1 + a2 + a3 : U32)), 0, encode.two(k2, e0, k6, e1), 0,
-    encode.scale(k0, ((a0 + a3 : U32) - (a1 + a2 : U32) : U32)), 0, encode.two.n(k6, e0, k2, e1), 0}
+  Oct{encode.scale(k0, (a0 + a1 + a2 + a3 : U32), fine), 0, encode.two(k2, e0, k6, e1, fine), 0,
+    encode.scale(k0, ((a0 + a3 : U32) - (a1 + a2 : U32) : U32), fine), 0, encode.two.n(k6, e0, k2, e1, fine), 0}
 
 # odd frequencies: antisymmetric samples share one weight
-def encode.odd(+d0: U32, +d1: U32, +d2: U32, +d3: U32, +o0: U32, +o1: U32, +o2: U32, +o3: U32) -> Oct:
+def encode.odd(
+  +d0: U32,
+  +d1: U32,
+  +d2: U32,
+  +d3: U32,
+  +o0: U32,
+  +o1: U32,
+  +o2: U32,
+  +o3: U32,
+  +fine: Bool
+) -> Oct:
   +n0 = Jpeg.decode.neg32(o0)
   +n2 = Jpeg.decode.neg32(o2)
   +n3 = Jpeg.decode.neg32(o3)
-  Oct{0, encode.four(o0, d0, o1, d1, o2, d2, o3, d3), 0, encode.four(o1, d0, n3, d1, n0, d2, n2, d3), 0,
-    encode.four(o2, d0, n0, d1, o3, d2, o1, d3), 0, encode.four(o3, d0, n2, d1, o1, d2, n0, d3)}
+  Oct{0, encode.four(o0, d0, o1, d1, o2, d2, o3, d3, fine), 0, encode.four(o1, d0, n3, d1, n0, d2, n2, d3, fine), 0,
+    encode.four(o2, d0, n0, d1, o3, d2, o1, d3, fine), 0, encode.four(o3, d0, n2, d1, o1, d2, n0, d3, fine)}
 
 def encode.dct8.od(+f0: U32, +f2: U32, +f4: U32, +f6: U32, od: Oct) -> Oct:
   match od:
@@ -586,26 +877,19 @@ def encode.dct8.k(
   +s5: U32,
   +s6: U32,
   +s7: U32,
-  kern: Kern
+  kern: Kern,
+  +fine: Bool
 ) -> Oct:
   match kern:
     case Kern{+k0, +k2, +k6, +o0, +o1, +o2, +o3}:
-      encode.dct8.at(encode.even(s0, s1, s2, s3, s4, s5, s6, s7, k0, k2, k6),
-        encode.odd((s0 - s7 : U32), (s1 - s6 : U32), (s2 - s5 : U32), (s3 - s4 : U32), o0, o1, o2, o3))
+      encode.dct8.at(encode.even(s0, s1, s2, s3, s4, s5, s6, s7, k0, k2, k6, fine),
+        encode.odd((s0 - s7 : U32), (s1 - s6 : U32), (s2 - s5 : U32), (s3 - s4 : U32), o0, o1, o2, o3, fine))
 
-# one 8-point transform. Pairing is the matrix product, so the rounded value matches.
-def encode.dct8(samp: Oct, kern: Kern) -> Oct:
+# one 8-point transform, fine for the row pass. Pairing is the matrix product, so the rounded value matches.
+def encode.dct8(samp: Oct, kern: Kern, +fine: Bool) -> Oct:
   match samp:
     case Oct{+s0, +s1, +s2, +s3, +s4, +s5, +s6, +s7}:
-      encode.dct8.k(s0, s1, s2, s3, s4, s5, s6, s7, kern)
-
-def encode.take(row: List<&2, U32>) -> Oct:
-  match row:
-    case +s0 <> +s1 <> +s2 <> +s3 <> +s4 <> +s5 <> +s6 <> +s7 <> rest:
-      +_drop = encode.drop(rest)
-      Oct{s0, s1, s2, s3, s4, s5, s6, s7}
-    case _:
-      Oct{0, 0, 0, 0, 0, 0, 0, 0}
+      encode.dct8.k(s0, s1, s2, s3, s4, s5, s6, s7, kern, fine)
 
 def encode.put8(
   +f0: U32,
@@ -771,19 +1055,11 @@ def encode.oct.stride(aa: Array<U32>, +at: U32, +step: U32) -> Array<U32> & Oct:
 def encode.col.use(got: Array<U32> & Oct, kern: Kern) -> Array<U32> & Oct:
   match got:
     case (arr, o):
-      (arr, encode.dct8(o, kern))
+      (arr, encode.dct8(o, kern, False{}))
 
 # one frequency column, read straight from the plane
 def encode.col(arr: Array<U32>, +at: U32, kern: Kern) -> Array<U32> & Oct:
   encode.col.use(encode.oct.stride(arr, at, 8), kern)
-
-def encode.pass1(rows: List<&2, List<&2, U32>>, +kern: Kern, arr: Array<U32>, +at: U32) -> Array<U32>:
-  match rows:
-    case Nil{}:
-      +_z = encode.kern.drop(kern)
-      arr
-    case h <> t:
-      encode.pass1(t, kern, encode.lay(encode.dct8(encode.take(h), kern), arr, at), (at + 8 : U32))
 
 def encode.pix.sink(aa: Array<U32>) -> U32:
   match aa:
@@ -797,30 +1073,53 @@ def encode.book.sink(book: Book) -> U32:
     case Book{dc, ac}:
       U32.or(encode.pix.sink(dc), encode.pix.sink(ac))
 
-def encode.pass2.done(st: Planes, kern: Kern) -> Array<U32>:
+# a frequency column divided by its quantisation steps, each rounded half away from zero
+def encode.quant8(oo: Oct, qq: Oct) -> Oct:
+  match oo:
+    case Oct{+f0, +f1, +f2, +f3, +f4, +f5, +f6, +f7}:
+      match qq:
+        case Oct{+q0, +q1, +q2, +q3, +q4, +q5, +q6, +q7}:
+          Oct{encode.qdiv(f0, q0), encode.qdiv(f1, q1), encode.qdiv(f2, q2), encode.qdiv(f3, q3), encode.qdiv(f4, q4),
+            encode.qdiv(f5, q5), encode.qdiv(f6, q6), encode.qdiv(f7, q7)}
+
+# a table's columns, when no longer read
+def encode.qdrop(qs: List<&2, Oct>) -> U32:
+  match qs:
+    case Nil{}:
+      0
+    case _q <> rest:
+      encode.qdrop(rest)
+
+def encode.pass2.done(st: Planes, kern: Kern, qs: List<&2, Oct>) -> Array<U32>:
   match st:
     case Planes{src, dst, +at}:
       +_z = encode.kern.drop(kern)
       +_s = encode.pix.sink(src)
+      +_q = encode.qdrop(qs)
       +_at = (at - at : U32)
       dst
 
-def encode.pass2.put(got: Array<U32> & Oct, dst: Array<U32>, +at: U32) -> Planes:
+def encode.pass2.put(got: Array<U32> & Oct, dst: Array<U32>, +at: U32, qq: Oct) -> Planes:
   match got:
     case (src, o):
-      Planes{src, encode.scatter(o, dst, at), (at + 1 : U32)}
+      Planes{src, encode.scatter(encode.quant8(o, qq), dst, at), (at + 1 : U32)}
 
-def encode.pass2.step(st: Planes, kern: Kern) -> Planes:
+def encode.pass2.step(st: Planes, kern: Kern, qq: Oct) -> Planes:
   match st:
     case Planes{src, dst, +at}:
-      encode.pass2.put(encode.col(src, at, kern), dst, at)
+      encode.pass2.put(encode.col(src, at, kern), dst, at, qq)
 
-def encode.pass2(left: Nat, st: Planes, +kern: Kern) -> Array<U32>:
+# the column transforms, each column divided by its quantisation steps. `left` columns are still unread.
+def encode.pass2(left: Nat, st: Planes, +kern: Kern, qs: List<&2, Oct>) -> Array<U32>:
   match left:
     case 0n:
-      encode.pass2.done(st, kern)
+      encode.pass2.done(st, kern, qs)
     case 1n+rest:
-      encode.pass2(rest, encode.pass2.step(st, kern), kern)
+      match qs:
+        case Nil{}:
+          encode.pass2(rest, encode.pass2.step(st, kern, Oct{1, 1, 1, 1, 1, 1, 1, 1}), kern, [])
+        case +qq <> qt:
+          encode.pass2(rest, encode.pass2.step(st, kern, qq), kern, qt)
 
 def encode.pass.rows.done(st: Planes, kern: Kern) -> Array<U32>:
   match st:
@@ -833,7 +1132,7 @@ def encode.pass.rows.done(st: Planes, kern: Kern) -> Array<U32>:
 def encode.pass.rows.lay(got: Array<U32> & Oct, +kern: Kern, dst: Array<U32>, +at: U32) -> Planes:
   match got:
     case (src, o):
-      Planes{src, encode.lay(encode.dct8(o, kern), dst, at), (at + 8 : U32)}
+      Planes{src, encode.lay(encode.dct8(o, kern, True{}), dst, at), (at + 8 : U32)}
 
 def encode.pass.rows.next(st: Planes, +kern: Kern) -> Planes:
   match st:
@@ -851,57 +1150,9 @@ def encode.pass.rows(left: Nat, st: Planes, +kern: Kern) -> Array<U32>:
 def encode.pass.mid(src: Array<U32>, +kern: Kern) -> Array<U32>:
   encode.pass.rows(8n, Planes{src, Jpeg.decode.plane(64), 0}, kern)
 
-# level plane in, natural-order frequencies out
-def encode.freq(src: Array<U32>, +kern: Kern) -> Array<U32>:
-  encode.pass2(8n, Planes{encode.pass.mid(src, kern), Jpeg.decode.plane(64), 0}, kern)
-
-def encode.drain.pack(got: Array<U32> & U32, acc: List<&2, U32>) -> Array<U32> & U32 & List<&2, U32>:
-  match got:
-    case (arr, samp):
-      (arr, samp, acc)
-
-def encode.drain.step(st: Array<U32> & U32 & List<&2, U32>, +idx: Nat) -> Array<U32> & U32 & List<&2, U32>:
-  (arr, samp, acc) = st
-  encode.drain.pack(Array.get(U32, arr, U32.from_nat(idx)), samp <> acc)
-
-def encode.drain.done(st: Array<U32> & U32 & List<&2, U32>) -> List<&2, U32>:
-  (arr, samp, acc) = st
-  +_s = encode.pix.sink(arr)
-  samp <> acc
-
-# read index 63 first, so the cons list comes out in order
-def encode.drain(left: Nat, st: Array<U32> & U32 & List<&2, U32>) -> List<&2, U32>:
-  match left:
-    case 0n:
-      encode.drain.done(st)
-    case 1n+ +rest:
-      encode.drain(rest, encode.drain.step(st, rest))
-
-def encode.drain.st(got: Array<U32> & U32) -> Array<U32> & U32 & List<&2, U32>:
-  match got:
-    case (arr, samp):
-      (arr, samp, [])
-
-def encode.fdct.go(src: Array<U32>, kern: Kern) -> List<&2, U32>:
-  encode.drain(63n, encode.drain.st(Array.get(U32, encode.pass2(8n, Planes{src, Jpeg.decode.plane(64), 0}, kern), 63)))
-
-def encode.fdct(rows: List<&2, List<&2, U32>>, +cs: List<&2, U32>) -> List<&2, U32>:
-  +kern = encode.kern(cs)
-  encode.fdct.go(encode.pass1(rows, kern, Jpeg.decode.plane(64), 0), kern)
-
-def encode.level(xs: List<&2, U32>) -> List<&2, U32>:
-  match xs:
-    case Nil{}:
-      Nil{}
-    case h <> t:
-      (h - 128 : U32) <> encode.level(t)
-
-def encode.levels(rows: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
-  match rows:
-    case Nil{}:
-      Nil{}
-    case h <> t:
-      encode.level(h) <> encode.levels(t)
+# level plane in, quantised natural-order coefficients out
+def encode.freq(src: Array<U32>, +kern: Kern, qs: List<&2, Oct>) -> Array<U32>:
+  encode.pass2(8n, Planes{encode.pass.mid(src, kern), Jpeg.decode.plane(64), 0}, kern, qs)
 
 def encode.sat(over: Bool, +xx: U32, +lim: U32) -> U32:
   match over:
@@ -938,18 +1189,6 @@ def encode.crch(+rr: U32, +gg: U32, +bb: U32) -> U32:
   +v = encode.cr(rr, gg, bb)
   encode.sat8(U32.is_gt(v, 255), v)
 
-def encode.chan.w(+ch: U32, +rr: U32, +gg: U32, +bb: U32) -> U32:
-  match ch:
-    case 0:
-      encode.ych(rr, gg, bb)
-    case 1:
-      encode.cbch(rr, gg, bb)
-    case _:
-      encode.crch(rr, gg, bb)
-
-def encode.chan(+pix: U32, +ch: U32) -> U32:
-  encode.chan.w(ch, U32.and(U32.shrn(pix, 16n), 255), U32.and(U32.shrn(pix, 8n), 255), U32.and(pix, 255))
-
 # the first `left` samples, then the rest of the list is unused
 def encode.pix.load(left: Nat, px: List<&2, U32>, aa: Array<U32>, +ii: U32) -> Array<U32>:
   match left px:
@@ -961,15 +1200,6 @@ def encode.pix.load(left: Nat, px: List<&2, U32>, aa: Array<U32>, +ii: U32) -> A
     case 1n+k +h <> t:
       encode.pix.load(k, t, Array.set(U32, aa, ii, h), (ii + 1 : U32))
 
-def encode.sample.use(got: Array<U32> & U32, +ch: U32) -> Array<U32> & U32:
-  (a, pix) = got
-  (a, encode.chan(pix, ch))
-
-# one index into the sample array, instead of a walk from the head of the list
-def encode.sample(aa: Array<U32>, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ch: U32) -> Array<U32> & U32:
-  encode.sample.use(Array.get(U32, aa,
-    (encode.sat(U32.is_ge(yy, hh), yy, hh) * ww + encode.sat(U32.is_ge(xx, ww), xx, ww) : U32)), ch)
-
 # both samples are the neutral level
 def encode.flat.both(aa: Bool, bb: Bool) -> Bool:
   match aa:
@@ -979,181 +1209,6 @@ def encode.flat.both(aa: Bool, bb: Bool) -> Bool:
           False{}
     case True{}:
       bb
-
-def encode.rowpix.step(+ss: U32, got: Array<U32> & List<&2, U32> & Bool) -> Array<U32> & List<&2, U32> & Bool:
-  (a, rest, flat) = got
-  (a, ss <> rest, encode.flat.both(U32.is_eq(ss, 128), flat))
-
-def encode.rowpix.one(+ss: U32, aa: Array<U32>) -> Array<U32> & List<&2, U32> & Bool:
-  (aa, ss <> Nil{}, encode.flat.both(U32.is_eq(ss, 128), True{}))
-
-# `got` is the sample at x. `left` counts it and the samples after it.
-def encode.rowpix(
-  left: Nat,
-  got: Array<U32> & U32,
-  +ww: U32,
-  +hh: U32,
-  +xx: U32,
-  +yy: U32,
-  +ch: U32
-) -> Array<U32> & List<&2, U32> & Bool:
-  match left:
-    case 0n:
-      (a, s) = got
-      encode.rowpix.one(s, a)
-    case 1n+0n:
-      (a, s) = got
-      encode.rowpix.one(s, a)
-    case 1n+1n+q:
-      (a, s) = got
-      encode.rowpix.step(s, encode.rowpix(1n+q, encode.sample(a, ww, hh, (xx + 1 : U32), yy, ch), ww, hh,
-        (xx + 1 : U32), yy, ch))
-
-def encode.rows.join(
-  +row: List<&2, U32>,
-  rf: Bool,
-  rest: Array<U32> & List<&2, List<&2, U32>> & Bool
-) -> Array<U32> & List<&2, List<&2, U32>> & Bool:
-  (a, tail, flat) = rest
-  (a, row <> tail, encode.flat.both(rf, flat))
-
-def encode.rows.one(+row: List<&2, U32>, rf: Bool, aa: Array<U32>) -> Array<U32> & List<&2, List<&2, U32>> & Bool:
-  (aa, row <> Nil{}, rf)
-
-# `got` is the row at y. `left` counts it and the rows after it.
-def encode.rows(
-  left: Nat,
-  got: Array<U32> & List<&2, U32> & Bool,
-  +ww: U32,
-  +hh: U32,
-  +xx: U32,
-  +yy: U32,
-  +ch: U32
-) -> Array<U32> & List<&2, List<&2, U32>> & Bool:
-  match left:
-    case 0n:
-      (a, row, rf) = got
-      encode.rows.one(row, rf, a)
-    case 1n+0n:
-      (a, row, rf) = got
-      encode.rows.one(row, rf, a)
-    case 1n+1n+q:
-      (a, row, rf) = got
-      encode.rows.join(row, rf, encode.rows(1n+q, encode.rowpix(8n, encode.sample(a, ww, hh, xx, (yy + 1 : U32), ch),
-        ww, hh, xx, (yy + 1 : U32), ch), ww, hh, xx, (yy + 1 : U32), ch))
-
-def encode.droprows(rows: List<&2, List<&2, U32>>) -> U32:
-  match rows:
-    case Nil{}:
-      0
-    case h <> t:
-      +_h = encode.drop(h)
-      encode.droprows(t)
-
-# the next quant step, or 0 when the table has run out (qdiv turns 0 into 1)
-def encode.zzq.take(qs: List<&2, U32>) -> U32 & List<&2, U32>:
-  match qs:
-    case Nil{}:
-      (0, [])
-    case +q <> qt:
-      (q, qt)
-
-# `got` is the coefficient at the zigzag index just read. `rest` is the indexes after it.
-def encode.zzq.go(
-  rest: List<&2, U32>,
-  got: Array<U32> & U32,
-  qv: U32 & List<&2, U32>,
-  acc: List<&2, U32>
-) -> List<&2, U32>:
-  match rest:
-    case Nil{}:
-      match got:
-        case (a, +v):
-          match qv:
-            case (+q, qt):
-              +_s = encode.pix.sink(a)
-              +_d = encode.drop(qt)
-              List.reverse(&2, U32, encode.qdiv(v, q) <> acc)
-    case +g <> gt:
-      match got:
-        case (a, +v):
-          match qv:
-            case (+q, qt):
-              encode.zzq.go(gt, Array.get(U32, a, g), encode.zzq.take(qt), encode.qdiv(v, q) <> acc)
-
-def encode.zzq.enter(zig: List<&2, U32>, arr: Array<U32>, qs: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
-  match zig:
-    case Nil{}:
-      +_s = encode.pix.sink(arr)
-      +_q = encode.drop(qs)
-      List.reverse(&2, U32, acc)
-    case +g <> gt:
-      encode.zzq.go(gt, Array.get(U32, arr, g), encode.zzq.take(qs), acc)
-
-def encode.zzq.load(nat: List<&2, U32>, arr: Array<U32>, +at: U32) -> Array<U32>:
-  match nat:
-    case Nil{}:
-      arr
-    case +h <> t:
-      encode.zzq.load(t, Array.set(U32, arr, at, h), (at + 1 : U32))
-
-# the coefficient block is an array, so each zigzag step is an index
-def encode.zzq(zig: List<&2, U32>, +nat: List<&2, U32>, +qs: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
-  encode.zzq.enter(zig, encode.zzq.load(nat, Jpeg.decode.plane(64), 0), qs, acc)
-
-# 128 level-shifts to 0, and the integer DCT of that block is 0, so quant by 1 stays 0
-def encode.zz(
-  flat: Bool,
-  rows: List<&2, List<&2, U32>>,
-  +kern: Kern,
-  +zig: List<&2, U32>,
-  +qs: List<&2, U32>
-) -> List<&2, U32>:
-  match flat:
-    case True{}:
-      +_r = encode.droprows(rows)
-      +_k = encode.kern.drop(kern)
-      +_g = encode.drop(zig)
-      +_q = encode.drop(qs)
-      List.replicate(U32, 64n, 0)
-    case False{}:
-      encode.zzq(zig, encode.fdct.go(encode.pass1(encode.levels(rows), kern, Jpeg.decode.plane(64), 0), kern), qs, [])
-
-def encode.block.pair(got: Book & U32 & Put, aa: Array<U32>) -> Array<U32> & Book & U32 & Put:
-  match got:
-    case (book, +dc, bit):
-      (aa, book, dc, bit)
-
-def encode.block.use(
-  book: Book,
-  pp: Put,
-  +pred: U32,
-  got: Array<U32> & List<&2, List<&2, U32>> & Bool,
-  +kern: Kern,
-  +zig: List<&2, U32>,
-  +qs: List<&2, U32>
-) -> Array<U32> & Book & U32 & Put:
-  (a, rows, flat) = got
-  encode.block.pair(encode.block.go(book, pp, pred, encode.zz(flat, rows, kern, zig, qs)), a)
-
-def encode.block(
-  book: Book,
-  pp: Put,
-  +pred: U32,
-  aa: Array<U32>,
-  +ww: U32,
-  +hh: U32,
-  +xx: U32,
-  +yy: U32,
-  +ch: U32,
-  ctx: Ctx
-) -> Array<U32> & Book & U32 & Put:
-  match ctx:
-    case Ctx{+kern, +zig, +qs}:
-      encode.block.use(book, pp, pred,
-        encode.rows(8n, encode.rowpix(8n, encode.sample(aa, ww, hh, xx, yy, ch), ww, hh, xx, yy, ch),
-          ww, hh, xx, yy, ch),
-        kern, zig, qs)
 
 def encode.nx(more: Bool, +mx: U32) -> U32:
   match more:
@@ -1168,14 +1223,6 @@ def encode.ny(more: Bool, +my: U32) -> U32:
       my
     case False{}:
       (my + 1 : U32)
-
-def encode.step.end(
-  got: Array<U32> & Book & U32 & Put,
-  +ydc: U32,
-  +bdc: U32
-) -> Array<U32> & Book & U32 & U32 & U32 & Put:
-  (a, book, rdc, bit) = got
-  (a, book, ydc, bdc, rdc, bit)
 
 def encode.scan.hit(got: Array<U32> & Put, arr: Array<U32>) -> Scan:
   (ac, bit) = got
@@ -1281,12 +1328,12 @@ def encode.chan.flat(
   +pred: U32,
   +kern: Kern,
   +zig: List<&2, U32>,
-  +qs: List<&2, U32>
+  +qs: List<&2, Oct>
 ) -> Book & U32 & Put:
   +_s = encode.pix.sink(plane)
   +_k = encode.kern.drop(kern)
   +_g = encode.drop(zig)
-  +_q = encode.drop(qs)
+  +_q = encode.qdrop(qs)
   encode.block.go(book, pp, pred, List.replicate(U32, 64n, 0))
 
 def encode.chan.mix(
@@ -1296,10 +1343,9 @@ def encode.chan.mix(
   +pred: U32,
   +kern: Kern,
   zig: List<&2, U32>,
-  qs: List<&2, U32>
+  qs: List<&2, Oct>
 ) -> Book & U32 & Put:
-  +_q = encode.drop(qs)
-  encode.scan(book, pp, pred, encode.freq(plane, kern), zig)
+  encode.scan(book, pp, pred, encode.freq(plane, kern, qs), zig)
 
 def encode.chan.go(
   flat: Bool,
@@ -1309,7 +1355,7 @@ def encode.chan.go(
   +pred: U32,
   +kern: Kern,
   +zig: List<&2, U32>,
-  +qs: List<&2, U32>
+  +qs: List<&2, Oct>
 ) -> Book & U32 & Put:
   match flat:
     case True{}:
@@ -1367,13 +1413,110 @@ def encode.tile(aa: Array<U32>, +ww: U32, +hh: U32, +xx: U32, +yy: U32) -> Tile:
   encode.tile.rows(8n, Tile{aa, Jpeg.decode.plane(64), Jpeg.decode.plane(64), Jpeg.decode.plane(64), True{}, True{},
     True{}}, ww, hh, xx, yy, 0)
 
-def encode.chan.pair(got: Book & U32 & Put, aa: Array<U32>) -> Array<U32> & Book & U32 & Put:
-  match got:
-    case (book, +dc, bit):
-      (aa, book, dc, bit)
+def encode.gtile.store(got: Array<U32> & U32, ys: Array<U32>, fy: Bool, +ii: U32) -> GTile:
+  (pix, +p) = got
+  +y8 = U32.and(p, 255)
+  GTile{pix, Array.set(U32, ys, ii, (y8 - 128 : U32)), encode.flat.both(U32.is_eq(y8, 128), fy)}
+
+def encode.gtile.pix(tt: GTile, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ii: U32) -> GTile:
+  match tt:
+    case GTile{pix, ys, fy}:
+      encode.gtile.store(encode.pix.at(pix, ww, hh, xx, yy), ys, fy, ii)
+
+def encode.gtile.row(left: Nat, tt: GTile, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ii: U32) -> GTile:
+  match left:
+    case 0n:
+      +_u = (ww + hh + xx + yy + ii : U32)
+      tt
+    case 1n+k:
+      encode.gtile.row(k, encode.gtile.pix(tt, ww, hh, xx, yy, ii), ww, hh, (xx + 1 : U32), yy, (ii + 1 : U32))
+
+def encode.gtile.rows(left: Nat, tt: GTile, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ii: U32) -> GTile:
+  match left:
+    case 0n:
+      +_u = (ww + hh + xx + yy + ii : U32)
+      tt
+    case 1n+k:
+      encode.gtile.rows(k, encode.gtile.row(8n, tt, ww, hh, xx, yy, ii), ww, hh, xx, (yy + 1 : U32), (ii + 8 : U32))
+
+# a gray MCU's level plane: each sample's blue, which is its red and green and so its luminance
+def encode.gtile(aa: Array<U32>, +ww: U32, +hh: U32, +xx: U32, +yy: U32) -> GTile:
+  encode.gtile.rows(8n, GTile{aa, Jpeg.decode.plane(64), True{}}, ww, hh, xx, yy, 0)
+
+def encode.gstep.end(got: Book & U32 & Put, aa: Array<U32>) -> Array<U32> & Book & U32 & Put:
+  (lb, +dc, bit) = got
+  (aa, lb, dc, bit)
+
+# a gray MCU's one block, with the luminance book and table
+def encode.gstep.tile(
+  tt: GTile,
+  lb: Book,
+  bit: Put,
+  +py: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>
+) -> Array<U32> & Book & U32 & Put:
+  match tt:
+    case GTile{pix, ys, fy}:
+      encode.gstep.end(encode.chan.go(fy, ys, lb, bit, py, kern, zig, ql), pix)
+
+def encode.gstep(
+  aa: Array<U32>,
+  lb: Book,
+  bit: Put,
+  +py: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +ctx: Ctx
+) -> Array<U32> & Book & U32 & Put:
+  match ctx:
+    case Ctx{+kern, +zig, +ql, _qc}:
+      encode.gstep.tile(encode.gtile(aa, ww, hh, xx, yy), lb, bit, py, kern, zig, ql)
+
+def encode.gmcus.done(got: Array<U32> & Book & U32 & Put) -> Put:
+  (a, lb, ydc, bit) = got
+  +_s = encode.pix.sink(a)
+  +_l = encode.book.sink(lb)
+  +_u = (ydc + 1 : U32)
+  bit
+
+def encode.gmcus(
+  left: Nat,
+  got: Array<U32> & Book & U32 & Put,
+  +mx: U32,
+  +my: U32,
+  +mw: U32,
+  +ww: U32,
+  +hh: U32,
+  +ctx: Ctx
+) -> Put:
+  match left:
+    case 0n:
+      encode.gmcus.done(got)
+    case 1n+nleft:
+      (a, lb, py, bit) = got
+      +x = (mx * 8 : U32)
+      +y = (my * 8 : U32)
+      +more = U32.is_lt((mx + 1 : U32), mw)
+      encode.gmcus(nleft, encode.gstep(a, lb, bit, py, x, y, ww, hh, ctx), encode.nx(more, mx), encode.ny(more, my),
+        mw, ww, hh, ctx)
+
+def encode.step.end(
+  got: Book & U32 & Put,
+  lb: Book,
+  aa: Array<U32>,
+  +ydc: U32,
+  +bdc: U32
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (cb, +rdc, bit) = got
+  (aa, lb, cb, ydc, bdc, rdc, bit)
 
 def encode.step.cr(
   got: Book & U32 & Put,
+  lb: Book,
   aa: Array<U32>,
   rs: Array<U32>,
   fr: Bool,
@@ -1381,13 +1524,14 @@ def encode.step.cr(
   +pr: U32,
   +kern: Kern,
   +zig: List<&2, U32>,
-  +qs: List<&2, U32>
-) -> Array<U32> & Book & U32 & U32 & U32 & Put:
-  (book, +bdc, bit) = got
-  encode.step.end(encode.chan.pair(encode.chan.go(fr, rs, book, bit, pr, kern, zig, qs), aa), ydc, bdc)
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (cb, +bdc, bit) = got
+  encode.step.end(encode.chan.go(fr, rs, cb, bit, pr, kern, zig, qc), lb, aa, ydc, bdc)
 
 def encode.step.cb(
   got: Book & U32 & Put,
+  cb: Book,
   aa: Array<U32>,
   bs: Array<U32>,
   rs: Array<U32>,
@@ -1397,30 +1541,36 @@ def encode.step.cb(
   +pr: U32,
   +kern: Kern,
   +zig: List<&2, U32>,
-  +qs: List<&2, U32>
-) -> Array<U32> & Book & U32 & U32 & U32 & Put:
-  (book, +ydc, bit) = got
-  encode.step.cr(encode.chan.go(fb, bs, book, bit, pb, kern, zig, qs), aa, rs, fr, ydc, pr, kern, zig, qs)
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (lb, +ydc, bit) = got
+  encode.step.cr(encode.chan.go(fb, bs, cb, bit, pb, kern, zig, qc), lb, aa, rs, fr, ydc, pr, kern, zig, qc)
 
+# Y with the luminance book and table, then Cb and Cr with the chrominance book and table. Each clipped DC is the
+# next predictor.
 def encode.step.tile(
   tt: Tile,
-  book: Book,
+  lb: Book,
+  cb: Book,
   bit: Put,
   +py: U32,
   +pb: U32,
   +pr: U32,
   +kern: Kern,
   +zig: List<&2, U32>,
-  +qs: List<&2, U32>
-) -> Array<U32> & Book & U32 & U32 & U32 & Put:
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
   match tt:
     case Tile{pix, ys, bs, rs, fy, fb, fr}:
-      encode.step.cb(encode.chan.go(fy, ys, book, bit, py, kern, zig, qs), pix, bs, rs, fb, fr, pb, pr, kern, zig, qs)
+      encode.step.cb(encode.chan.go(fy, ys, lb, bit, py, kern, zig, ql), cb, pix, bs, rs, fb, fr, pb, pr, kern, zig,
+        qc)
 
-# one walk of the MCU, then Y, Cb, and Cr. Each clipped DC is the next predictor.
+# one walk of the MCU, then its three blocks
 def encode.step.y(
   aa: Array<U32>,
-  book: Book,
+  lb: Book,
+  cb: Book,
   bit: Put,
   +py: U32,
   +pb: U32,
@@ -1430,21 +1580,22 @@ def encode.step.y(
   +ww: U32,
   +hh: U32,
   +ctx: Ctx
-) -> Array<U32> & Book & U32 & U32 & U32 & Put:
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
   match ctx:
-    case Ctx{+kern, +zig, +qs}:
-      encode.step.tile(encode.tile(aa, ww, hh, xx, yy), book, bit, py, pb, pr, kern, zig, qs)
+    case Ctx{+kern, +zig, +ql, +qc}:
+      encode.step.tile(encode.tile(aa, ww, hh, xx, yy), lb, cb, bit, py, pb, pr, kern, zig, ql, qc)
 
-def encode.mcus.done(got: Array<U32> & Book & U32 & U32 & U32 & Put) -> Put:
-  (a, book, ydc, bdc, rdc, bit) = got
+def encode.mcus.done(got: Array<U32> & Book & Book & U32 & U32 & U32 & Put) -> Put:
+  (a, lb, cb, ydc, bdc, rdc, bit) = got
   +_s = encode.pix.sink(a)
-  +_b = encode.book.sink(book)
+  +_l = encode.book.sink(lb)
+  +_c = encode.book.sink(cb)
   +_u = (ydc + bdc + rdc : U32)
   bit
 
 def encode.mcus(
   left: Nat,
-  got: Array<U32> & Book & U32 & U32 & U32 & Put,
+  got: Array<U32> & Book & Book & U32 & U32 & U32 & Put,
   +mx: U32,
   +my: U32,
   +mw: U32,
@@ -1456,282 +1607,448 @@ def encode.mcus(
     case 0n:
       encode.mcus.done(got)
     case 1n+nleft:
-      (a, book, py, pb, pr, bit) = got
+      (a, lb, cb, py, pb, pr, bit) = got
       +x = (mx * 8 : U32)
       +y = (my * 8 : U32)
       +more = U32.is_lt((mx + 1 : U32), mw)
-      encode.mcus(nleft, encode.step.y(a, book, bit, py, pb, pr, x, y, ww, hh, ctx), encode.nx(more, mx),
+      encode.mcus(nleft, encode.step.y(a, lb, cb, bit, py, pb, pr, x, y, ww, hh, ctx), encode.nx(more, mx),
         encode.ny(more, my), mw, ww, hh, ctx)
 
-def encode.finish(
+# one sample of a 4:2:0 quad: its luminance at ii, its chrominance added to the sums
+def encode.quad.store(got: Array<U32> & U32, ys: Array<U32>, fy: Bool, +sb: U32, +sr: U32, +ii: U32) -> Quad:
+  (pix, +p) = got
+  +r = U32.and(U32.shrn(p, 16n), 255)
+  +g = U32.and(U32.shrn(p, 8n), 255)
+  +b = U32.and(p, 255)
+  +y8 = encode.ych(r, g, b)
+  Quad{pix, Array.set(U32, ys, ii, (y8 - 128 : U32)), encode.flat.both(U32.is_eq(y8, 128), fy),
+    (sb + encode.cbch(r, g, b) : U32), (sr + encode.crch(r, g, b) : U32)}
+
+def encode.quad.pix(qd: Quad, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ii: U32) -> Quad:
+  match qd:
+    case Quad{pix, ys, fy, +sb, +sr}:
+      encode.quad.store(encode.pix.at(pix, ww, hh, xx, yy), ys, fy, sb, sr, ii)
+
+# a quad's chrominance: the four samples' mean, rounded with the bias, stored at ci
+def encode.quad.put(qd: Quad, bs: Array<U32>, rs: Array<U32>, fb: Bool, fr: Bool, +ci: U32) -> Tile:
+  match qd:
+    case Quad{pix, ys, fy, +sb, +sr}:
+      +b8 = U32.shrn(sb, 2n)
+      +r8 = U32.shrn(sr, 2n)
+      Tile{pix, ys, Array.set(U32, bs, ci, (b8 - 128 : U32)), Array.set(U32, rs, ci, (r8 - 128 : U32)), fy,
+        encode.flat.both(U32.is_eq(b8, 128), fb), encode.flat.both(U32.is_eq(r8, 128), fr)}
+
+# the 2 by 2 samples at x, y: luminance at ii, ii + 1, ii + 8 and ii + 9, and one chrominance sample at ci, their
+# mean plus the bias (1, or 2 at an odd chrominance column, as libjpeg's h2v2 downsampling rounds) over 4
+def encode.quad(tt: Tile, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ii: U32, +ci: U32, +bias: U32) -> Tile:
+  match tt:
+    case Tile{pix, ys, bs, rs, fy, fb, fr}:
+      +x1 = (xx + 1 : U32)
+      +y1 = (yy + 1 : U32)
+      encode.quad.put(encode.quad.pix(encode.quad.pix(encode.quad.pix(encode.quad.pix(Quad{pix, ys, fy, bias, bias},
+        ww, hh, xx, yy, ii), ww, hh, x1, yy, (ii + 1 : U32)), ww, hh, xx, y1, (ii + 8 : U32)), ww, hh, x1, y1,
+        (ii + 9 : U32)), bs, rs, fb, fr, ci)
+
+def encode.quad.row(
+  left: Nat,
+  tt: Tile,
   +ww: U32,
   +hh: U32,
-  ent: List<&2, U32>,
-  +dcc: List<&2, U32>,
-  +dcs: List<&2, U32>,
-  +acc: List<&2, U32>,
-  +acs: List<&2, U32>
-) -> List<&2, U32>:
-  encode.join(encode.header(ww, hh, dcc, dcs, acc, acs), encode.join(ent, Jpeg.eoi()))
-
-# samples before a mismatch were packed 8421504, so that prefix can be replayed
-def encode.hunt.nil(+seen: U32) -> Bool & List<&2, U32>:
-  (False{}, List.replicate(U32, U32.to_nat(seen), 8421504))
-
-def encode.hunt.mix(+seen: U32, +hh: U32, tt: List<&2, U32>) -> Bool & List<&2, U32>:
-  (False{}, List.append(&2, U32, List.replicate(U32, U32.to_nat(seen), 8421504), hh <> tt))
-
-def encode.hunt.rest(xs: List<&2, U32>) -> Bool & List<&2, U32>:
-  +_d = encode.drop(xs)
-  (True{}, [])
-
-# no samples remain after `h`
-def encode.hunt.done(eq: Bool, +hh: U32, xs: List<&2, U32>, +seen: U32) -> Bool & List<&2, U32>:
-  match eq:
-    case False{}:
-      encode.hunt.mix(seen, hh, xs)
-    case True{}:
-      encode.hunt.rest(xs)
-
-# the list ended before the area did
-def encode.hunt.empty(eq: Bool, +hh: U32, +seen: U32) -> Bool & List<&2, U32>:
-  match eq:
-    case False{}:
-      encode.hunt.mix(seen, hh, [])
-    case True{}:
-      encode.hunt.nil((seen + 1 : U32))
-
-# `h` was just read. `left` samples remain after it. `seen` neutral samples precede it.
-def encode.hunt.go(left: Nat, xs: List<&2, U32>, eq: Bool, +hh: U32, +seen: U32) -> Bool & List<&2, U32>:
+  +xx: U32,
+  +yy: U32,
+  +ii: U32,
+  +ci: U32,
+  +bias: U32
+) -> Tile:
   match left:
     case 0n:
-      encode.hunt.done(eq, hh, xs, seen)
-    case 1n+p:
-      match xs:
-        case Nil{}:
-          encode.hunt.empty(eq, hh, seen)
-        case +s <> u:
-          match eq:
-            case False{}:
-              encode.hunt.mix(seen, hh, s <> u)
-            case True{}:
-              encode.hunt.go(p, u, U32.is_eq(s, 8421504), s, (seen + 1 : U32))
-
-# the area was one colour. `seen` of those samples are replayed only on a miss.
-def encode.hold.no(+seen: U32, +cc: U32, tail: List<&2, U32>) -> Bool & List<&2, U32>:
-  (False{}, List.append(&2, U32, List.replicate(U32, U32.to_nat(seen), cc), tail))
-
-def encode.hold.yes(xs: List<&2, U32>, +cc: U32, +hh: U32, +seen: U32) -> Bool & List<&2, U32>:
-  +_d = encode.drop(xs)
-  +_u = (cc + hh + seen : U32)
-  (True{}, [])
-
-def encode.hold.done(eq: Bool, +hh: U32, xs: List<&2, U32>, +cc: U32, +seen: U32) -> Bool & List<&2, U32>:
-  match eq:
-    case False{}:
-      encode.hold.no(seen, cc, hh <> xs)
-    case True{}:
-      encode.hold.yes(xs, cc, hh, seen)
-
-def encode.hold.empty(eq: Bool, +hh: U32, +cc: U32, +seen: U32) -> Bool & List<&2, U32>:
-  match eq:
-    case False{}:
-      encode.hold.no(seen, cc, hh <> [])
-    case True{}:
-      +_h = (hh - hh : U32)
-      encode.hold.no((seen + 1 : U32), cc, [])
-
-# `h` was just read. `left` samples remain after it. `seen` copies of `c` precede it.
-def encode.hold.go(left: Nat, xs: List<&2, U32>, eq: Bool, +hh: U32, +cc: U32, +seen: U32) -> Bool & List<&2, U32>:
-  match left:
-    case 0n:
-      encode.hold.done(eq, hh, xs, cc, seen)
-    case 1n+p:
-      match xs:
-        case Nil{}:
-          encode.hold.empty(eq, hh, cc, seen)
-        case +s <> u:
-          match eq:
-            case False{}:
-              encode.hold.no(seen, cc, hh <> (s <> u))
-            case True{}:
-              encode.hold.go(p, u, U32.is_eq(s, cc), s, cc, (seen + 1 : U32))
-
-# 0 neutral, 1 one other colour, 2 mixed. A short list stays mixed: the plane's gaps are 0.
-def encode.watch.neu(got: Bool & List<&2, U32>) -> U32 & U32 & List<&2, U32>:
-  (ok, px) = got
-  match ok:
-    case True{}:
-      +_d = encode.drop(px)
-      (0, 0, [])
-    case False{}:
-      (2, 0, px)
-
-def encode.watch.sol(got: Bool & List<&2, U32>, +hh: U32) -> U32 & U32 & List<&2, U32>:
-  (ok, px) = got
-  match ok:
-    case True{}:
-      +_d = encode.drop(px)
-      (1, hh, [])
-    case False{}:
-      +_h = (hh - hh : U32)
-      (2, 0, px)
-
-def encode.watch.pick(neu: Bool, kk: Nat, tt: List<&2, U32>, +hh: U32) -> U32 & U32 & List<&2, U32>:
-  match neu:
-    case True{}:
-      encode.watch.neu(encode.hunt.go(kk, tt, True{}, hh, 0))
-    case False{}:
-      encode.watch.sol(encode.hold.go(kk, tt, True{}, hh, hh, 0), hh)
-
-def encode.watch(left: Nat, xs: List<&2, U32>) -> U32 & U32 & List<&2, U32>:
-  match left:
-    case 0n:
-      +_d = encode.drop(xs)
-      (0, 0, [])
+      +_u = (ww + hh + xx + yy + ii + ci + bias : U32)
+      tt
     case 1n+k:
-      match xs:
-        case Nil{}:
-          (2, 0, [])
-        case +h <> t:
-          encode.watch.pick(U32.is_eq(h, 8421504), k, t, h)
+      encode.quad.row(k, encode.quad(tt, ww, hh, xx, yy, ii, ci, bias), ww, hh, (xx + 2 : U32), yy, (ii + 2 : U32),
+        (ci + 1 : U32), (3 - bias : U32))
 
-# low len bits of code join the open byte; a finished byte is stuffed
-def encode.pack.byte(+buf: U32, +len: U32, +code: U32) -> U32:
-  U32.or(code, U32.shln(buf, U32.to_nat(len)))
-
-def encode.pack.full(full: Bool, out: List<&2, U32>, +buf: U32, +nn: U32, +len: U32, +code: U32) -> Put:
-  match full:
-    case True{}:
-      encode.stuff(out, encode.pack.byte(buf, len, code))
-    case False{}:
-      Put{out, encode.pack.byte(buf, len, code), (nn + len : U32)}
-
-def encode.pack.keep(pp: Put, +lo: U32, +rest: U32) -> Put:
-  match pp:
-    case Put{out, _buf, _n}:
-      Put{out, rest, lo}
-
-def encode.pack.span(out: List<&2, U32>, +buf: U32, +nn: U32, +len: U32, +code: U32) -> Put:
-  +room = (8 - nn : U32)
-  +lo = (len - room : U32)
-  encode.pack.keep(encode.stuff(out, U32.or(U32.shrn(code, U32.to_nat(lo)), U32.shln(buf,
-    U32.to_nat(room)))), lo, U32.and((U32.shln(1, U32.to_nat(lo)) - 1 : U32), code))
-
-def encode.pack.fit(fit: Bool, out: List<&2, U32>, +buf: U32, +nn: U32, +len: U32, +code: U32) -> Put:
-  match fit:
-    case True{}:
-      encode.pack.full(U32.is_eq((nn + len : U32), 8), out, buf, nn, len, code)
-    case False{}:
-      encode.pack.span(out, buf, nn, len, code)
-
-def encode.pack(pp: Put, +len: U32, +code: U32) -> Put:
-  match pp:
-    case Put{out, +buf, +n}:
-      encode.pack.fit(U32.is_le((n + len : U32), 8), out, buf, n, len, code)
-
-# Annex K luminance: a zero block is DC 00 then EOB 1010
-def encode.zput(pp: Put) -> Put:
-  encode.pack(pp, 6, 10)
-
-def encode.ztri(pp: Put) -> Put:
-  encode.zput(encode.zput(encode.zput(pp)))
-
-def encode.neutral.mcus(left: Nat, pp: Put) -> Put:
+def encode.quad.rows(left: Nat, tt: Tile, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ii: U32, +ci: U32) -> Tile:
   match left:
     case 0n:
-      pp
+      +_u = (ww + hh + xx + yy + ii + ci : U32)
+      tt
+    case 1n+k:
+      encode.quad.rows(k, encode.quad.row(4n, tt, ww, hh, xx, yy, ii, ci, 1), ww, hh, xx, (yy + 2 : U32),
+        (ii + 16 : U32), (ci + 8 : U32))
+
+# one 8 by 8 luminance block of a 4:2:0 MCU at x, y, and the quarter of the chrominance planes it covers, from ci
+def encode.quad.block(tt: Tile, +ww: U32, +hh: U32, +xx: U32, +yy: U32, +ci: U32) -> Tile:
+  encode.quad.rows(4n, tt, ww, hh, xx, yy, 0, ci)
+
+# the 4:2:0 MCU's last block, Cr, and the loop's state after it
+def encode.h2.end(
+  got: Book & U32 & Put,
+  lb: Book,
+  pix: Array<U32>,
+  +py: U32,
+  +pb: U32
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (cb, +pr, bit) = got
+  (pix, lb, cb, py, pb, pr, bit)
+
+def encode.h2.cr(
+  got: Book & U32 & Put,
+  lb: Book,
+  pix: Array<U32>,
+  rs: Array<U32>,
+  fr: Bool,
+  +py: U32,
+  +pr: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (cb, +pb, bit) = got
+  encode.h2.end(encode.chan.go(fr, rs, cb, bit, pr, kern, zig, qc), lb, pix, py, pb)
+
+# the 4:2:0 MCU's Cb and Cr blocks, after its four Y blocks
+def encode.h2.cb(
+  pix: Array<U32>,
+  bs: Array<U32>,
+  rs: Array<U32>,
+  fb: Bool,
+  fr: Bool,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  encode.h2.cr(encode.chan.go(fb, bs, cb, bit, pb, kern, zig, qc), lb, pix, rs, fr, py, pr, kern, zig, qc)
+
+# after the 4:2:0 MCU's Y block 3: the chrominance blocks
+def encode.h2.n4(
+  got: Book & U32 & Put,
+  pix: Array<U32>,
+  bs: Array<U32>,
+  rs: Array<U32>,
+  fb: Bool,
+  fr: Bool,
+  cb: Book,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (lb, +py, bit) = got
+  +_u = (xx + yy + ww + hh : U32)
+  +_q = encode.qdrop(ql)
+  encode.h2.cb(pix, bs, rs, fb, fr, lb, cb, bit, py, pb, pr, kern, zig, qc)
+
+# the 4:2:0 MCU's Y block 3 (of 0 to 3, left to right, top to bottom), then the rest
+def encode.h2.y3(
+  tt: Tile,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  match tt:
+    case Tile{pix, ys, bs, rs, fy, fb, fr}:
+      encode.h2.n4(encode.chan.go(fy, ys, lb, bit, py, kern, zig, ql), pix, bs, rs, fb, fr, cb, pb, pr, xx, yy, ww,
+        hh, kern, zig, ql, qc)
+
+# after the 4:2:0 MCU's Y block 2: the next Y block and its quarter of the chrominance
+def encode.h2.n3(
+  got: Book & U32 & Put,
+  pix: Array<U32>,
+  bs: Array<U32>,
+  rs: Array<U32>,
+  fb: Bool,
+  fr: Bool,
+  cb: Book,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (lb, +py, bit) = got
+  encode.h2.y3(encode.quad.block(Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh, (xx + 8 : U32),
+    (yy + 8 : U32),
+    36), lb, cb, bit, py, pb, pr, xx, yy, ww, hh, kern, zig, ql, qc)
+
+# the 4:2:0 MCU's Y block 2 (of 0 to 3, left to right, top to bottom), then the rest
+def encode.h2.y2(
+  tt: Tile,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  match tt:
+    case Tile{pix, ys, bs, rs, fy, fb, fr}:
+      encode.h2.n3(encode.chan.go(fy, ys, lb, bit, py, kern, zig, ql), pix, bs, rs, fb, fr, cb, pb, pr, xx, yy, ww,
+        hh, kern, zig, ql, qc)
+
+# after the 4:2:0 MCU's Y block 1: the next Y block and its quarter of the chrominance
+def encode.h2.n2(
+  got: Book & U32 & Put,
+  pix: Array<U32>,
+  bs: Array<U32>,
+  rs: Array<U32>,
+  fb: Bool,
+  fr: Bool,
+  cb: Book,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (lb, +py, bit) = got
+  encode.h2.y2(encode.quad.block(Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh, xx, (yy + 8 : U32),
+    32), lb, cb, bit, py, pb, pr, xx, yy, ww, hh, kern, zig, ql, qc)
+
+# the 4:2:0 MCU's Y block 1 (of 0 to 3, left to right, top to bottom), then the rest
+def encode.h2.y1(
+  tt: Tile,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  match tt:
+    case Tile{pix, ys, bs, rs, fy, fb, fr}:
+      encode.h2.n2(encode.chan.go(fy, ys, lb, bit, py, kern, zig, ql), pix, bs, rs, fb, fr, cb, pb, pr, xx, yy, ww,
+        hh, kern, zig, ql, qc)
+
+# after the 4:2:0 MCU's Y block 0: the next Y block and its quarter of the chrominance
+def encode.h2.n1(
+  got: Book & U32 & Put,
+  pix: Array<U32>,
+  bs: Array<U32>,
+  rs: Array<U32>,
+  fb: Bool,
+  fr: Bool,
+  cb: Book,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  (lb, +py, bit) = got
+  encode.h2.y1(encode.quad.block(Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh, (xx + 8 : U32), yy,
+    4), lb, cb, bit, py, pb, pr, xx, yy, ww, hh, kern, zig, ql, qc)
+
+# the 4:2:0 MCU's Y block 0 (of 0 to 3, left to right, top to bottom), then the rest
+def encode.h2.y0(
+  tt: Tile,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +kern: Kern,
+  +zig: List<&2, U32>,
+  +ql: List<&2, Oct>,
+  +qc: List<&2, Oct>
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  match tt:
+    case Tile{pix, ys, bs, rs, fy, fb, fr}:
+      encode.h2.n1(encode.chan.go(fy, ys, lb, bit, py, kern, zig, ql), pix, bs, rs, fb, fr, cb, pb, pr, xx, yy, ww,
+        hh, kern, zig, ql, qc)
+
+# one 4:2:0 MCU at x, y: four Y blocks with the luminance book and table, each walked with its quarter of the
+# chrominance planes, then Cb and Cr with the chrominance book and table
+def encode.h2.step(
+  aa: Array<U32>,
+  lb: Book,
+  cb: Book,
+  bit: Put,
+  +py: U32,
+  +pb: U32,
+  +pr: U32,
+  +xx: U32,
+  +yy: U32,
+  +ww: U32,
+  +hh: U32,
+  +ctx: Ctx
+) -> Array<U32> & Book & Book & U32 & U32 & U32 & Put:
+  match ctx:
+    case Ctx{+kern, +zig, +ql, +qc}:
+      encode.h2.y0(encode.quad.block(Tile{aa, Jpeg.decode.plane(64), Jpeg.decode.plane(64), Jpeg.decode.plane(64),
+        True{}, True{}, True{}}, ww, hh, xx, yy, 0), lb, cb, bit, py, pb, pr, xx, yy, ww, hh, kern, zig, ql, qc)
+
+def encode.h2.mcus(
+  left: Nat,
+  got: Array<U32> & Book & Book & U32 & U32 & U32 & Put,
+  +mx: U32,
+  +my: U32,
+  +mw: U32,
+  +ww: U32,
+  +hh: U32,
+  +ctx: Ctx
+) -> Put:
+  match left:
+    case 0n:
+      encode.mcus.done(got)
     case 1n+nleft:
-      encode.neutral.mcus(nleft, encode.ztri(pp))
+      (a, lb, cb, py, pb, pr, bit) = got
+      +x = (mx * 16 : U32)
+      +y = (my * 16 : U32)
+      +more = U32.is_lt((mx + 1 : U32), mw)
+      encode.h2.mcus(nleft, encode.h2.step(a, lb, cb, bit, py, pb, pr, x, y, ww, hh, ctx), encode.nx(more, mx),
+        encode.ny(more, my), mw, ww, hh, ctx)
 
-# the entropy-coded bytes of a neutral picture: every MCU is three zero blocks
-def encode.neutral(+ww: U32, +hh: U32) -> List<&2, U32>:
-  +mw = U32.div((ww + 7 : U32), 8)
-  +mh = U32.div((hh + 7 : U32), 8)
-  encode.pad(encode.neutral.mcus(U32.to_nat((mw * mh : U32)), encode.put0()))
-
-# the rest of a solid picture is the same DC, so each later block is a zero difference
-def encode.solid.end(got: Array<U32> & Book & U32 & Put) -> Put:
-  (a, book, +dc, bit) = got
-  +_s = encode.pix.sink(a)
-  +_b = encode.book.sink(book)
-  +_d = (dc - dc : U32)
-  bit
-
-def encode.solid.cr(got: Array<U32> & Book & U32 & Put, +ctx: Ctx) -> Put:
-  (a, book, +dc, bit) = got
-  +_d = (dc - dc : U32)
-  encode.solid.end(encode.block(book, bit, 1024, a, 1, 1, 0, 0, 2, ctx))
-
-def encode.solid.cb(got: Array<U32> & Book & U32 & Put, +ctx: Ctx) -> Put:
-  (a, book, +dc, bit) = got
-  +_d = (dc - dc : U32)
-  encode.solid.cr(encode.block(book, bit, 1024, a, 1, 1, 0, 0, 1, ctx), ctx)
-
-def encode.solid.y(aa: Array<U32>, book: Book, bit: Put, +ctx: Ctx) -> Put:
-  encode.solid.cb(encode.block(book, bit, 1024, aa, 1, 1, 0, 0, 0, ctx), ctx)
-
-# one colour repeated. The first MCU is that block; every later MCU is three zero differences.
-# The result is the entropy-coded bytes.
-def encode.solid(+ww: U32, +hh: U32, +color: U32) -> List<&2, U32>:
-  +mw = U32.div((ww + 7 : U32), 8)
-  +mh = U32.div((hh + 7 : U32), 8)
-  +n = (mw * mh : U32)
-  encode.pad(encode.neutral.mcus(U32.to_nat((n - 1 : U32)),
-    encode.solid.y(Array.set(U32, Jpeg.decode.plane(1), 0, color),
-      encode.book(encode.dccounts(), encode.dcsyms(), encode.accounts(), encode.acsyms()),
-      encode.put0(), encode.ctx())))
-
-# the entropy-coded bytes of any other picture, MCU by MCU
-def encode.go(+ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
+# the entropy-coded bytes of an accepted size at a quality, three components, MCU by MCU
+def encode.arm3(+ww: U32, +hh: U32, +qq: U32, px: List<&2, U32>) -> List<&2, U32>:
   +mw = U32.div((ww + 7 : U32), 8)
   +mh = U32.div((hh + 7 : U32), 8)
   +area = (ww * hh : U32)
-  book = encode.book(encode.dccounts(), encode.dcsyms(), encode.accounts(), encode.acsyms())
-  encode.pad(encode.mcus(U32.to_nat((mw * mh : U32)),
-    (encode.pix.load(U32.to_nat(area), px, Jpeg.decode.plane(area), 0), book, 1024, 1024, 1024,
-      encode.put0()), 0, 0, mw, ww, hh, encode.ctx()))
+  encode.pad(encode.mcus(U32.to_nat((mw * mh : U32)), (encode.pix.load(U32.to_nat(area), px,
+    Jpeg.decode.plane(area), 0), encode.bookof(False{}), encode.bookof(True{}), 1024, 1024, 1024, encode.put0()), 0,
+    0, mw, ww, hh, encode.ctx(qq)))
 
-# the entropy-coded bytes, by what the watch found: neutral, one solid colour, or anything else
-def encode.dispatch.b(neu: Bool, sol: Bool, +color: U32, px: List<&2, U32>, +ww: U32, +hh: U32) -> List<&2, U32>:
-  match neu:
-    case True{}:
-      +_c = (color - color : U32)
-      +_d = encode.drop(px)
-      +_s = Bool.not(sol)
-      encode.neutral(ww, hh)
-    case False{}:
-      match sol:
+# the entropy-coded bytes of an accepted size at a quality, one gray component, MCU by MCU
+def encode.armg(+ww: U32, +hh: U32, +qq: U32, px: List<&2, U32>) -> List<&2, U32>:
+  +mw = U32.div((ww + 7 : U32), 8)
+  +mh = U32.div((hh + 7 : U32), 8)
+  +area = (ww * hh : U32)
+  encode.pad(encode.gmcus(U32.to_nat((mw * mh : U32)), (encode.pix.load(U32.to_nat(area), px,
+    Jpeg.decode.plane(area), 0), encode.bookof(False{}), 1024, encode.put0()), 0, 0, mw, ww, hh, encode.ctx(qq)))
+
+# the entropy-coded bytes of an accepted size at a quality, 4:2:0, MCU by MCU: 16 by 16 samples each
+def encode.arm2(+ww: U32, +hh: U32, +qq: U32, px: List<&2, U32>) -> List<&2, U32>:
+  +mw = Jpeg.decode.ceil(ww, 16)
+  +mh = Jpeg.decode.ceil(hh, 16)
+  +area = (ww * hh : U32)
+  encode.pad(encode.h2.mcus(U32.to_nat((mw * mh : U32)), (encode.pix.load(U32.to_nat(area), px,
+    Jpeg.decode.plane(area), 0), encode.bookof(False{}), encode.bookof(True{}), 1024, 1024, 1024, encode.put0()), 0,
+    0, mw, ww, hh, encode.ctx(qq)))
+
+# the entropy-coded bytes of an accepted size at a quality, in the frame of kind kd
+def encode.arm(+ww: U32, +hh: U32, +qq: U32, +kd: Layout, px: List<&2, U32>) -> List<&2, U32>:
+  match kd:
+    case K444{}:
+      encode.arm3(ww, hh, qq, px)
+    case KGray{}:
+      encode.armg(ww, hh, qq, px)
+    case K420{}:
+      encode.arm2(ww, hh, qq, px)
+
+# one sample is gray: its red, green and blue the same
+def encode.gray.one(+pp: U32) -> Bool:
+  +gg = U32.and(U32.shrn(pp, 8n), 255)
+  Bool.and(U32.is_eq(U32.and(U32.shrn(pp, 16n), 255), gg), U32.is_eq(gg, U32.and(pp, 255)))
+
+# every sample is gray, while ok holds
+def encode.gray.all(xs: List<&2, U32>, ok: Bool) -> Bool:
+  match xs:
+    case Nil{}:
+      ok
+    case +pp <> rest:
+      match ok:
         case True{}:
-          +_d = encode.drop(px)
-          encode.solid(ww, hh, color)
+          encode.gray.all(rest, encode.gray.one(pp))
         case False{}:
-          +_c = (color - color : U32)
-          encode.go(ww, hh, px)
+          +_d = encode.drop(rest)
+          +_p = pp
+          False{}
 
-# the watch's tag, 0 neutral, 1 solid, 2 mixed, asked with U32.is_eq so a law reaches every tag
-def encode.dispatch(+tag: U32, +color: U32, px: List<&2, U32>, +ww: U32, +hh: U32) -> List<&2, U32>:
-  encode.dispatch.b(U32.is_eq(tag, 0), U32.is_eq(tag, 1), color, px, ww, hh)
+# a colour frame: 4:2:0 when sub is set, else 4:4:4
+def encode.kind.sub(sub: Bool) -> Layout:
+  match sub:
+    case True{}:
+      K420{}
+    case False{}:
+      K444{}
 
-# the watch's answer, dispatched
-def encode.arm.use(got: U32 & U32 & List<&2, U32>, +ww: U32, +hh: U32) -> List<&2, U32>:
-  match got:
-    case (+tag, +color, px):
-      encode.dispatch(tag, color, px, ww, hh)
+# the kind of frame for the samples: one gray component when every sample is gray, else 4:2:0 when sub is set,
+# else 4:4:4
+def encode.kind.pick(gray: Bool, +sub: Bool) -> Layout:
+  match gray:
+    case True{}:
+      +_s = sub
+      KGray{}
+    case False{}:
+      encode.kind.sub(sub)
 
-# the entropy-coded bytes of an accepted size
-def encode.arm(+ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
-  encode.arm.use(encode.watch(U32.to_nat((ww * hh : U32)), px), ww, hh)
+def encode.kindof(+sub: Bool, +px: List<&2, U32>) -> Layout:
+  encode.kind.pick(encode.gray.all(px, True{}), sub)
 
-def encode.pick(bad: Bool, +ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
+def encode.finish(+ww: U32, +hh: U32, +qq: U32, +kd: Layout, ent: List<&2, U32>) -> List<&2, U32>:
+  encode.join(encode.header(ww, hh, qq, kd), encode.join(ent, Jpeg.eoi()))
+
+def encode.pick(bad: Bool, +ww: U32, +hh: U32, +qq: U32, +kd: Layout, px: List<&2, U32>) -> List<&2, U32>:
   match bad:
     case True{}:
       +_d = encode.drop(px)
+      +_q = qq
+      +_k = kd
       encode.join(Jpeg.soi(), Jpeg.eoi())
     case False{}:
-      encode.finish(ww, hh, encode.arm(ww, hh, px), encode.dccounts(), encode.dcsyms(), encode.accounts(),
-        encode.acsyms())
+      encode.finish(ww, hh, qq, kd, encode.arm(ww, hh, qq, kd, px))
 
-# baseline sequential 4:4:4 JPEG bytes for packed RGB samples, or SOI EOI when the size is rejected
-def encode(+ww: U32, +hh: U32, px: List<&2, U32>) -> List<&2, U32>:
-  encode.pick(encode.bad(ww, hh), ww, hh, px)
+# baseline sequential JPEG bytes for packed RGB samples at a quality of 1 to 100 (a quality outside it is the
+# nearest end), 4:2:0 when sub is set, else 4:4:4, one gray component when every sample is gray; or SOI EOI when
+# the size is rejected
+def encode(+ww: U32, +hh: U32, +qq: U32, +sub: Bool, +px: List<&2, U32>) -> List<&2, U32>:
+  encode.pick(encode.bad(ww, hh), ww, hh, qq, encode.kindof(sub, px), px)

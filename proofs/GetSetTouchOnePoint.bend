@@ -4,6 +4,7 @@ import ../main.bend as Img
 import ../laws/GetSetTouchOnePoint.bend as Laws
 import ./lemmas/BasicFacts.bend as M1
 import ./lemmas/RowMajorIndex.bend as M2
+import ./lemmas/RowWalk.bend as M4
 import ./lemmas/WordAddition.bend as M3
 
 # an index below the length finds an element
@@ -55,8 +56,6 @@ def ras.get_in(
   +px: List<&2, U32>,
   +xx: U32,
   +yy: U32,
-  +area: U32,
-  h_area: {U32.to_nat(area) == Nat.mul(U32.to_nat(ww), U32.to_nat(hh)) : Nat},
   +hx: {Nat.is_lt(U32.to_nat(xx), U32.to_nat(ww)) == True{} : Bool},
   +hy: {Nat.is_lt(U32.to_nat(yy), U32.to_nat(hh)) == True{} : Bool}
 ) -> {Img.get.x(U32.is_lt(xx, ww), px, ww, hh, xx, yy) == List.get(&2, U32, px, Laws.spot(ww, xx, yy)) :
@@ -69,15 +68,14 @@ def ras.get_in(
       List.get(&2, U32, px, Laws.spot(ww, xx, yy)),
       Equal.cong(Bool, Maybe<&2, U32>, bb => Img.get.y(bb, px, ww, xx, yy), U32.is_lt(yy, hh), True{},
         M2.ras.lt(yy, hh, hy)),
-      Equal.cong(Nat, Maybe<&2, U32>, nn => List.get(&2, U32, px, nn), U32.to_nat(U32.add(U32.mul(yy, ww), xx)),
-        Laws.spot(ww, xx, yy), M2.u32_index(ww, xx, yy, hh, area, h_area, hx, hy))))
+      M4.get_rows(U32.to_nat(yy), px, U32.to_nat(ww), U32.to_nat(xx))))
 
-def Laws.get_inside(img, xx, yy, area, h_area, h_in):
+def Laws.get_inside(img, xx, yy, h_in):
   match img:
     case Img.Raster{+ww, +hh, +px}:
-      ras.get_in(ww, hh, px, xx, yy, area, h_area, ras.hx(ww, hh, xx, yy, h_in), ras.hy(ww, hh, xx, yy, h_in))
+      ras.get_in(ww, hh, px, xx, yy, ras.hx(ww, hh, xx, yy, h_in), ras.hy(ww, hh, xx, yy, h_in))
 
-def Laws.get_inside_some(img, xx, yy, area, h_area, h_wf, h_in):
+def Laws.get_inside_some(img, xx, yy, h_wf, h_in):
   match img:
     case Img.Raster{+ww, +hh, +px}:
       +hx = {ras.hx(ww, hh, xx, yy, h_in) : {Nat.is_lt(U32.to_nat(xx), U32.to_nat(ww)) == True{} : Bool}}
@@ -92,7 +90,7 @@ def Laws.get_inside_some(img, xx, yy, area, h_area, h_wf, h_in):
         Maybe.is_some(&2, U32, List.get(&2, U32, px, Laws.spot(ww, xx, yy))), True{},
         Equal.cong(Maybe<&2, U32>, Bool, mm => Maybe.is_some(&2, U32, mm),
           Img.get.x(U32.is_lt(xx, ww), px, ww, hh, xx, yy), List.get(&2, U32, px, Laws.spot(ww, xx, yy)),
-          ras.get_in(ww, hh, px, xx, yy, area, h_area, hx, hy)),
+          ras.get_in(ww, hh, px, xx, yy, hx, hy)),
         get_some_lt(px, Laws.spot(ww, xx, yy), hk))
 
 # the Nat test of a point and the U32 test agree
@@ -138,7 +136,7 @@ def Laws.get_outside(img, xx, yy, h_out):
           Bool.and(Nat.is_lt(U32.to_nat(xx), U32.to_nat(ww)), Nat.is_lt(U32.to_nat(yy), U32.to_nat(hh))), False{},
           ras.in_u32(ww, hh, xx, yy), h_out))
 
-def Laws.set_inside(img, xx, yy, color, area, h_area, h_in):
+def Laws.set_inside(img, xx, yy, color, h_in):
   match img:
     case Img.Raster{+ww, +hh, +px}:
       +hx = {ras.hx(ww, hh, xx, yy, h_in) : {Nat.is_lt(U32.to_nat(xx), U32.to_nat(ww)) == True{} : Bool}}
@@ -153,9 +151,10 @@ def Laws.set_inside(img, xx, yy, color, area, h_area, h_in):
           Img.raster(ww, hh, List.set(&2, U32, px, Laws.spot(ww, xx, yy), color)),
           Equal.cong(Bool, Img.Raster, bb => Img.set.y(bb, ww, hh, px, xx, yy, color), U32.is_lt(yy, hh), True{},
             M2.ras.lt(yy, hh, hy)),
-          Equal.cong(Nat, Img.Raster, nn => Img.raster(ww, hh, List.set(&2, U32, px, nn, color)),
-            U32.to_nat(U32.add(U32.mul(yy, ww), xx)), Laws.spot(ww, xx, yy),
-            M2.u32_index(ww, xx, yy, hh, area, h_area, hx, hy))))
+          Equal.cong(List<&2, U32>, Img.Raster, qs => Img.raster(ww, hh, qs),
+            Img.set.rows(U32.to_nat(yy), px, U32.to_nat(ww), U32.to_nat(xx), color),
+            List.set(&2, U32, px, Laws.spot(ww, xx, yy), color),
+            M4.set_rows(U32.to_nat(yy), px, U32.to_nat(ww), U32.to_nat(xx), color))))
 
 # set outside: split on the x test, then the y test
 def ras.set_out(

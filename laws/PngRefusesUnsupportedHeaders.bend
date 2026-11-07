@@ -1,9 +1,17 @@
-# `decode_png` returns none for every input whose IHDR has a bit depth other
-# than 8, an interlace method other than 0, or a colour type outside 0, 2, 3,
-# 4 and 6.
+# `decode_png` returns none for every input whose IHDR pairs a colour type
+# with a bit depth PNG table 11.1 does not list (so every colour type other
+# than 0, 2, 3, 4 and 6), or has an interlace method other than 0 (none) and
+# 1 (Adam7), or a width or height of 2^31 or more (PNG section 11.2.1 allows
+# 1 to 2^31 - 1). Every pairing the table lists, at either interlace method,
+# with sides in that range, passes the IHDR check. Until 2026-11 the decoder
+# refused every bit depth but 8 and Adam7, and took any nonzero side; reading
+# those depths and Adam7, and refusing sides of 2^31 or more, are deliberate
+# changes.
 import Base
 import ../main.bend as Img
+import ../src/png.bend as Png
 import ./defs/PngSpecification.bend as D1
+import ./defs/SizeBounds.bend as D2
 
 # a PNG file whose first chunk is an IHDR: the signature, the length 13, the
 # type IHDR, width, height, bit depth, colour type, compression, filter and
@@ -24,7 +32,8 @@ def spec.ihdr.file(
         ii],
       List.append(&2, U32, D1.spec.be4(crc), rest))))))
 
-# LAW: an IHDR whose bit depth is not 8 makes decode_png none, whatever the other fields, the CRC and the rest
+# LAW: an IHDR whose colour type and bit depth table 11.1 does not pair makes decode_png none, whatever the other
+# fields, the CRC and the rest
 law png_depth_refused:
   for +ww: U32
   for +hh: U32
@@ -35,10 +44,11 @@ law png_depth_refused:
   for +ii: U32
   for +crc: U32
   for +rest: List<&2, U32>
-  for h_dd: {U32.is_eq(dd, 8) == False{} : Bool}
+  for h_dd: {D1.spec.depth.ok(cc, dd) == False{} : Bool}
   {Img.decode_png(spec.ihdr.file(ww, hh, dd, cc, comp, ff, ii, crc, rest)) == None{} : Maybe<&2, Img.Raster>}
 
-# LAW: an IHDR whose interlace method is not 0 makes decode_png none, whatever the other fields, the CRC and the rest
+# LAW: an IHDR whose interlace method is neither 0 nor 1 makes decode_png none, whatever the other fields, the CRC
+# and the rest
 law png_interlace_refused:
   for +ww: U32
   for +hh: U32
@@ -49,12 +59,12 @@ law png_interlace_refused:
   for +ii: U32
   for +crc: U32
   for +rest: List<&2, U32>
-  for h_ii: {U32.is_eq(ii, 0) == False{} : Bool}
+  for h_ii: {D1.spec.inter.ok(ii) == False{} : Bool}
   {Img.decode_png(spec.ihdr.file(ww, hh, dd, cc, comp, ff, ii, crc, rest)) == None{} : Maybe<&2, Img.Raster>}
 
-# LAW: an IHDR whose colour type is not 0, 2, 3, 4 or 6 makes decode_png none, whatever the other fields, the CRC
-# and the rest
-law png_colour_refused:
+# LAW: an IHDR whose width or height is 2^31 or more makes decode_png none, whatever the other fields, the CRC and
+# the rest
+law png_size_refused:
   for +ww: U32
   for +hh: U32
   for +dd: U32
@@ -64,5 +74,19 @@ law png_colour_refused:
   for +ii: U32
   for +crc: U32
   for +rest: List<&2, U32>
-  for h_cc: {D1.spec.colour.ok(cc) == False{} : Bool}
+  for h_big: {Bool.and(D2.below(31n, U32.to_nat(ww)), D2.below(31n, U32.to_nat(hh))) == False{} : Bool}
   {Img.decode_png(spec.ihdr.file(ww, hh, dd, cc, comp, ff, ii, crc, rest)) == None{} : Maybe<&2, Img.Raster>}
+
+# LAW: the IHDR check takes every pairing table 11.1 lists, at interlace method 0 or 1, with sides from 1 to
+# 2^31 - 1 and compression and filter method 0
+law png_header_takes:
+  for +ww: U32
+  for +hh: U32
+  for +dd: U32
+  for +cc: U32
+  for +ii: U32
+  for h_ww: {D1.spec.side(ww) == True{} : Bool}
+  for h_hh: {D1.spec.side(hh) == True{} : Bool}
+  for h_dd: {D1.spec.depth.ok(cc, dd) == True{} : Bool}
+  for h_ii: {D1.spec.inter.ok(ii) == True{} : Bool}
+  {Png.png.good(ww, hh, dd, cc, 0, 0, ii) == True{} : Bool}

@@ -165,6 +165,67 @@ def correct_png():
     ok = got is not None and got[2] == exp
     add_case("A pillow→ezimg png", "2x2 RGB + tEXt", "PASS" if ok else "FAIL", f"{len(raw)}B")
 
+# Real-size PNGs written by Pillow, decoded by ezimg and compared sample for
+# sample, each against a time budget. Pillow picks a filter per row, so the
+# files hold every filter type, and fixed and dynamic Huffman blocks.
+REAL_SIZES = [(320, 260), (800, 400)]
+# Each file's budget is a floor plus microseconds per sample, about six
+# times what the slowest of them takes today (an 800x400 RGBA file decodes in
+# under a second), so a decoder that turns quadratic again, as the old
+# distance-walking back-reference copy did, fails here.
+REAL_FLOOR_S = 2.0
+REAL_SAVES = [("zlib 1", {"compress_level": 1}, 10.0), ("zlib 6", {"compress_level": 6}, 10.0),
+              ("zlib 9", {"compress_level": 9}, 10.0), ("optimize", {"optimize": True}, 10.0)]
+
+def real_budget(w, h, rate):
+    return REAL_FLOOR_S + rate * w * h / 1e6
+
+def real_photo(w, h, mode, seed):
+    # smooth gradients and waves with a little grain, like a photograph
+    rng = random.Random(seed)
+    buf = bytearray()
+    for y in range(h):
+        for x in range(w):
+            r = 127 + 60 * math.sin(x / 23.0) + 50 * math.cos(y / 31.0) + rng.randrange(-6, 7)
+            g = 127 + 70 * math.sin((x + y) / 41.0) + rng.randrange(-6, 7)
+            b = 127 + 80 * math.cos((x - y) / 37.0) + rng.randrange(-6, 7)
+            buf += bytes(max(0, min(255, int(v))) for v in (r, g, b))
+            if mode == "RGBA":
+                buf.append(max(0, min(255, int(200 + 55 * math.sin(x * y / 900.0)))))
+    return Image.frombytes(mode, (w, h), bytes(buf))
+
+def real_noise(w, h, mode, seed):
+    rng = random.Random(seed)
+    return Image.frombytes(mode, (w, h), bytes(rng.getrandbits(8) for _ in range(w * h * len(mode))))
+
+def correct_png_real():
+    log("\n== PNG correctness, real sizes ==")
+    log(f"budget per file: {REAL_FLOOR_S:.0f} s + a rate per sample (wall: process, decode and EZR write)")
+    for w, h in REAL_SIZES:
+        for kind, make in (("photo", real_photo), ("noise", real_noise)):
+            for mode in ("RGB", "RGBA"):
+                im = make(w, h, mode, w * 31 + h)
+                want = as_rgba_words(im)
+                for label, kw, rate in REAL_SAVES:
+                    budget = real_budget(w, h, rate)
+                    name = f"{w}x{h} {kind} {mode} {label}"
+                    buf = io.BytesIO(); im.save(buf, format="PNG", **kw); data = buf.getvalue()
+                    path = os.path.join(WORK, "real_" + name.replace(" ", "_") + ".png")
+                    open(path, "wb").write(data)
+                    r, got = run_decode("png-dec", path, budget * 2 + 30)
+                    if got is None:
+                        add_case("F pillow→ezimg png real", name, "FAIL",
+                                 f"{len(data)}B decode rc={r['rc']} timeout={r['timeout']} wall={r['wall']:.2f}s "
+                                 f"err={r['err'][:200]}")
+                        continue
+                    gw, gh, pix = got
+                    bad = sum(1 for a, b in zip(pix, want) if a != b)
+                    same = (gw, gh) == (w, h) and len(pix) == len(want) and bad == 0
+                    fast = r["wall"] <= budget
+                    add_case("F pillow→ezimg png real", name, "PASS" if same and fast else "FAIL",
+                             f"{len(data)}B {gw}x{gh} differing={bad} wall={r['wall']:.2f}s budget={budget:.0f}s"
+                             + ("" if fast else " OVER BUDGET"))
+
 def correct_jpeg():
     log("\n== JPEG correctness ==")
     for w, h in [(1, 1), (2, 2), (8, 8), (7, 5)]:
@@ -218,7 +279,8 @@ def correct_jpeg():
                     r = x * 255 // (w - 1); g = y * 255 // (h - 1); b = (x + y) * 255 // (w + h - 2)
                 else:
                     r, g, b = rng.randrange(256), rng.randrange(256), rng.randrange(256)
-                pix.append(pack_rgb(r, g, b))
+                # opaque: encode_jpeg flattens a sample onto white by its alpha
+                pix.append(pack_rgba(r, g, b, 255))
         im = Image.new("RGB", (w, h))
         im.putdata([((p >> 16) & 255, (p >> 8) & 255, p & 255) for p in pix])
         return pix, im
@@ -239,29 +301,37 @@ def correct_jpeg():
                      f"PSNR={m['psnr']:.2f} max_abs={m['max_abs']}")
 
         ezr = os.path.join(WORK, f"ez_16x16_{label}.ezr"); write_ezr(ezr, 16, 16, pix)
-        jpg = ezr + ".jpg"
-        er = ez(["jpeg-enc", ezr, jpg], 60)
-        if er["timeout"] or er["rc"] != 0:
-            add_case("C2 ezimg jpeg lossy", f"16x16 {label}", "FAIL", f"encode rc={er['rc']}")
+        # encode_jpeg is quality 75 with 4:2:0 chroma, as Pillow's quality=75, subsampling=2; encode_jpeg_with at
+        # 4:4:4 (the bench's jpeg-enc-444) is Pillow's subsampling=0. The same Annex K tables at the same scale
+        # and the same 2 by 2 chroma averaging, so ezimg's file should be about as close to the original and
+        # about as small as Pillow's (libjpeg-turbo's)
+        for mode, args, ss in (("4:2:0", ["jpeg-enc"], 2), ("4:4:4", ["jpeg-enc-444"], 0)):
+          jpg = ezr + "." + mode.replace(":", "") + ".jpg"
+          er = ez(args + [ezr, jpg] + (["75"] if ss == 0 else []), 60)
+          if er["timeout"] or er["rc"] != 0:
+            add_case("C2 ezimg jpeg lossy", f"16x16 {label} {mode}", "FAIL", f"encode rc={er['rc']}")
             continue
-        enc = open(jpg, "rb").read()
-        pil2 = Image.open(io.BytesIO(enc)); pil2.load()
-        pref2 = as_rgb_words(pil2)
-        mp = channel_metrics(pref2, pix, "rgb")
-        # After FDCT fix: expect ~45+ dB vs original for qstep-1 style encode
-        ok_enc = mp["psnr"] >= 40.0 and mp["max_abs"] <= 8
-        add_case("C2 ezimg jpeg → Pillow vs original", f"16x16 {label}",
-                 "PASS" if ok_enc else "FAIL",
-                 f"file {len(enc)}B PSNR={mp['psnr']:.2f} max_abs={mp['max_abs']}")
-        r2, got2 = run_decode("jpeg-dec", jpg, 60)
-        if got2 is None:
-            add_case("C2 ezimg decode vs Pillow decode", f"16x16 {label}", "FAIL", "decode failed")
-        else:
-            both = channel_metrics(got2[2], pref2, "rgb")
-            ok_both = both["max_abs"] <= 3 and both["psnr"] >= 45.0
-            add_case("C2 ezimg decode vs Pillow decode", f"16x16 {label}",
-                     "PASS" if ok_both else "FAIL",
-                     f"PSNR={both['psnr']:.2f} max_abs={both['max_abs']}")
+          enc = open(jpg, "rb").read()
+          pil2 = Image.open(io.BytesIO(enc)); pil2.load()
+          pref2 = as_rgb_words(pil2)
+          mp = channel_metrics(pref2, pix, "rgb")
+          ref = pillow_jpeg(im, quality=75, subsampling=ss)
+          rim = Image.open(io.BytesIO(ref)); rim.load()
+          mr = channel_metrics(as_rgb_words(rim), pix, "rgb")
+          ok_enc = mp["psnr"] >= mr["psnr"] - 1.0 and len(enc) <= len(ref) * 1.15
+          add_case("C2 ezimg jpeg → Pillow vs original", f"16x16 {label} {mode}",
+                   "PASS" if ok_enc else "FAIL",
+                   f"file {len(enc)}B PSNR={mp['psnr']:.2f} max_abs={mp['max_abs']}"
+                   f" (Pillow q75 {mode}: {len(ref)}B PSNR={mr['psnr']:.2f})")
+          r2, got2 = run_decode("jpeg-dec", jpg, 60)
+          if got2 is None:
+              add_case("C2 ezimg decode vs Pillow decode", f"16x16 {label} {mode}", "FAIL", "decode failed")
+          else:
+              both = channel_metrics(got2[2], pref2, "rgb")
+              ok_both = both["max_abs"] <= 3 and both["psnr"] >= 45.0
+              add_case("C2 ezimg decode vs Pillow decode", f"16x16 {label} {mode}",
+                       "PASS" if ok_both else "FAIL",
+                       f"PSNR={both['psnr']:.2f} max_abs={both['max_abs']}")
 
     # Subsampled chroma: every luma block of an MCU lands in its own place (BC-2).
     # Pillow smooths chroma when it upsamples and ezimg replicates it, as T.81
@@ -284,6 +354,47 @@ def correct_jpeg():
         ok = got[:2] == (w, h) and dl <= 3.0 and opaque(got[2])
         add_case("D pillow→ezimg jpeg", f"16x16 gradient {label}", "PASS" if ok else "FAIL", f"max luma diff={dl:.2f}")
 
+    # Sequential files of several scans (T.81 E.2). jpegtran -scans recodes a Pillow file with one scan to each
+    # component, or Y then Cb and Cr interleaved, or the components out of order, keeping every coefficient: ezimg
+    # must decode each exactly as it decodes the one-scan file, and within 1 of Pillow. With -optimize each scan
+    # has its own DHT between the scans; -restart 1 puts RSTn markers in each. A progressive recoding stays refused.
+    jt = os.environ.get("EZIMG_JPEGTRAN")
+    if not jt:
+        add_case("D3 jpegtran -scans→ezimg", "jpegtran", "SKIP", "EZIMG_JPEGTRAN unset", hard=False)
+    else:
+        rng = random.Random(5)
+        scripts = (("a scan to each component", "0;\n1;\n2;\n"), ("Y, then Cb and Cr", "0;\n1 2;\n"),
+                   ("Cr, Y, Cb", "2;\n0;\n1;\n"), ("gray", "0;\n"))
+        k = 0
+        for w, h, mode, ss in ((37, 29, "RGB", 2), (40, 24, "RGB", 0), (17, 9, "RGB", 1), (23, 11, "L", 0)):
+            im = Image.frombytes(mode, (w, h), bytes(rng.getrandbits(8) for _ in range(w * h * len(mode))))
+            src = os.path.join(WORK, f"ms_{w}x{h}_{mode}_{ss}.jpg")
+            open(src, "wb").write(pillow_jpeg(im, quality=85, subsampling=ss))
+            _r0, one = run_decode("jpeg-dec", src, 60)
+            for label, script in scripts:
+                if (label == "gray") != (mode == "L"):
+                    continue
+                sf = src + ".scans"; open(sf, "w").write(script)
+                for opt in ([], ["-optimize"], ["-restart", "1"]):
+                    k += 1
+                    name = f"{w}x{h} {mode} subsampling={ss} {label} {' '.join(opt)}".strip()
+                    dst = os.path.join(WORK, f"ms_{k}.jpg")
+                    subprocess.run([jt, "-copy", "none", "-scans", sf] + opt + ["-outfile", dst, src], check=True)
+                    r, got = run_decode("jpeg-dec", dst, 60)
+                    if got is None or one is None:
+                        add_case("D3 jpegtran -scans→ezimg", name, "FAIL", f"rc={r['rc']} one-scan ok={one is not None}")
+                        continue
+                    pil = Image.open(dst); pil.load()
+                    m = channel_metrics(got[2], as_rgb_words(pil), "rgb")
+                    ok = got == one and m["max_abs"] <= 1 and opaque(got[2])
+                    add_case("D3 jpegtran -scans→ezimg", name, "PASS" if ok else "FAIL",
+                             f"same as one scan={got == one} Pillow max_abs={m['max_abs']}")
+        prog = os.path.join(WORK, "ms_progressive.jpg")
+        subprocess.run([jt, "-progressive", "-outfile", prog, os.path.join(WORK, "ms_37x29_RGB_2.jpg")], check=True)
+        r, got = run_decode("jpeg-dec", prog, 60)
+        add_case("D3 jpegtran -scans→ezimg", "progressive recoding refused", "PASS" if got is None else "FAIL",
+                 f"rc={r['rc']}")
+
     # A JPEG decoded by ezimg and saved as PNG by ezimg keeps its colour and is
     # opaque: one sample format for every decoder and encoder (laws/DecodedSamplesPackArgb.bend).
     for name, im, kw in (("RGB 8x8 red 4:4:4", Image.new("RGB", (8, 8), (220, 40, 40)), {"subsampling": 0}),
@@ -305,7 +416,7 @@ def correct_jpeg():
 def speed():
     log("\n== Speed (printable; does not fail the check) ==")
     log("ezimg: IO.now around codec only (native ELF). Pillow: time.perf_counter in-process.")
-    log("PNG Pillow optimize=False. JPEG Pillow quality=95 subsampling=0.")
+    log("PNG Pillow optimize=False. JPEG Pillow quality=75 subsampling=2 (4:2:0), as encode_jpeg.")
     log("ezimg PNG solid: opaque gray128. ezimg JPEG solid: packed gray128.")
     jobs = [
         ("png-enc", 8, 8, 50, 30),
@@ -328,7 +439,7 @@ def speed():
         else:
             r = ez(["bench-jpeg-enc", str(w), str(h), str(n)], timeout)
             im = Image.new("RGB", (w, h), (128, 128, 128))
-            kw = dict(quality=95, subsampling=0)
+            kw = dict(quality=75, subsampling=2)
             t0 = time.perf_counter()
             for _ in range(n):
                 buf = io.BytesIO(); im.save(buf, format="JPEG", **kw)
@@ -391,7 +502,7 @@ def main():
     log("driver ping ok (native ELF)")
     try:
         if MODE in ("correctness", "all"):
-            correct_png(); correct_jpeg()
+            correct_png(); correct_png_real(); correct_jpeg()
         if MODE in ("speed", "all"):
             speed()
     except Exception:

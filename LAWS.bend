@@ -22,28 +22,39 @@
 # `cbc4358` and the decisions that shaped it are in docs/rfc/ezimg-spec.md;
 # every law as it stood then, the findings of the audit and the progress of
 # the rollout are in docs/rfc/ezimg-law-inventory.md. They name the
-# guarantees by the requirement IDs of docs/SPEC.md, the table these files
-# replaced.
+# guarantees by the requirement IDs of the SPEC.md table these files
+# replaced, which is docs/SPEC.md at `cd9ea41`.
 import Base
 import ./laws/BlitCopiesCoveredPoints.bend as BlitCopiesCoveredPoints
+import ./laws/CheckedRasterIsWellFormed.bend as CheckedRasterIsWellFormed
+import ./laws/CountIsArea.bend as CountIsArea
 import ./laws/CrcIsIso3309.bend as CrcIsIso3309
 import ./laws/CropTakesIntersection.bend as CropTakesIntersection
 import ./laws/DecodedSamplesPackArgb.bend as DecodedSamplesPackArgb
 import ./laws/FillIsUniform.bend as FillIsUniform
 import ./laws/GetSetTouchOnePoint.bend as GetSetTouchOnePoint
 import ./laws/InflateReadsStoredBlocks.bend as InflateReadsStoredBlocks
-import ./laws/JpegEncodeIgnoresAlpha.bend as JpegEncodeIgnoresAlpha
+import ./laws/InflateUptoKeepsBudget.bend as InflateUptoKeepsBudget
+import ./laws/InflateUptoReadsStoredBlocks.bend as InflateUptoReadsStoredBlocks
+import ./laws/JpegEncodeFlattensAlpha.bend as JpegEncodeFlattensAlpha
+import ./laws/JpegEncodeRefusesBadRasters.bend as JpegEncodeRefusesBadRasters
 import ./laws/JpegPlacesComponentSamples.bend as JpegPlacesComponentSamples
+import ./laws/JpegReadsScansInTurn.bend as JpegReadsScansInTurn
 import ./laws/JpegRefusesNonBaselineFrames.bend as JpegRefusesNonBaselineFrames
-import ./laws/JpegRefusesWhatPngRefuses.bend as JpegRefusesWhatPngRefuses
 import ./laws/JpegRoundTripKeepsSize.bend as JpegRoundTripKeepsSize
 import ./laws/JpegWritesJfifLayout.bend as JpegWritesJfifLayout
 import ./laws/MapAppliesPerSample.bend as MapAppliesPerSample
+import ./laws/PngAdam7PlacesPasses.bend as PngAdam7PlacesPasses
 import ./laws/PngAncillaryChunksIgnored.bend as PngAncillaryChunksIgnored
+import ./laws/PngDecodesWellFormed.bend as PngDecodesWellFormed
 import ./laws/PngHeaderPicksColourType.bend as PngHeaderPicksColourType
+import ./laws/PngIgnoresBytesAfterIend.bend as PngIgnoresBytesAfterIend
+import ./laws/PngIgnoresFaultyTrns.bend as PngIgnoresFaultyTrns
 import ./laws/PngRefusesBadRasters.bend as PngRefusesBadRasters
+import ./laws/PngRefusesLongChunks.bend as PngRefusesLongChunks
 import ./laws/PngRefusesUnsupportedHeaders.bend as PngRefusesUnsupportedHeaders
 import ./laws/PngRoundTrips.bend as PngRoundTrips
+import ./laws/PngSamplesFollowBitDepth.bend as PngSamplesFollowBitDepth
 import ./laws/PngSamplesFollowColourType.bend as PngSamplesFollowColourType
 import ./laws/SignatureMatchesPngMagic.bend as SignatureMatchesPngMagic
 import ./laws/UnfilterUndoesFilter.bend as UnfilterUndoesFilter
