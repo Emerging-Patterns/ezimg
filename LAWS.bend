@@ -22,8 +22,8 @@
 # `cbc4358` and the decisions that shaped it are in docs/rfc/ezimg-spec.md;
 # every law as it stood then, the findings of the audit and the progress of
 # the rollout are in docs/rfc/ezimg-law-inventory.md. They name the
-# guarantees by the requirement IDs of docs/SPEC.md, the table these files
-# replaced.
+# guarantees by the requirement IDs of the SPEC.md table these files
+# replaced, which is docs/SPEC.md at `cd9ea41`.
 import Base
 import ./laws/BlitCopiesCoveredPoints.bend as BlitCopiesCoveredPoints
 import ./laws/CheckedRasterIsWellFormed.bend as CheckedRasterIsWellFormed
