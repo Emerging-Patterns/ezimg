@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.0](https://github.com/Emerging-Patterns/ezimg/compare/v1.3.0...v1.4.0) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* count returns a Nat instead of a wrapping U32. encode_jpeg and encode_jpeg_q write 4:2:0 at IJG quality 75 by default and flatten alpha onto white; use encode_jpeg_with for 4:4:4. The trusted JPEG round-trip bound is restated per quality for 4:4:4 only.
+
+### Bug Fixes
+
+* read and write PNG and JPEG the way libpng, zlib and libjpeg do ([eb0e259](https://github.com/Emerging-Patterns/ezimg/commit/eb0e259d63aab418d1440e21362c72cbb2734e3d))
+
 ## [1.3.0](https://github.com/Emerging-Patterns/ezimg/compare/v1.2.0...v1.3.0) (2026-10-25)
 
 
