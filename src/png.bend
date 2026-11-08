@@ -21,12 +21,22 @@ type Pz is Data:
   ZDat{}
   ZCrc{}
 
-# image state while chunks are read
+# where the IDAT chunks are (PNG section 5.6: they are consecutive): none
+# yet, a run still open, or a run a later chunk has closed
+type Run is Data:
+  RNone{}
+  ROpen{}
+  RShut{}
+
+# image state while chunks are read: before IHDR, or after it with the IHDR
+# fields, the IDAT data so far (newest first), the PLTE and tRNS data once
+# each has come, and where the IDAT run is. IEND is no state: the walk
+# stops there (NEnd)
 type Pg is Data:
+  PgStart{}
   Pg{
     +w: U32, +h: U32, +depth: U32, +colour: U32, +comp: U32, +filt: U32, +inter: U32,
-    idat: List<&2, U32>, plte: List<&2, U32>, trns: List<&2, U32>,
-    ihdr: Bool, saw_plte: Bool, saw_idat: Bool, idat_done: Bool, saw_trns: Bool, iend: Bool
+    idat: List<&2, U32>, plte: Maybe<&2, List<&2, U32>>, trns: Maybe<&2, List<&2, U32>>, run: Run
   }
 
 # a chunk was rejected, ended the image, or left more chunks
@@ -134,20 +144,31 @@ def png.good(+ww: U32, +hh: U32, +dd: U32, +cc: U32, +comp: U32, +ff: U32, +ii: 
     )
   )
 
-# an empty image state
+# the state before IHDR
 def pg.empty() -> Pg:
-  Pg{0, 0, 0, 0, 0, 0, 0, [], [], [], False{}, False{}, False{}, False{}, False{}, False{}}
+  PgStart{}
 
 # state after a valid IHDR
 def pg.ihdr(+ww: U32, +hh: U32, +dd: U32, +cc: U32, +comp: U32, +ff: U32, +ii: U32) -> Pg:
-  Pg{ww, hh, dd, cc, comp, ff, ii, [], [], [], True{}, False{}, False{}, False{}, False{}, False{}}
+  Pg{ww, hh, dd, cc, comp, ff, ii, [], None{}, None{}, RNone{}}
+
+# an open IDAT run closes; none, or a closed one, stays as it is
+def run.seal(run: Run) -> Run:
+  match run:
+    case RNone{}:
+      RNone{}
+    case ROpen{}:
+      RShut{}
+    case RShut{}:
+      RShut{}
 
 # close the IDAT sequence once a later chunk appears
 def png.seal(pg: Pg) -> Pg:
   match pg:
-    case Pg{+w, +h, +d, +c, +comp, +f, +i, idat, plte, trns, ihdr, saw_plte, +saw_idat, idat_done, saw_trns, iend}:
-      Pg{w, h, d, c, comp, f, i, idat, plte, trns, ihdr, saw_plte, saw_idat, Bool.or(saw_idat, idat_done), saw_trns,
-        iend}
+    case PgStart{}:
+      PgStart{}
+    case Pg{+w, +h, +d, +c, +comp, +f, +i, idat, plte, trns, run}:
+      Pg{w, h, d, c, comp, f, i, idat, plte, trns, run.seal(run)}
 
 def png.bpp.ix(z3: Bool) -> U32:
   match z3:
@@ -675,24 +696,24 @@ def png.allow(zz: Bool, pg: Pg) -> Nx:
 
 def pg.idat(pg: Pg, extra: List<&2, U32>) -> Pg:
   match pg:
-    case Pg{+w, +h, +d, +c, +comp, +f, +i, idat, plte, trns, ihdr, saw_plte, _sid, idat_done, saw_trns, iend}:
-      Pg{w, h, d, c, comp, f, i, List.append(&2, U32, extra, idat), plte, trns, ihdr, saw_plte, True{}, idat_done,
-        saw_trns, iend}
+    case PgStart{}:
+      PgStart{}
+    case Pg{+w, +h, +d, +c, +comp, +f, +i, idat, plte, trns, _run}:
+      Pg{w, h, d, c, comp, f, i, List.append(&2, U32, extra, idat), plte, trns, ROpen{}}
 
 def pg.plte(pg: Pg, bytes: List<&2, U32>) -> Pg:
   match pg:
-    case Pg{+w, +h, +d, +c, +comp, +f, +i, idat, _pl, trns, ihdr, _sp, saw_idat, idat_done, saw_trns, iend}:
-      Pg{w, h, d, c, comp, f, i, idat, bytes, trns, ihdr, True{}, saw_idat, idat_done, saw_trns, iend}
+    case PgStart{}:
+      PgStart{}
+    case Pg{+w, +h, +d, +c, +comp, +f, +i, idat, _pl, trns, run}:
+      Pg{w, h, d, c, comp, f, i, idat, Some{bytes}, trns, run}
 
 def pg.trns(pg: Pg, bytes: List<&2, U32>) -> Pg:
   match pg:
-    case Pg{+w, +h, +d, +c, +comp, +f, +i, idat, plte, _tr, ihdr, saw_plte, saw_idat, idat_done, _st, iend}:
-      Pg{w, h, d, c, comp, f, i, idat, plte, bytes, ihdr, saw_plte, saw_idat, idat_done, True{}, iend}
-
-def pg.iend(pg: Pg) -> Pg:
-  match pg:
-    case Pg{+w, +h, +d, +c, +comp, +f, +i, idat, plte, trns, ihdr, saw_plte, saw_idat, _done, saw_trns, _ie}:
-      Pg{w, h, d, c, comp, f, i, idat, plte, trns, ihdr, saw_plte, saw_idat, True{}, saw_trns, True{}}
+    case PgStart{}:
+      PgStart{}
+    case Pg{+w, +h, +d, +c, +comp, +f, +i, idat, plte, _tr, run}:
+      Pg{w, h, d, c, comp, f, i, idat, plte, Some{bytes}, run}
 
 def png.idat.try(zz: Bool, data: List<&2, U32>, pg: Pg) -> Nx:
   match zz:
@@ -701,19 +722,24 @@ def png.idat.try(zz: Bool, data: List<&2, U32>, pg: Pg) -> Nx:
     case True{}:
       NMore{pg.idat(pg, data)}
 
-def png.on.ihdr(ihdr: Bool, data: List<&2, U32>) -> Nx:
-  match ihdr:
-    case True{}:
-      NBad{}
+# the first chunk: IHDR starts the state; any other is refused
+def png.on.start(zihdr: Bool, data: List<&2, U32>) -> Nx:
+  match zihdr:
     case False{}:
+      NBad{}
+    case True{}:
       png.ihdr.put(parse_ihdr(List.reverse(&2, U32, data)))
 
-def png.on.idat(ihdr: Bool, idat_done: Bool, need: Bool, data: List<&2, U32>, pg: Pg) -> Nx:
-  match ihdr:
-    case False{}:
+# an IDAT opens or extends the run, when the colour type has what it needs;
+# one after the run has closed is refused
+def png.on.idat(run: Run, need: Bool, data: List<&2, U32>, pg: Pg) -> Nx:
+  match run:
+    case RShut{}:
       NBad{}
-    case True{}:
-      png.idat.try(Bool.and(Bool.not(idat_done), need), data, pg)
+    case RNone{}:
+      png.idat.try(need, data, pg)
+    case ROpen{}:
+      png.idat.try(need, data, pg)
 
 def png.plte.ok(+cc: U32) -> Bool:
   Bool.or(U32.is_eq(cc, 2), Bool.or(U32.is_eq(cc, 3), U32.is_eq(cc, 6)))
@@ -724,15 +750,17 @@ def png.trns.ok(+cc: U32, saw_plte: Bool) -> Bool:
     Bool.and(U32.is_eq(cc, 3), saw_plte)
   )
 
-def png.on.plte(ihdr: Bool, saw_plte: Bool, saw_idat: Bool, +colour: U32, +data: List<&2, U32>, pg: Pg) -> Nx:
-  match ihdr:
-    case False{}:
+# a PLTE is taken before any IDAT, when it is the first, the colour type
+# allows one and its length is a palette's
+def png.on.plte(run: Run, saw_plte: Bool, +colour: U32, +data: List<&2, U32>, pg: Pg) -> Nx:
+  match run:
+    case RNone{}:
+      png.allow(Bool.and(Bool.not(saw_plte), Bool.and(png.plte.ok(colour), png.mod3(data))),
+        pg.plte(pg, List.reverse(&2, U32, data)))
+    case ROpen{}:
       NBad{}
-    case True{}:
-      png.allow(
-        Bool.and(Bool.not(saw_plte), Bool.and(Bool.not(saw_idat), Bool.and(png.plte.ok(colour), png.mod3(data)))),
-        pg.plte(pg, List.reverse(&2, U32, data))
-      )
+    case RShut{}:
+      NBad{}
 
 # a tRNS the decoder takes: the first, before IDAT, for a colour type that
 # allows one. Any other is ignored as a faulty ancillary chunk (PNG section
@@ -744,27 +772,21 @@ def png.trns.take(zz: Bool, data: List<&2, U32>, pg: Pg) -> Nx:
     case False{}:
       NMore{png.seal(pg)}
 
-def png.on.trns(
-  ihdr: Bool,
-  saw_trns: Bool,
-  saw_idat: Bool,
-  +colour: U32,
-  saw_plte: Bool,
-  data: List<&2, U32>,
-  pg: Pg
-) -> Nx:
-  match ihdr:
-    case False{}:
-      NBad{}
-    case True{}:
-      png.trns.take(Bool.and(Bool.not(saw_idat), Bool.and(Bool.not(saw_trns), png.trns.ok(colour, saw_plte))), data, pg)
+def png.on.trns(run: Run, saw_trns: Bool, +colour: U32, saw_plte: Bool, data: List<&2, U32>, pg: Pg) -> Nx:
+  match run:
+    case RNone{}:
+      png.trns.take(Bool.and(Bool.not(saw_trns), png.trns.ok(colour, saw_plte)), data, pg)
+    case ROpen{}:
+      NMore{png.seal(pg)}
+    case RShut{}:
+      NMore{png.seal(pg)}
 
 def png.iend.ok(zz: Bool, pg: Pg) -> Nx:
   match zz:
     case False{}:
       NBad{}
     case True{}:
-      NEnd{pg.iend(pg)}
+      NEnd{pg}
 
 def png.iend.at(zempty: Bool, zpal: Bool, pg: Pg) -> Nx:
   match zempty:
@@ -773,12 +795,8 @@ def png.iend.at(zempty: Bool, zpal: Bool, pg: Pg) -> Nx:
     case True{}:
       png.iend.ok(zpal, pg)
 
-def png.on.iend(ihdr: Bool, +colour: U32, saw_plte: Bool, data: List<&2, U32>, pg: Pg) -> Nx:
-  match ihdr:
-    case False{}:
-      NBad{}
-    case True{}:
-      png.iend.at(List.is_empty(&2, U32, data), Bool.or(Bool.not(U32.is_eq(colour, 3)), saw_plte), pg)
+def png.on.iend(+colour: U32, saw_plte: Bool, data: List<&2, U32>, pg: Pg) -> Nx:
+  png.iend.at(List.is_empty(&2, U32, data), Bool.or(Bool.not(U32.is_eq(colour, 3)), saw_plte), pg)
 
 def png.other.at(anc: Bool, pg: Pg) -> Nx:
   match anc:
@@ -787,66 +805,56 @@ def png.other.at(anc: Bool, pg: Pg) -> Nx:
     case True{}:
       NMore{png.seal(pg)}
 
-def png.on.other(ihdr: Bool, anc: Bool, pg: Pg) -> Nx:
-  match ihdr:
-    case False{}:
-      NBad{}
-    case True{}:
-      png.other.at(anc, pg)
-
 def png.apply.tr(
   ztrns: Bool,
   anc: Bool,
-  ihdr: Bool,
-  saw_plte: Bool,
-  saw_idat: Bool,
+  run: Run,
   saw_trns: Bool,
+  saw_plte: Bool,
   +colour: U32,
   data: List<&2, U32>,
   pg: Pg
 ) -> Nx:
   match ztrns:
     case True{}:
-      png.on.trns(ihdr, saw_trns, saw_idat, colour, saw_plte, data, pg)
+      png.on.trns(run, saw_trns, colour, saw_plte, data, pg)
     case False{}:
-      png.on.other(ihdr, anc, pg)
+      png.other.at(anc, pg)
 
 def png.apply.pl(
   zplte: Bool,
   ztrns: Bool,
   anc: Bool,
-  ihdr: Bool,
-  saw_plte: Bool,
-  saw_idat: Bool,
+  run: Run,
   saw_trns: Bool,
+  saw_plte: Bool,
   +colour: U32,
   data: List<&2, U32>,
   pg: Pg
 ) -> Nx:
   match zplte:
     case True{}:
-      png.on.plte(ihdr, saw_plte, saw_idat, colour, data, pg)
+      png.on.plte(run, saw_plte, colour, data, pg)
     case False{}:
-      png.apply.tr(ztrns, anc, ihdr, saw_plte, saw_idat, saw_trns, colour, data, pg)
+      png.apply.tr(ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
 
 def png.apply.ie(
   ziend: Bool,
   zplte: Bool,
   ztrns: Bool,
   anc: Bool,
-  ihdr: Bool,
-  saw_plte: Bool,
-  saw_idat: Bool,
+  run: Run,
   saw_trns: Bool,
+  saw_plte: Bool,
   +colour: U32,
   data: List<&2, U32>,
   pg: Pg
 ) -> Nx:
   match ziend:
     case True{}:
-      png.on.iend(ihdr, colour, saw_plte, data, pg)
+      png.on.iend(colour, saw_plte, data, pg)
     case False{}:
-      png.apply.pl(zplte, ztrns, anc, ihdr, saw_plte, saw_idat, saw_trns, colour, data, pg)
+      png.apply.pl(zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
 
 def png.apply.id(
   zidat: Bool,
@@ -854,21 +862,20 @@ def png.apply.id(
   zplte: Bool,
   ztrns: Bool,
   anc: Bool,
-  ihdr: Bool,
-  saw_plte: Bool,
-  saw_idat: Bool,
-  idat_done: Bool,
+  run: Run,
   saw_trns: Bool,
+  saw_plte: Bool,
   +colour: U32,
   data: List<&2, U32>,
   pg: Pg
 ) -> Nx:
   match zidat:
     case True{}:
-      png.on.idat(ihdr, idat_done, Bool.or(Bool.not(U32.is_eq(colour, 3)), saw_plte), data, pg)
+      png.on.idat(run, Bool.or(Bool.not(U32.is_eq(colour, 3)), saw_plte), data, pg)
     case False{}:
-      png.apply.ie(ziend, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, saw_trns, colour, data, pg)
+      png.apply.ie(ziend, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
 
+# a chunk after IHDR: a second IHDR is refused
 def png.apply.go(
   zihdr: Bool,
   zidat: Bool,
@@ -876,54 +883,29 @@ def png.apply.go(
   zplte: Bool,
   ztrns: Bool,
   anc: Bool,
-  ihdr: Bool,
-  saw_plte: Bool,
-  saw_idat: Bool,
-  idat_done: Bool,
+  run: Run,
   saw_trns: Bool,
+  saw_plte: Bool,
   +colour: U32,
   data: List<&2, U32>,
   pg: Pg
 ) -> Nx:
   match zihdr:
     case True{}:
-      png.on.ihdr(ihdr, data)
-    case False{}:
-      png.apply.id(zidat, ziend, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, idat_done, saw_trns, colour, data, pg)
-
-def png.apply.at(
-  iend: Bool,
-  zihdr: Bool,
-  zidat: Bool,
-  ziend: Bool,
-  zplte: Bool,
-  ztrns: Bool,
-  anc: Bool,
-  ihdr: Bool,
-  saw_plte: Bool,
-  saw_idat: Bool,
-  idat_done: Bool,
-  saw_trns: Bool,
-  +colour: U32,
-  data: List<&2, U32>,
-  pg: Pg
-) -> Nx:
-  match iend:
-    case True{}:
       NBad{}
     case False{}:
-      png.apply.go(zihdr, zidat, ziend, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, idat_done, saw_trns, colour, data,
-        pg)
+      png.apply.id(zidat, ziend, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
 
 def png.apply(+typ: U32, data: List<&2, U32>, pg: Pg) -> Nx:
   match pg:
-    case Pg{+w, +h, +d, +colour, +comp, +f, +i, idat, plte, trns, +ihdr, +saw_plte, +saw_idat, +idat_done, +saw_trns,
-      +iend}:
-      png.apply.at(
-        iend, U32.is_eq(typ, tag.ihdr()), U32.is_eq(typ, tag.idat()), U32.is_eq(typ, tag.iend()),
+    case PgStart{}:
+      png.on.start(U32.is_eq(typ, tag.ihdr()), data)
+    case Pg{+w, +h, +d, +colour, +comp, +f, +i, idat, +plte, +trns, +run}:
+      png.apply.go(
+        U32.is_eq(typ, tag.ihdr()), U32.is_eq(typ, tag.idat()), U32.is_eq(typ, tag.iend()),
         U32.is_eq(typ, tag.plte()), U32.is_eq(typ, tag.trns()), tag.anc(typ),
-        ihdr, saw_plte, saw_idat, idat_done, saw_trns, colour, data,
-        Pg{w, h, d, colour, comp, f, i, idat, plte, trns, ihdr, saw_plte, saw_idat, idat_done, saw_trns, iend}
+        run, Maybe.is_some(&2, List<&2, U32>, trns), Maybe.is_some(&2, List<&2, U32>, plte), colour, data,
+        Pg{w, h, d, colour, comp, f, i, idat, plte, trns, run}
       )
 
 def png.judge.at(zz: Bool, +typ: U32, data: List<&2, U32>, pg: Pg) -> Nx:
@@ -1612,29 +1594,22 @@ def png.finish.go(
       png.deep(Inf.inflate.upto(png.budget(ww, hh, dd, colour, ii), List.reverse(&2, U32, idat)), ww, hh, dd,
         colour, ii, plte, trns)
 
-def png.finish.at(
-  zz: Bool,
-  zenc: Bool,
-  +ww: U32,
-  +hh: U32,
-  +dd: U32,
-  +colour: U32,
-  +ii: U32,
-  idat: List<&2, U32>,
-  plte: List<&2, U32>,
-  trns: List<&2, U32>
-) -> Maybe<&2, Pic>:
-  match zz:
-    case False{}:
-      None{}
-    case True{}:
-      png.finish.go(zenc, ww, hh, dd, colour, ii, idat, plte, trns)
+# the data of a chunk that came, none for one that did not
+def png.or.nil(mm: Maybe<&2, List<&2, U32>>) -> List<&2, U32>:
+  match mm:
+    case None{}:
+      []
+    case Some{xs}:
+      xs
 
+# the picture of the state IEND ended: none before IHDR
 def png.finish(pg: Pg) -> Maybe<&2, Pic>:
   match pg:
-    case Pg{+w, +h, +d, +colour, +comp, +f, +i, idat, plte, trns, ihdr, _sp, _si, _sd, _st, iend}:
-      png.finish.at(Bool.and(ihdr, iend), Bool.and(U32.is_eq(d, 8), Bool.and(U32.is_zero(comp), Bool.and(U32.is_zero(f),
-        U32.is_zero(i)))), w, h, d, colour, i, idat, plte, trns)
+    case PgStart{}:
+      None{}
+    case Pg{+w, +h, +d, +colour, +comp, +f, +i, idat, plte, trns, _run}:
+      png.finish.go(Bool.and(U32.is_eq(d, 8), Bool.and(U32.is_zero(comp), Bool.and(U32.is_zero(f), U32.is_zero(i)))),
+        w, h, d, colour, i, idat, png.or.nil(plte), png.or.nil(trns))
 
 # after a judged chunk: none when it was refused, the picture when it was
 # IEND (whatever bytes follow it, as libpng and other decoders stop reading

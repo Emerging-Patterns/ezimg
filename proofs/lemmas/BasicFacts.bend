@@ -1682,6 +1682,14 @@ def w32(
 
 # ---- C. the walker's state, chunk by chunk ----
 
+# the IDAT run: open once an IDAT came, none before
+def st.run(sid: Bool) -> Png.Run:
+  match sid:
+    case True{}:
+      Png.ROpen{}
+    case False{}:
+      Png.RNone{}
+
 # the state after IHDR, PLTE when there is one, and tRNS when there is one,
 # with idat the IDAT data so far, newest first, and sid whether an IDAT came
 def st(
@@ -1693,8 +1701,7 @@ def st(
   idat: List<&2, U32>,
   sid: Bool
 ) -> Png.Pg:
-  Png.Pg{ww, hh, 8, cc, 0, 0, 0, idat, D1.spec.or.nil(plte), D1.spec.or.nil(trns), True{},
-    Maybe.is_some(&2, List<&2, U32>, plte), sid, False{}, Maybe.is_some(&2, List<&2, U32>, trns), False{}}
+  Png.Pg{ww, hh, 8, cc, 0, 0, 0, idat, plte, trns, st.run(sid)}
 
 # a colour type other than 3, or a PLTE: what IDAT and IEND ask of the state
 def need(+cc: U32, +plte: Maybe<&2, List<&2, U32>>) -> Bool:

@@ -7,8 +7,26 @@ import ../laws/PngAncillaryChunksIgnored.bend as Laws
 import ../laws/defs/PngSpecification.bend as D1
 import ./lemmas/BasicFacts.bend as M1
 import ./lemmas/PngChunkWalker.bend as M2
+import ./lemmas/PngImageWalk.bend as M4
 
 # ---- K. ancillary chunks in the chunk walker ----
+
+# a closed run once an IDAT came; none, the run's end with no IDAT before it
+def sd.shut(sid: Bool) -> Png.Run:
+  match sid:
+    case True{}:
+      Png.RShut{}
+    case False{}:
+      Png.RNone{}
+
+# the IDAT run of st with its end named: none before an IDAT, open after
+# one, closed once a chunk after the IDAT chunks has closed it
+def sd.run(sid: Bool, done: Bool) -> Png.Run:
+  match done:
+    case False{}:
+      M1.st.run(sid)
+    case True{}:
+      sd.shut(sid)
 
 # st with the IDAT run's end named: done once a chunk after the IDAT
 # chunks has closed the run
@@ -22,11 +40,22 @@ def sd(
   +sid: Bool,
   +done: Bool
 ) -> Png.Pg:
-  Png.Pg{ww, hh, 8, cc, 0, 0, 0, idat, D1.spec.or.nil(plte), D1.spec.or.nil(trns), True{},
-    Maybe.is_some(&2, List<&2, U32>, plte), sid, done, Maybe.is_some(&2, List<&2, U32>, trns), False{}}
+  Png.Pg{ww, hh, 8, cc, 0, 0, 0, idat, plte, trns, sd.run(sid, done)}
 
-# the walker's dispatch on a type that is none of the five it reads, with the
-# ancillary bit set: the chunk closes the IDAT run
+# a chunk after the IDAT chunks closes the run once one came
+def seal.sd(sid: Bool, done: Bool) -> {Png.run.seal(sd.run(sid, done)) == sd.run(sid, Bool.or(sid, done)) : Png.Run}:
+  match sid done:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# the walker's dispatch after IHDR on a type that is none of the five it
+# reads, with the ancillary bit set: the chunk closes the IDAT run
 def anc.at(
   z1: Bool,
   z2: Bool,
@@ -34,10 +63,9 @@ def anc.at(
   z4: Bool,
   z5: Bool,
   an: Bool,
-  +sp: Bool,
-  +si: Bool,
-  +sdn: Bool,
+  +run: Png.Run,
   +st: Bool,
+  +sp: Bool,
   +colour: U32,
   +data: List<&2, U32>,
   +pg: Png.Pg,
@@ -47,33 +75,28 @@ def anc.at(
   +e4: {z4 == False{} : Bool},
   +e5: {z5 == False{} : Bool},
   +ea: {an == True{} : Bool}
-) -> {Png.png.apply.at(False{}, z1, z2, z3, z4, z5, an, True{}, sp, si, sdn, st, colour, data, pg) ==
-  Png.NMore{Png.png.seal(pg)} : Png.Nx}:
+) -> {Png.png.apply.go(z1, z2, z3, z4, z5, an, run, st, sp, colour, data, pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}:
   match z1 z2 z3 z4 z5 an:
     case False{} False{} False{} False{} False{} True{}:
       {==}
     case True{} _z2 _z3 _z4 _z5 _an:
-      Empty.absurd({Png.png.apply.at(False{}, True{}, _z2, _z3, _z4, _z5, _an, True{}, sp, si, sdn, st, colour, data,
-        pg)
-        == Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e1)))
+      Empty.absurd({Png.png.apply.go(True{}, _z2, _z3, _z4, _z5, _an, run, st, sp, colour, data, pg) ==
+        Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e1)))
     case False{} True{} _z3 _z4 _z5 _an:
-      Empty.absurd({Png.png.apply.at(False{}, False{}, True{}, _z3, _z4, _z5, _an, True{}, sp, si, sdn, st, colour,
-        data,
-        pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e2)))
+      Empty.absurd({Png.png.apply.go(False{}, True{}, _z3, _z4, _z5, _an, run, st, sp, colour, data, pg) ==
+        Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e2)))
     case False{} False{} True{} _z4 _z5 _an:
-      Empty.absurd({Png.png.apply.at(False{}, False{}, False{}, True{}, _z4, _z5, _an, True{}, sp, si, sdn, st, colour,
-        data, pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e3)))
+      Empty.absurd({Png.png.apply.go(False{}, False{}, True{}, _z4, _z5, _an, run, st, sp, colour, data, pg) ==
+        Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e3)))
     case False{} False{} False{} True{} _z5 _an:
-      Empty.absurd({Png.png.apply.at(False{}, False{}, False{}, False{}, True{}, _z5, _an, True{}, sp, si, sdn, st,
-        colour, data, pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{},
-        e4)))
+      Empty.absurd({Png.png.apply.go(False{}, False{}, False{}, True{}, _z5, _an, run, st, sp, colour, data, pg) ==
+        Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e4)))
     case False{} False{} False{} False{} True{} _an:
-      Empty.absurd({Png.png.apply.at(False{}, False{}, False{}, False{}, False{}, True{}, _an, True{}, sp, si, sdn, st,
-        colour, data, pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{},
-        e5)))
+      Empty.absurd({Png.png.apply.go(False{}, False{}, False{}, False{}, True{}, _an, run, st, sp, colour, data, pg) ==
+        Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e5)))
     case False{} False{} False{} False{} False{} False{}:
-      Empty.absurd({Png.png.apply.at(False{}, False{}, False{}, False{}, False{}, False{}, False{}, True{}, sp, si, sdn,
-        st, colour, data, pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(ea))
+      Empty.absurd({Png.png.apply.go(False{}, False{}, False{}, False{}, False{}, False{}, run, st, sp, colour, data,
+        pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(ea))
 
 # a type with the ancillary bit is not one whose bit is clear, once is_eq's answer is named
 def neq.at(
@@ -118,11 +141,33 @@ def anc.step(
   +ht: {U32.is_eq(tt, 1951551059) == False{} : Bool}
 ) -> {Png.png.apply(tt, data, sd(ww, hh, cc, plte, trns, idat, sid, done)) == Png.NMore{sd(ww, hh, cc, plte, trns,
   idat, sid, Bool.or(sid, done))} : Png.Nx}:
-  anc.at(U32.is_eq(tt, Png.tag.ihdr()), U32.is_eq(tt, Png.tag.idat()), U32.is_eq(tt, Png.tag.iend()), U32.is_eq(tt,
-    Png.tag.plte()), U32.is_eq(tt, Png.tag.trns()), Png.tag.anc(tt), Maybe.is_some(&2, List<&2, U32>, plte), sid, done,
-    Maybe.is_some(&2, List<&2, U32>, trns), cc, data, sd(ww, hh, cc, plte, trns, idat, sid, done), neq(tt,
-    Png.tag.ihdr(), hb, {==}), neq(tt, Png.tag.idat(), hb, {==}), neq(tt, Png.tag.iend(), hb, {==}), neq(tt,
-    Png.tag.plte(), hb, {==}), ht, hb)
+  +pg = sd(ww, hh, cc, plte, trns, idat, sid, done)
+  Equal.trans(Png.Nx, Png.png.apply(tt, data, pg), Png.NMore{Png.png.seal(pg)},
+    Png.NMore{sd(ww, hh, cc, plte, trns, idat, sid, Bool.or(sid, done))},
+    anc.at(U32.is_eq(tt, Png.tag.ihdr()), U32.is_eq(tt, Png.tag.idat()), U32.is_eq(tt, Png.tag.iend()), U32.is_eq(tt,
+      Png.tag.plte()), U32.is_eq(tt, Png.tag.trns()), Png.tag.anc(tt), sd.run(sid, done), Maybe.is_some(&2, List<&2,
+      U32>, trns), Maybe.is_some(&2, List<&2, U32>, plte), cc, data, pg, neq(tt, Png.tag.ihdr(), hb, {==}), neq(tt,
+      Png.tag.idat(), hb, {==}), neq(tt, Png.tag.iend(), hb, {==}), neq(tt, Png.tag.plte(), hb, {==}), ht, hb),
+    Equal.cong(Png.Run, Png.Nx, rr => Png.NMore{Png.Pg{ww, hh, 8, cc, 0, 0, 0, idat, plte, trns, rr}},
+      Png.run.seal(sd.run(sid, done)), sd.run(sid, Bool.or(sid, done)), seal.sd(sid, done)))
+
+# tRNS after an IDAT, the run open or closed: the walker ignores it and the run is closed
+def trns.late(
+  +data: List<&2, U32>,
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  +plte: Maybe<&2, List<&2, U32>>,
+  +trns: Maybe<&2, List<&2, U32>>,
+  +idat: List<&2, U32>,
+  done: Bool
+) -> {Png.png.apply(1951551059, data, sd(ww, hh, cc, plte, trns, idat, True{}, done)) == Png.NMore{sd(ww, hh, cc, plte,
+  trns, idat, True{}, Bool.or(True{}, done))} : Png.Nx}:
+  match done:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
 
 # the walker's dispatch on tRNS after an IDAT: the chunk is ignored and closes the IDAT run
 def anc.step.trns(
@@ -149,7 +194,7 @@ def anc.step.trns(
         Png.NMore{sd(ww, hh, cc, plte, trns, idat, True{}, Bool.or(True{}, done))},
         Equal.cong(U32, Png.Nx, uu => Png.png.apply(uu, data, sd(ww, hh, cc, plte, trns, idat, True{}, done)), tt,
           1951551059, M1.ueq(tt, 1951551059, ez)),
-        {==})
+        trns.late(data, ww, hh, cc, plte, trns, idat, done))
 
 # an ancillary chunk after the IDAT chunks, tRNS too when an IDAT came: the walker closes the run and goes on
 def anc.step.late(
@@ -336,19 +381,17 @@ def pfin.walk.idats(
           tr),
         anc.walk.late(a3, ie, ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid, False{}, ha),
         Equal.trans(Maybe<&2, Png.Pic>, Png.png.go(ie, Png.ZLen{}, False{}, 0, 0, [], [], pg),
-          Png.png.finish(Png.pg.iend(pg)), Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc),
+          Png.png.finish(pg), Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc),
             List.append(&2, U32, done, [])), ww, hh, cc, pl,
           tr),
-          M2.chunk.end(73, 69, 78, 68, [], [], pg, Png.pg.iend(pg), ({==}, {==}), M2.iend.ok.true(M1.need(cc, plte), pg,
+          M2.chunk.end(73, 69, 78, 68, [], [], pg, pg, ({==}, {==}), M2.iend.ok.true(M1.need(cc, plte), pg,
             h_nd)),
-          Equal.trans(Maybe<&2, Png.Pic>, Png.png.finish(Png.pg.iend(pg)),
+          Equal.trans(Maybe<&2, Png.Pic>, Png.png.finish(pg),
             Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), done), ww, hh,
             cc,
             pl, tr), Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.append(&2, U32, done, [])), ww,
               hh, cc, pl, tr),
-            Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww,
-              hh, cc), xs), ww, hh, cc, pl, tr),
-              List.reverse(&2, U32, List.reverse(&2, U32, done)), done, M1.inf.rev_rev(done)),
+            M4.fin.done(ww, hh, cc, plte, trns, done, sd.run(sid, M1.dn(a3, sid, False{}))),
             Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww,
               hh, cc), xs), ww, hh, cc, pl, tr),
               done, List.append(&2, U32, done, []), Equal.sym(List<&2, U32>, List.append(&2, U32, done, []), done,

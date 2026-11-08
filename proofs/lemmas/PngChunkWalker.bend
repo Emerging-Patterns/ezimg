@@ -595,19 +595,23 @@ def idat.step(
   h_nd: {M1.need(cc, plte) == True{} : Bool}
 ) -> {Png.png.apply(Png.be.u32(73, 68, 65, 84), List.reverse(&2, U32, dd), M1.st(ww, hh, cc, plte, trns, acc, sid)) ==
   Png.NMore{M1.st(ww, hh, cc, plte, trns, List.append(&2, U32, List.reverse(&2, U32, dd), acc), True{})} : Png.Nx}:
-  idat.try.true(M1.need(cc, plte), List.reverse(&2, U32, dd), M1.st(ww, hh, cc, plte, trns, acc, sid), h_nd)
+  match sid:
+    case True{}:
+      idat.try.true(M1.need(cc, plte), List.reverse(&2, U32, dd), M1.st(ww, hh, cc, plte, trns, acc, True{}), h_nd)
+    case False{}:
+      idat.try.true(M1.need(cc, plte), List.reverse(&2, U32, dd), M1.st(ww, hh, cc, plte, trns, acc, False{}), h_nd)
 
 # an IEND the checks take ends the image
 def iend.ok.true(
   zz: Bool,
   +pg: Png.Pg,
   ez: {zz == True{} : Bool}
-) -> {Png.png.iend.ok(zz, pg) == Png.NEnd{Png.pg.iend(pg)} : Png.Nx}:
+) -> {Png.png.iend.ok(zz, pg) == Png.NEnd{pg} : Png.Nx}:
   match zz:
     case True{}:
       {==}
     case False{}:
-      Empty.absurd({Png.NBad{} == Png.NEnd{Png.pg.iend(pg)} : Png.Nx}, M1.false_true(ez))
+      Empty.absurd({Png.NBad{} == Png.NEnd{pg} : Png.Nx}, M1.false_true(ez))
 
 # reversing an append onto acc: the second part, onto the first reversed
 def revgo_app(
