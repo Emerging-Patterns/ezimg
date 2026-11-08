@@ -132,23 +132,27 @@ def not.true(bb: Bool, hh: {Bool.not(bb) == True{} : Bool}) -> {bb == False{} : 
     case False{}:
       {==}
 
-# the take test for a misplaced tRNS is false
+# the take test for a misplaced tRNS before any IDAT is false
 def take.false(
-  si: Bool,
   st: Bool,
   +ok: Bool,
-  h_bad: {Bool.or(si, Bool.or(st, Bool.not(ok))) == True{} : Bool}
-) -> {Bool.and(Bool.not(si), Bool.and(Bool.not(st), ok)) == False{} : Bool}:
-  match si st:
-    case True{} _st:
+  h_bad: {Bool.or(st, Bool.not(ok)) == True{} : Bool}
+) -> {Bool.and(Bool.not(st), ok) == False{} : Bool}:
+  match st:
+    case True{}:
       {==}
-    case False{} True{}:
-      {==}
-    case False{} False{}:
+    case False{}:
       not.true(ok, h_bad)
 
-def Laws.png_trns_placed(ww, hh, dd, cc, comp, ff, ii, idat, plte, trns, sp, si, sd, st, data, h_bad):
-  +pg = {Png.Pg{ww, hh, dd, cc, comp, ff, ii, idat, plte, trns, True{}, sp, si, sd, st, False{}} : Png.Pg}
-  +ok = Png.png.trns.ok(cc, sp)
-  Equal.cong(Bool, Png.Nx, zz => Png.png.trns.take(zz, data, pg), Bool.and(Bool.not(si), Bool.and(Bool.not(st), ok)),
-    False{}, take.false(si, st, ok, h_bad))
+def Laws.png_trns_placed(ww, hh, dd, cc, comp, ff, ii, idat, plte, trns, run, data, h_bad):
+  match run:
+    case Png.RNone{}:
+      +pg = {Png.Pg{ww, hh, dd, cc, comp, ff, ii, idat, plte, trns, Png.RNone{}} : Png.Pg}
+      +ok = Png.png.trns.ok(cc, Maybe.is_some(&2, List<&2, U32>, plte))
+      +st = Maybe.is_some(&2, List<&2, U32>, trns)
+      Equal.cong(Bool, Png.Nx, zz => Png.png.trns.take(zz, data, pg), Bool.and(Bool.not(st), ok), False{},
+        take.false(st, ok, h_bad))
+    case Png.ROpen{}:
+      {==}
+    case Png.RShut{}:
+      {==}

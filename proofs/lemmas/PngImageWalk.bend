@@ -8,6 +8,50 @@ import ../../laws/defs/PngSpecification.bend as D1
 import ./BasicFacts.bend as M1
 import ./PngChunkWalker.bend as M2
 
+# the picture of a state after IHDR, bit depth 8 and methods 0: the samples
+# of its IDAT data, oldest first, inflated, with its PLTE and tRNS data
+def fin.pg(
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  +plte: Maybe<&2, List<&2, U32>>,
+  +trns: Maybe<&2, List<&2, U32>>,
+  +idat: List<&2, U32>,
+  +run: Png.Run
+) -> {Png.png.finish(Png.Pg{ww, hh, 8, cc, 0, 0, 0, idat, plte, trns, run}) ==
+  Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.reverse(&2, U32, idat)), ww, hh, cc,
+    D1.spec.or.nil(plte), D1.spec.or.nil(trns)) : Maybe<&2, Png.Pic>}:
+  match plte trns:
+    case None{} None{}:
+      {==}
+    case None{} Some{_t}:
+      {==}
+    case Some{_p} None{}:
+      {==}
+    case Some{_p} Some{_t}:
+      {==}
+
+# the same, with the IDAT data held newest first as done reversed: the samples of done
+def fin.done(
+  +ww: U32,
+  +hh: U32,
+  +cc: U32,
+  +plte: Maybe<&2, List<&2, U32>>,
+  +trns: Maybe<&2, List<&2, U32>>,
+  +done: List<&2, U32>,
+  +run: Png.Run
+) -> {Png.png.finish(Png.Pg{ww, hh, 8, cc, 0, 0, 0, List.reverse(&2, U32, done), plte, trns, run}) ==
+  Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), done), ww, hh, cc, D1.spec.or.nil(plte),
+    D1.spec.or.nil(trns)) : Maybe<&2, Png.Pic>}:
+  Equal.trans(Maybe<&2, Png.Pic>, Png.png.finish(Png.Pg{ww, hh, 8, cc, 0, 0, 0, List.reverse(&2, U32, done), plte,
+    trns, run}), Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.reverse(&2, U32, List.reverse(&2,
+    U32, done))), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)), Png.png.samples(Inf.inflate.upto(
+    D1.spec.budget(ww, hh, cc), done), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)),
+    fin.pg(ww, hh, cc, plte, trns, List.reverse(&2, U32, done), run),
+    Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc),
+      xs), ww, hh, cc, D1.spec.or.nil(plte), D1.spec.or.nil(trns)), List.reverse(&2, U32, List.reverse(&2, U32, done)),
+      done, M1.inf.rev_rev(done)))
+
 # the IEND chunk, empty: it ends the image
 def iend.step(
   +ww: U32,
@@ -19,7 +63,7 @@ def iend.step(
   +sid: Bool,
   h_nd: {M1.need(cc, plte) == True{} : Bool}
 ) -> {Png.png.apply(Png.be.u32(73, 69, 78, 68), List.reverse(&2, U32, []), M1.st(ww, hh, cc, plte, trns, acc, sid)) ==
-  Png.NEnd{Png.pg.iend(M1.st(ww, hh, cc, plte, trns, acc, sid))} : Png.Nx}:
+  Png.NEnd{M1.st(ww, hh, cc, plte, trns, acc, sid)} : Png.Nx}:
   M2.iend.ok.true(M1.need(cc, plte), M1.st(ww, hh, cc, plte, trns, acc, sid), h_nd)
 
 # the IDAT chunks, then IEND and any bytes after it: with done the IDAT data read so far, the image
@@ -47,18 +91,16 @@ def walk.idats(
       +pg = M1.st(ww, hh, cc, plte, trns, List.reverse(&2, U32, done), sid)
       Equal.trans(Maybe<&2, Png.Pic>,
         Png.png.go(D1.spec.chunk([73, 69, 78, 68], [], junk), Png.ZLen{}, False{}, 0, 0, [], [], pg),
-        Png.png.finish(Png.pg.iend(pg)),
+        Png.png.finish(pg),
         Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.append(&2, U32, done, [])), ww, hh, cc, pl,
           tr),
-        M2.chunk.end(73, 69, 78, 68, [], junk, pg, Png.pg.iend(pg), ({==}, {==}), iend.step(ww, hh, cc, plte, trns,
+        M2.chunk.end(73, 69, 78, 68, [], junk, pg, pg, ({==}, {==}), iend.step(ww, hh, cc, plte, trns,
           List.reverse(&2, U32, done), sid, h_nd)),
-        Equal.trans(Maybe<&2, Png.Pic>, Png.png.finish(Png.pg.iend(pg)),
+        Equal.trans(Maybe<&2, Png.Pic>, Png.png.finish(pg),
           Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), done), ww, hh, cc, pl, tr),
           Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh, cc), List.append(&2, U32, done, [])), ww, hh, cc,
             pl, tr),
-          Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh,
-            cc), xs), ww, hh, cc, pl, tr),
-            List.reverse(&2, U32, List.reverse(&2, U32, done)), done, M1.inf.rev_rev(done)),
+          fin.done(ww, hh, cc, plte, trns, done, M1.st.run(sid)),
           Equal.cong(List<&2, U32>, Maybe<&2, Png.Pic>, xs => Png.png.samples(Inf.inflate.upto(D1.spec.budget(ww, hh,
             cc), xs), ww, hh, cc, pl, tr),
             done, List.append(&2, U32, done, []), Equal.sym(List<&2, U32>, List.append(&2, U32, done, []), done,

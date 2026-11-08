@@ -20,6 +20,16 @@ import ./PngSamplesFollowColourType.bend as L1
 def spec.trns.allowed(+cc: U32, saw_plte: Bool) -> Bool:
   Bool.or(Bool.or(U32.is_eq(cc, 0), U32.is_eq(cc, 2)), Bool.and(U32.is_eq(cc, 3), saw_plte))
 
+# an IDAT has come: the run is open or closed
+def spec.after.idat(run: Png.Run) -> Bool:
+  match run:
+    case Png.RNone{}:
+      False{}
+    case Png.ROpen{}:
+      True{}
+    case Png.RShut{}:
+      True{}
+
 # LAW: colour type 0: a tRNS of other than two bytes gives no key, each gray byte decoding to 0xFFgggggg
 law png_trns_grey_len:
   for +xs: List<&2, U32>
@@ -67,14 +77,11 @@ law png_trns_placed:
   for +ff: U32
   for +ii: U32
   for +idat: List<&2, U32>
-  for +plte: List<&2, U32>
-  for +trns: List<&2, U32>
-  for +sp: Bool
-  for +si: Bool
-  for +sd: Bool
-  for +st: Bool
+  for +plte: Maybe<&2, List<&2, U32>>
+  for +trns: Maybe<&2, List<&2, U32>>
+  for +run: Png.Run
   for +data: List<&2, U32>
-  for h_bad: {Bool.or(si, Bool.or(st, Bool.not(spec.trns.allowed(cc, sp)))) == True{} : Bool}
-  {Png.png.apply(1951551059, data, Png.Pg{ww, hh, dd, cc, comp, ff, ii, idat, plte, trns, True{}, sp, si, sd, st,
-    False{}}) == Png.NMore{Png.png.seal(Png.Pg{ww, hh, dd, cc, comp, ff, ii, idat, plte, trns, True{}, sp, si, sd, st,
-    False{}})} : Png.Nx}
+  for h_bad: {Bool.or(spec.after.idat(run), Bool.or(Maybe.is_some(&2, List<&2, U32>, trns),
+    Bool.not(spec.trns.allowed(cc, Maybe.is_some(&2, List<&2, U32>, plte))))) == True{} : Bool}
+  {Png.png.apply(1951551059, data, Png.Pg{ww, hh, dd, cc, comp, ff, ii, idat, plte, trns, run}) ==
+    Png.NMore{Png.png.seal(Png.Pg{ww, hh, dd, cc, comp, ff, ii, idat, plte, trns, run})} : Png.Nx}

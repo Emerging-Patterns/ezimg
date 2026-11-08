@@ -127,12 +127,12 @@ def open.ihdr.put(mm: Maybe<&2, Png.Ihdr>) -> {nx.ends(Png.png.ihdr.put(mm)) == 
     case Some{Png.Ihdr{+w, +h, +d, +c, +comp, +f, +i}}:
       open.ihdr.ok(Png.png.good(w, h, d, c, comp, f, i), w, h, d, c, comp, f, i)
 
-# IHDR does not end the image
-def open.on.ihdr(ihdr: Bool, +data: List<&2, U32>) -> {nx.ends(Png.png.on.ihdr(ihdr, data)) == False{} : Bool}:
-  match ihdr:
-    case True{}:
-      {==}
+# the first chunk, IHDR or not, does not end the image
+def open.on.start(zihdr: Bool, +data: List<&2, U32>) -> {nx.ends(Png.png.on.start(zihdr, data)) == False{} : Bool}:
+  match zihdr:
     case False{}:
+      {==}
+    case True{}:
       open.ihdr.put(Png.parse_ihdr(List.reverse(&2, U32, data)))
 
 # IDAT does not end the image
@@ -149,33 +149,35 @@ def open.idat.try(
 
 # IDAT, wherever it comes, does not end the image
 def open.on.idat(
-  ihdr: Bool,
-  +idat_done: Bool,
+  run: Png.Run,
   +need: Bool,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.on.idat(ihdr, idat_done, need, data, pg)) == False{} : Bool}:
-  match ihdr:
-    case False{}:
+) -> {nx.ends(Png.png.on.idat(run, need, data, pg)) == False{} : Bool}:
+  match run:
+    case Png.RShut{}:
       {==}
-    case True{}:
-      open.idat.try(Bool.and(Bool.not(idat_done), need), data, pg)
+    case Png.RNone{}:
+      open.idat.try(need, data, pg)
+    case Png.ROpen{}:
+      open.idat.try(need, data, pg)
 
 # PLTE does not end the image
 def open.on.plte(
-  ihdr: Bool,
+  run: Png.Run,
   +saw_plte: Bool,
-  +saw_idat: Bool,
   +colour: U32,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.on.plte(ihdr, saw_plte, saw_idat, colour, data, pg)) == False{} : Bool}:
-  match ihdr:
-    case False{}:
+) -> {nx.ends(Png.png.on.plte(run, saw_plte, colour, data, pg)) == False{} : Bool}:
+  match run:
+    case Png.RNone{}:
+      open.allow(Bool.and(Bool.not(saw_plte), Bool.and(Png.png.plte.ok(colour), Png.png.mod3(data))),
+        Png.pg.plte(pg, List.reverse(&2, U32, data)))
+    case Png.ROpen{}:
       {==}
-    case True{}:
-      open.allow(Bool.and(Bool.not(saw_plte), Bool.and(Bool.not(saw_idat), Bool.and(Png.png.plte.ok(colour),
-        Png.png.mod3(data)))), Png.pg.plte(pg, List.reverse(&2, U32, data)))
+    case Png.RShut{}:
+      {==}
 
 # a tRNS taken or ignored does not end the image
 def open.trns.take(
@@ -191,20 +193,20 @@ def open.trns.take(
 
 # tRNS does not end the image
 def open.on.trns(
-  ihdr: Bool,
+  run: Png.Run,
   +saw_trns: Bool,
-  +saw_idat: Bool,
   +colour: U32,
   +saw_plte: Bool,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.on.trns(ihdr, saw_trns, saw_idat, colour, saw_plte, data, pg)) == False{} : Bool}:
-  match ihdr:
-    case False{}:
+) -> {nx.ends(Png.png.on.trns(run, saw_trns, colour, saw_plte, data, pg)) == False{} : Bool}:
+  match run:
+    case Png.RNone{}:
+      open.trns.take(Bool.and(Bool.not(saw_trns), Png.png.trns.ok(colour, saw_plte)), data, pg)
+    case Png.ROpen{}:
       {==}
-    case True{}:
-      open.trns.take(Bool.and(Bool.not(saw_idat), Bool.and(Bool.not(saw_trns), Png.png.trns.ok(colour, saw_plte))),
-        data, pg)
+    case Png.RShut{}:
+      {==}
 
 # an ancillary chunk or a refused critical one does not end the image
 def open.other.at(anc: Bool, +pg: Png.Pg) -> {nx.ends(Png.png.other.at(anc, pg)) == False{} : Bool}:
@@ -214,55 +216,40 @@ def open.other.at(anc: Bool, +pg: Png.Pg) -> {nx.ends(Png.png.other.at(anc, pg))
     case False{}:
       {==}
 
-# any other chunk does not end the image
-def open.on.other(
-  ihdr: Bool,
-  +anc: Bool,
-  +pg: Png.Pg
-) -> {nx.ends(Png.png.on.other(ihdr, anc, pg)) == False{} : Bool}:
-  match ihdr:
-    case False{}:
-      {==}
-    case True{}:
-      open.other.at(anc, pg)
-
 # tRNS or another chunk
 def open.apply.tr(
   ztrns: Bool,
   +anc: Bool,
-  +ihdr: Bool,
-  +saw_plte: Bool,
-  +saw_idat: Bool,
+  +run: Png.Run,
   +saw_trns: Bool,
+  +saw_plte: Bool,
   +colour: U32,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.tr(ztrns, anc, ihdr, saw_plte, saw_idat, saw_trns, colour, data, pg)) == False{} : Bool}:
+) -> {nx.ends(Png.png.apply.tr(ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) == False{} : Bool}:
   match ztrns:
     case True{}:
-      open.on.trns(ihdr, saw_trns, saw_idat, colour, saw_plte, data, pg)
+      open.on.trns(run, saw_trns, colour, saw_plte, data, pg)
     case False{}:
-      open.on.other(ihdr, anc, pg)
+      open.other.at(anc, pg)
 
 # PLTE, tRNS or another chunk
 def open.apply.pl(
   zplte: Bool,
   +ztrns: Bool,
   +anc: Bool,
-  +ihdr: Bool,
-  +saw_plte: Bool,
-  +saw_idat: Bool,
+  +run: Png.Run,
   +saw_trns: Bool,
+  +saw_plte: Bool,
   +colour: U32,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.pl(zplte, ztrns, anc, ihdr, saw_plte, saw_idat, saw_trns, colour, data, pg)) == False{}
-  : Bool}:
+) -> {nx.ends(Png.png.apply.pl(zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) == False{} : Bool}:
   match zplte:
     case True{}:
-      open.on.plte(ihdr, saw_plte, saw_idat, colour, data, pg)
+      open.on.plte(run, saw_plte, colour, data, pg)
     case False{}:
-      open.apply.tr(ztrns, anc, ihdr, saw_plte, saw_idat, saw_trns, colour, data, pg)
+      open.apply.tr(ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
 
 # not IEND: on to PLTE, tRNS or another chunk
 def open.apply.ie(
@@ -271,21 +258,20 @@ def open.apply.ie(
   +zplte: Bool,
   +ztrns: Bool,
   +anc: Bool,
-  +ihdr: Bool,
-  +saw_plte: Bool,
-  +saw_idat: Bool,
+  +run: Png.Run,
   +saw_trns: Bool,
+  +saw_plte: Bool,
   +colour: U32,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.ie(ziend, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, saw_trns, colour, data, pg))
-  == False{} : Bool}:
+) -> {nx.ends(Png.png.apply.ie(ziend, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) == False{} :
+  Bool}:
   match ziend:
     case True{}:
-      Empty.absurd({nx.ends(Png.png.apply.ie(True{}, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, saw_trns, colour,
-        data, pg)) == False{} : Bool}, M1.true_false(ez))
+      Empty.absurd({nx.ends(Png.png.apply.ie(True{}, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) ==
+        False{} : Bool}, M1.true_false(ez))
     case False{}:
-      open.apply.pl(zplte, ztrns, anc, ihdr, saw_plte, saw_idat, saw_trns, colour, data, pg)
+      open.apply.pl(zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
 
 # IDAT, or not IEND
 def open.apply.id(
@@ -295,23 +281,21 @@ def open.apply.id(
   +zplte: Bool,
   +ztrns: Bool,
   +anc: Bool,
-  +ihdr: Bool,
-  +saw_plte: Bool,
-  +saw_idat: Bool,
-  +idat_done: Bool,
+  +run: Png.Run,
   +saw_trns: Bool,
+  +saw_plte: Bool,
   +colour: U32,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.id(zidat, ziend, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, idat_done, saw_trns, colour,
-  data, pg)) == False{} : Bool}:
+) -> {nx.ends(Png.png.apply.id(zidat, ziend, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) ==
+  False{} : Bool}:
   match zidat:
     case True{}:
-      open.on.idat(ihdr, idat_done, Bool.or(Bool.not(U32.is_eq(colour, 3)), saw_plte), data, pg)
+      open.on.idat(run, Bool.or(Bool.not(U32.is_eq(colour, 3)), saw_plte), data, pg)
     case False{}:
-      open.apply.ie(ziend, ez, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, saw_trns, colour, data, pg)
+      open.apply.ie(ziend, ez, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
 
-# IHDR, or the rest
+# a second IHDR is refused; any other chunk is the rest
 def open.apply.go(
   zihdr: Bool,
   +zidat: Bool,
@@ -320,49 +304,19 @@ def open.apply.go(
   +zplte: Bool,
   +ztrns: Bool,
   +anc: Bool,
-  +ihdr: Bool,
-  +saw_plte: Bool,
-  +saw_idat: Bool,
-  +idat_done: Bool,
+  +run: Png.Run,
   +saw_trns: Bool,
+  +saw_plte: Bool,
   +colour: U32,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.go(zihdr, zidat, ziend, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, idat_done, saw_trns,
-  colour, data, pg)) == False{} : Bool}:
+) -> {nx.ends(Png.png.apply.go(zihdr, zidat, ziend, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) ==
+  False{} : Bool}:
   match zihdr:
-    case True{}:
-      open.on.ihdr(ihdr, data)
-    case False{}:
-      open.apply.id(zidat, ziend, ez, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, idat_done, saw_trns, colour, data,
-        pg)
-
-# after IEND every chunk is refused; before, a chunk that is not IEND does not end the image
-def open.apply.at(
-  iend: Bool,
-  +zihdr: Bool,
-  +zidat: Bool,
-  +ziend: Bool,
-  ez: {ziend == False{} : Bool},
-  +zplte: Bool,
-  +ztrns: Bool,
-  +anc: Bool,
-  +ihdr: Bool,
-  +saw_plte: Bool,
-  +saw_idat: Bool,
-  +idat_done: Bool,
-  +saw_trns: Bool,
-  +colour: U32,
-  +data: List<&2, U32>,
-  +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.at(iend, zihdr, zidat, ziend, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, idat_done,
-  saw_trns, colour, data, pg)) == False{} : Bool}:
-  match iend:
     case True{}:
       {==}
     case False{}:
-      open.apply.go(zihdr, zidat, ziend, ez, zplte, ztrns, anc, ihdr, saw_plte, saw_idat, idat_done, saw_trns, colour,
-        data, pg)
+      open.apply.id(zidat, ziend, ez, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
 
 # a chunk whose type is not IEND does not end the image, whatever the state
 def open.apply(
@@ -372,12 +326,13 @@ def open.apply(
   pg: Png.Pg
 ) -> {nx.ends(Png.png.apply(typ, data, pg)) == False{} : Bool}:
   match pg:
-    case Png.Pg{+w, +h, +d, +colour, +comp, +f, +i, +idat, +plte, +trns, +ihdr, +saw_plte, +saw_idat, +idat_done,
-      +saw_trns, +iend}:
-      open.apply.at(iend, U32.is_eq(typ, Png.tag.ihdr()), U32.is_eq(typ, Png.tag.idat()), U32.is_eq(typ,
-        Png.tag.iend()), ht, U32.is_eq(typ, Png.tag.plte()), U32.is_eq(typ, Png.tag.trns()), Png.tag.anc(typ), ihdr,
-        saw_plte, saw_idat, idat_done, saw_trns, colour, data,
-        Png.Pg{w, h, d, colour, comp, f, i, idat, plte, trns, ihdr, saw_plte, saw_idat, idat_done, saw_trns, iend})
+    case Png.PgStart{}:
+      open.on.start(U32.is_eq(typ, Png.tag.ihdr()), data)
+    case Png.Pg{+w, +h, +d, +colour, +comp, +f, +i, +idat, +plte, +trns, +run}:
+      open.apply.go(U32.is_eq(typ, Png.tag.ihdr()), U32.is_eq(typ, Png.tag.idat()), U32.is_eq(typ, Png.tag.iend()),
+        ht, U32.is_eq(typ, Png.tag.plte()), U32.is_eq(typ, Png.tag.trns()), Png.tag.anc(typ), run,
+        Maybe.is_some(&2, List<&2, U32>, trns), Maybe.is_some(&2, List<&2, U32>, plte), colour, data,
+        Png.Pg{w, h, d, colour, comp, f, i, idat, plte, trns, run})
 
 # a judged chunk that is not IEND, CRC right or wrong, does not end the image
 def open.judge.at(
