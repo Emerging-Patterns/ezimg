@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/Emerging-Patterns/ezimg/compare/v1.4.0...v1.5.0) (2026-11-16)
+
+
+### Bug Fixes
+
+* **lint:** ez 1.16.0, bolt 1.65.0; clear bolt findings ([#94](https://github.com/Emerging-Patterns/ezimg/issues/94)) ([94c103b](https://github.com/Emerging-Patterns/ezimg/commit/94c103b35d42378efcfd320a594aa6c21c68194a))
+
 ## [1.4.0](https://github.com/Emerging-Patterns/ezimg/compare/v1.3.0...v1.4.0) (2026-11-07)
 
 
