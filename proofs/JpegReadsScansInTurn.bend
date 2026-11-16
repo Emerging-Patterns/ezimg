@@ -48,14 +48,14 @@ def sw.one(
     case True{}:
       es = Equal.sym(Bool, U32.is_eq(bb, 255), True{}, ee)
       eb = Equal.sym(U32, bb, 255, M1.ueq(bb, 255, ee))
-      %es : {Jpeg.decode.walk(rest, Jpeg.decode.step.ent(_, bb, frame, scan, tabs, en, ri, kind, bad)) ==
+      %es : {Jpeg.decode.walk(rest, Jpeg.decode.step.ent(_, bb, Jpeg.Rd{frame, scan, tabs, en, ri, kind, bad})) ==
         Jpeg.St{Jpeg.Ent{}, frame, scan, tabs, List.reverse.go(&2, U32, rest, bb <> en), ri, kind, bad} : Jpeg.St}
-      %eb : {Jpeg.decode.walk(rest, Jpeg.decode.step.ent(True{}, bb, frame, scan, tabs, en, ri, kind, bad)) ==
+      %eb : {Jpeg.decode.walk(rest, Jpeg.decode.step.ent(True{}, bb, Jpeg.Rd{frame, scan, tabs, en, ri, kind, bad})) ==
         Jpeg.St{Jpeg.Ent{}, frame, scan, tabs, List.reverse.go(&2, U32, rest, _ <> en), ri, kind, bad} : Jpeg.St}
       ih
     case False{}:
       es = Equal.sym(Bool, U32.is_eq(bb, 255), False{}, ee)
-      %es : {Jpeg.decode.walk(rest, Jpeg.decode.step.ent(_, bb, frame, scan, tabs, en, ri, kind, bad)) ==
+      %es : {Jpeg.decode.walk(rest, Jpeg.decode.step.ent(_, bb, Jpeg.Rd{frame, scan, tabs, en, ri, kind, bad})) ==
         Jpeg.St{Jpeg.Ent{}, frame, scan, tabs, List.reverse.go(&2, U32, rest, bb <> en), ri, kind, bad} : Jpeg.St}
       ih
 
@@ -219,8 +219,8 @@ def Laws.jpeg_scans_in_turn(
   +s1 = {Jpeg.St{Jpeg.Rest{mark, acc}, frame, scan, tabs, ent, ri, 1, 0} : Jpeg.St}
   +sc2 = {Jpeg.Scan{ns, sids, td, ta, ss, se, ah} : Jpeg.Scan}
   +s2 = {Jpeg.St{Jpeg.Stop{}, frame, sc2, tabs2, ent2, ri2, 1, 0} : Jpeg.St}
-  +nx = Jpeg.decode.walk(List.reverse(&2, U32, acc), Jpeg.decode.mark(mark, frame, Jpeg.decode.scan0(), tabs, [], ri,
-    1, 0))
+  +nx = Jpeg.decode.walk(List.reverse(&2, U32, acc), Jpeg.decode.mark(mark, Jpeg.Rd{frame, Jpeg.decode.scan0(), tabs,
+    [], ri, 1, 0}))
   +p1 = {Jpeg.Pass{scan, tabs, List.reverse(&2, U32, ent), ri} : Jpeg.Pass}
   +p2 = {Jpeg.Pass{sc2, tabs2, List.reverse(&2, U32, ent2), ri2} : Jpeg.Pass}
   +left = {1n+List.length(&2, U32, acc) : Nat}

@@ -66,6 +66,12 @@ type Pt is Data:
   PTwo{ev: Pt, od: Pt}
   PList{xs: List<&2, U32>}
 
+# what the header and the PLTE and tRNS chunks say of the samples: the
+# picture's width and height, bit depth, colour type, palette and
+# transparency
+type Hd is Data:
+  Hd{+w: U32, +h: U32, +depth: U32, +colour: U32, +plte: List<&2, U32>, +trns: List<&2, U32>}
+
 # a pass read from the front of the inflated data: its pixel rows and the
 # bytes after it, or refused
 type Pass is Data:
@@ -347,9 +353,15 @@ def uf.done(rows: Nat, all: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
     case 1n+_p:
       None{}
 
+# where unfilter stands in a row: the row above from the current byte on
+# (prest), the bytes of it already passed (phist), the row so far, reversed
+# (cur), the row's bytes after the current one (left) and its filter type (ft)
+type Ur is Data:
+  Ur{+prest: List<&2, U32>, +phist: List<&2, U32>, +cur: List<&2, U32>, +left: U32, +ft: U32}
+
 # walk the filtered stream: a filter byte opens each row (UFilt), then its
-# bytes (UBody). `left` counts the row's bytes after the current one, and
-# `zlast`, whether it is zero, marks the row's last byte.
+# bytes (UBody). `zlast`, whether the row's `left` is zero, marks the row's
+# last byte.
 def uf.go(
   xs: List<&2, U32>,
   ph: Uf,
@@ -357,43 +369,30 @@ def uf.go(
   +bpp: U32,
   +stride: U32,
   rows: Nat,
-  +prest: List<&2, U32>,
-  +phist: List<&2, U32>,
-  +cur: List<&2, U32>,
-  all: List<&2, U32>,
-  +left: U32,
-  +ft: U32
+  ur: Ur,
+  all: List<&2, U32>
 ) -> Maybe<&2, List<&2, U32>>:
-  match xs ph zlast:
-    case _xs UBad{} _z:
+  match xs ph zlast rows ur:
+    case _xs UBad{} _z _r _u:
       None{}
-    case Nil{} UFilt{} _z:
+    case Nil{} UFilt{} _z _r _u:
       uf.done(rows, all)
-    case +b <> rest UFilt{} _z:
-      match rows:
-        case 0n:
-          None{}
-        case 1n++r:
-          uf.go(
-            rest, uf.phase(U32.is_le(b, 4)), U32.is_zero((stride - 1 : U32)), bpp, stride, r,
-            prest, [], [], all, (stride - 1 : U32), b
-          )
-    case +b <> rest UBody{} True{}:
+    case _b <> _rest UFilt{} _z 0n _u:
+      None{}
+    case +b <> rest UFilt{} _z 1n++r Ur{+prest, _h, _c, _l, _f}:
+      uf.go(rest, uf.phase(U32.is_le(b, 4)), U32.is_zero((stride - 1 : U32)), bpp, stride, r,
+        Ur{prest, [], [], (stride - 1 : U32), b}, all)
+    case +b <> rest UBody{} True{} _r Ur{+prest, +phist, +cur, _l, +ft}:
       +y = uf.recon(b, ft, bpp, prest, phist, cur)
       +cur2 = {y <> cur : List<&2, U32>}
-      uf.go(
-        rest, UFilt{}, False{}, bpp, stride, rows, List.reverse(&2, U32, cur2),
-        [], [], {y <> all : List<&2, U32>}, 0, 0
-      )
-    case +b <> rest UBody{} False{}:
+      uf.go(rest, UFilt{}, False{}, bpp, stride, rows, Ur{List.reverse(&2, U32, cur2), [], [], 0, 0},
+        {y <> all : List<&2, U32>})
+    case +b <> rest UBody{} False{} _r Ur{+prest, +phist, +cur, +left, +ft}:
       +y = uf.recon(b, ft, bpp, prest, phist, cur)
       +nl = (left - 1 : U32)
-      uf.go(
-        rest, UBody{}, U32.is_zero(nl), bpp, stride, rows,
-        uf.drop(prest), uf.push(prest, phist), {y <> cur : List<&2, U32>},
-        {y <> all : List<&2, U32>}, nl, ft
-      )
-    case Nil{} UBody{} _z:
+      uf.go(rest, UBody{}, U32.is_zero(nl), bpp, stride, rows,
+        Ur{uf.drop(prest), uf.push(prest, phist), {y <> cur : List<&2, U32>}, nl, ft}, {y <> all : List<&2, U32>})
+    case Nil{} UBody{} _z _r _u:
       None{}
 
 def uf.start(zz: Bool, raw: List<&2, U32>, +ww: U32, +hh: U32, +bpp: U32) -> Maybe<&2, List<&2, U32>>:
@@ -401,7 +400,7 @@ def uf.start(zz: Bool, raw: List<&2, U32>, +ww: U32, +hh: U32, +bpp: U32) -> May
     case False{}:
       None{}
     case True{}:
-      uf.go(raw, UFilt{}, False{}, bpp, (ww * bpp : U32), U32.to_nat(hh), [], [], [], [], 0, 0)
+      uf.go(raw, UFilt{}, False{}, bpp, (ww * bpp : U32), U32.to_nat(hh), Ur{[], [], [], 0, 0}, [])
 
 # ISO/IEC 15948 / W3C PNG — undo filter types None, Sub, Up, Average, and Paeth.
 def unfilter(raw: List<&2, U32>, +ww: U32, +hh: U32, +bpp: U32) -> Maybe<&2, List<&2, U32>>:
@@ -492,20 +491,16 @@ def pt.leaf(xs: List<&2, U32>) -> Pt:
 # a lookup tree of the entries: an index's low bit picks the half its entry
 # is in, so a palette of 256 entries is found in eight steps, not 256
 def pt.build(fuel: Nat, xs: List<&2, U32>) -> Pt:
-  match fuel:
-    case 0n:
+  match fuel xs:
+    case 0n _xs:
       pt.leaf(xs)
-    case 1n+(+ff):
-      match xs:
-        case Nil{}:
-          PNone{}
-        case +hd <> tl:
-          match tl:
-            case Nil{}:
-              POne{hd}
-            case +yy <> rr:
-              +all = {hd <> {yy <> rr : List<&2, U32>} : List<&2, U32>}
-              PTwo{pt.build(ff, pt.alt(all, True{})), pt.build(ff, pt.alt(all, False{}))}
+    case 1n+_f Nil{}:
+      PNone{}
+    case 1n+_f Con{+hd, Nil{}}:
+      POne{hd}
+    case 1n+(+ff) Con{+hd, Con{+yy, rr}}:
+      +all = {hd <> {yy <> rr : List<&2, U32>} : List<&2, U32>}
+      PTwo{pt.build(ff, pt.alt(all, True{})), pt.build(ff, pt.alt(all, False{}))}
 
 # the lookup tree of a list: as many halvings as there are entries is more
 # fuel than the halving needs, so the tree never falls back on the list
@@ -796,7 +791,7 @@ def png.iend.at(zempty: Bool, zpal: Bool, pg: Pg) -> Nx:
       png.iend.ok(zpal, pg)
 
 def png.on.iend(+colour: U32, saw_plte: Bool, data: List<&2, U32>, pg: Pg) -> Nx:
-  png.iend.at(List.is_empty(&2, U32, data), Bool.or(Bool.not(U32.is_eq(colour, 3)), saw_plte), pg)
+  png.iend.at(List.is_empty(&2, U32, data), Bool.or(U32.is_ne(colour, 3), saw_plte), pg)
 
 def png.other.at(anc: Bool, pg: Pg) -> Nx:
   match anc:
@@ -805,56 +800,56 @@ def png.other.at(anc: Bool, pg: Pg) -> Nx:
     case True{}:
       NMore{png.seal(pg)}
 
-def png.apply.tr(
-  ztrns: Bool,
-  anc: Bool,
-  run: Run,
-  saw_trns: Bool,
-  saw_plte: Bool,
-  +colour: U32,
-  data: List<&2, U32>,
-  pg: Pg
-) -> Nx:
+# what a chunk after IHDR is: IHDR again, IDAT, IEND, PLTE, tRNS, and
+# whether its type has the ancillary bit
+type Tags is Data:
+  Tags{+ihdr: Bool, +idat: Bool, +iend: Bool, +plte: Bool, +trns: Bool, +anc: Bool}
+
+# what the state has seen when a chunk after IHDR comes: where the IDAT run
+# is, whether tRNS and PLTE have come, and the colour type
+type Seen is Data:
+  Seen{run: Run, +saw_trns: Bool, +saw_plte: Bool, +colour: U32}
+
+def png.seen.idat(sn: Seen, data: List<&2, U32>, pg: Pg) -> Nx:
+  match sn:
+    case Seen{run, _st, +saw_plte, +colour}:
+      png.on.idat(run, Bool.or(U32.is_ne(colour, 3), saw_plte), data, pg)
+
+def png.seen.iend(sn: Seen, data: List<&2, U32>, pg: Pg) -> Nx:
+  match sn:
+    case Seen{_r, _st, +saw_plte, +colour}:
+      png.on.iend(colour, saw_plte, data, pg)
+
+def png.seen.plte(sn: Seen, data: List<&2, U32>, pg: Pg) -> Nx:
+  match sn:
+    case Seen{run, _st, +saw_plte, +colour}:
+      png.on.plte(run, saw_plte, colour, data, pg)
+
+def png.seen.trns(sn: Seen, data: List<&2, U32>, pg: Pg) -> Nx:
+  match sn:
+    case Seen{run, +saw_trns, +saw_plte, +colour}:
+      png.on.trns(run, saw_trns, colour, saw_plte, data, pg)
+
+def png.apply.tr(ztrns: Bool, anc: Bool, sn: Seen, data: List<&2, U32>, pg: Pg) -> Nx:
   match ztrns:
     case True{}:
-      png.on.trns(run, saw_trns, colour, saw_plte, data, pg)
+      png.seen.trns(sn, data, pg)
     case False{}:
       png.other.at(anc, pg)
 
-def png.apply.pl(
-  zplte: Bool,
-  ztrns: Bool,
-  anc: Bool,
-  run: Run,
-  saw_trns: Bool,
-  saw_plte: Bool,
-  +colour: U32,
-  data: List<&2, U32>,
-  pg: Pg
-) -> Nx:
+def png.apply.pl(zplte: Bool, ztrns: Bool, anc: Bool, sn: Seen, data: List<&2, U32>, pg: Pg) -> Nx:
   match zplte:
     case True{}:
-      png.on.plte(run, saw_plte, colour, data, pg)
+      png.seen.plte(sn, data, pg)
     case False{}:
-      png.apply.tr(ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
+      png.apply.tr(ztrns, anc, sn, data, pg)
 
-def png.apply.ie(
-  ziend: Bool,
-  zplte: Bool,
-  ztrns: Bool,
-  anc: Bool,
-  run: Run,
-  saw_trns: Bool,
-  saw_plte: Bool,
-  +colour: U32,
-  data: List<&2, U32>,
-  pg: Pg
-) -> Nx:
+def png.apply.ie(ziend: Bool, zplte: Bool, ztrns: Bool, anc: Bool, sn: Seen, data: List<&2, U32>, pg: Pg) -> Nx:
   match ziend:
     case True{}:
-      png.on.iend(colour, saw_plte, data, pg)
+      png.seen.iend(sn, data, pg)
     case False{}:
-      png.apply.pl(zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
+      png.apply.pl(zplte, ztrns, anc, sn, data, pg)
 
 def png.apply.id(
   zidat: Bool,
@@ -862,39 +857,23 @@ def png.apply.id(
   zplte: Bool,
   ztrns: Bool,
   anc: Bool,
-  run: Run,
-  saw_trns: Bool,
-  saw_plte: Bool,
-  +colour: U32,
+  sn: Seen,
   data: List<&2, U32>,
   pg: Pg
 ) -> Nx:
   match zidat:
     case True{}:
-      png.on.idat(run, Bool.or(Bool.not(U32.is_eq(colour, 3)), saw_plte), data, pg)
+      png.seen.idat(sn, data, pg)
     case False{}:
-      png.apply.ie(ziend, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
+      png.apply.ie(ziend, zplte, ztrns, anc, sn, data, pg)
 
 # a chunk after IHDR: a second IHDR is refused
-def png.apply.go(
-  zihdr: Bool,
-  zidat: Bool,
-  ziend: Bool,
-  zplte: Bool,
-  ztrns: Bool,
-  anc: Bool,
-  run: Run,
-  saw_trns: Bool,
-  saw_plte: Bool,
-  +colour: U32,
-  data: List<&2, U32>,
-  pg: Pg
-) -> Nx:
-  match zihdr:
-    case True{}:
+def png.apply.go(tags: Tags, sn: Seen, data: List<&2, U32>, pg: Pg) -> Nx:
+  match tags:
+    case Tags{True{}, _id, _ie, _pl, _tr, _an}:
       NBad{}
-    case False{}:
-      png.apply.id(zidat, ziend, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
+    case Tags{False{}, +zidat, +ziend, +zplte, +ztrns, +anc}:
+      png.apply.id(zidat, ziend, zplte, ztrns, anc, sn, data, pg)
 
 def png.apply(+typ: U32, data: List<&2, U32>, pg: Pg) -> Nx:
   match pg:
@@ -902,9 +881,11 @@ def png.apply(+typ: U32, data: List<&2, U32>, pg: Pg) -> Nx:
       png.on.start(U32.is_eq(typ, tag.ihdr()), data)
     case Pg{+w, +h, +d, +colour, +comp, +f, +i, idat, +plte, +trns, +run}:
       png.apply.go(
-        U32.is_eq(typ, tag.ihdr()), U32.is_eq(typ, tag.idat()), U32.is_eq(typ, tag.iend()),
-        U32.is_eq(typ, tag.plte()), U32.is_eq(typ, tag.trns()), tag.anc(typ),
-        run, Maybe.is_some(&2, List<&2, U32>, trns), Maybe.is_some(&2, List<&2, U32>, plte), colour, data,
+        Tags{
+          U32.is_eq(typ, tag.ihdr()), U32.is_eq(typ, tag.idat()), U32.is_eq(typ, tag.iend()),
+          U32.is_eq(typ, tag.plte()), U32.is_eq(typ, tag.trns()), tag.anc(typ)
+        },
+        Seen{run, Maybe.is_some(&2, List<&2, U32>, trns), Maybe.is_some(&2, List<&2, U32>, plte), colour}, data,
         Pg{w, h, d, colour, comp, f, i, idat, plte, trns, run}
       )
 
@@ -987,7 +968,7 @@ def uf.rows.at(zz: Bool, raw: List<&2, U32>, +stride: U32, +hh: U32, +bpp: U32) 
     case False{}:
       None{}
     case True{}:
-      uf.go(raw, UFilt{}, False{}, bpp, stride, U32.to_nat(hh), [], [], [], [], 0, 0)
+      uf.go(raw, UFilt{}, False{}, bpp, stride, U32.to_nat(hh), Ur{[], [], [], 0, 0}, [])
 
 # undo the filters of hh rows of `stride` bytes each, `bpp` bytes per pixel
 # back (1 to 8): the scanlines of any bit depth, or of one Adam7 pass
@@ -1198,73 +1179,42 @@ def pass.rows(mm: Maybe<&2, List<&2, U32>>, rest: List<&2, U32>, +pw: U32, +ph: 
     case Some{+px}:
       PGot{rows.split(U32.to_nat(ph), px, U32.to_nat(pw)), rest}
 
-def pass.px(
-  mm: Maybe<&2, List<&2, U32>>,
-  rest: List<&2, U32>,
-  +sn: Nat,
-  +pw: U32,
-  +ph: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
-) -> Pass:
-  match mm:
-    case None{}:
+def pass.px(mm: Maybe<&2, List<&2, U32>>, rest: List<&2, U32>, +sn: Nat, +pw: U32, +ph: U32, +hd: Hd) -> Pass:
+  match mm hd:
+    case None{} _h:
       PBad{}
-    case Some{+bytes}:
+    case Some{+bytes} Hd{_w, _h, +dd, +cc, +plte, +trns}:
       +count = Nat.mul(U32.to_nat(pw), U32.to_nat(png.bpp(cc)))
       pass.rows(px.deep(cc, dd, pass.samples(U32.to_nat(ph), dd, bytes, sn, count, []), plte, trns), rest, pw, ph)
 
-def pass.fit(
-  zz: Bool,
-  +raw: List<&2, U32>,
-  +sn: Nat,
-  +pw: U32,
-  +ph: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
-) -> Pass:
+# bits per pixel of the header's bit depth and colour type
+def hd.bits(hd: Hd) -> U32:
+  match hd:
+    case Hd{_w, _h, +dd, +cc, _p, _t}:
+      png.bits(dd, cc)
+
+def pass.fit(zz: Bool, +raw: List<&2, U32>, +sn: Nat, +pw: U32, +ph: U32, +hd: Hd) -> Pass:
   match zz:
     case False{}:
       PBad{}
     case True{}:
       +nn = Nat.mul(U32.to_nat(ph), 1n+sn)
-      +bits = png.bits(dd, cc)
-      pass.px(unfilter.rows(List.take(&2, U32, raw, nn), U32.from_nat(sn), ph, png.fbpp(bits)),
-        List.drop(&2, U32, raw, nn), sn, pw, ph, dd, cc, plte, trns)
+      pass.px(unfilter.rows(List.take(&2, U32, raw, nn), U32.from_nat(sn), ph, png.fbpp(hd.bits(hd))),
+        List.drop(&2, U32, raw, nn), sn, pw, ph, hd)
 
-def pass.open(
-  zz: Bool,
-  +raw: List<&2, U32>,
-  +pw: U32,
-  +ph: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
-) -> Pass:
+def pass.open(zz: Bool, +raw: List<&2, U32>, +pw: U32, +ph: U32, +hd: Hd) -> Pass:
   match zz:
     case True{}:
       PGot{[], raw}
     case False{}:
-      +sn = png.stride(U32.to_nat(pw), png.bits(dd, cc))
-      pass.fit(Nat.is_eq(U32.to_nat(U32.from_nat(sn)), sn), raw, sn, pw, ph, dd, cc, plte, trns)
+      +sn = png.stride(U32.to_nat(pw), hd.bits(hd))
+      pass.fit(Nat.is_eq(U32.to_nat(U32.from_nat(sn)), sn), raw, sn, pw, ph, hd)
 
 # a pass of pw by ph pixels, its scanlines filtered on their own (PNG section
-# 8.2); a pass with a side 0 is empty and has no bytes
-def pass.read(
-  +raw: List<&2, U32>,
-  +pw: U32,
-  +ph: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
-) -> Pass:
-  pass.open(Bool.or(U32.is_zero(pw), U32.is_zero(ph)), raw, pw, ph, dd, cc, plte, trns)
+# 8.2); a pass with a side 0 is empty and has no bytes. hd's samples format
+# is the pass's; its size is the whole picture's
+def pass.read(+raw: List<&2, U32>, +pw: U32, +ph: U32, +hd: Hd) -> Pass:
+  pass.open(Bool.or(U32.is_zero(pw), U32.is_zero(ph)), raw, pw, ph, hd)
 
 # ceil(n / 2)
 def png.up(+nn: U32) -> U32:
@@ -1370,18 +1320,13 @@ def a7.s6(
   r4: List<&2, List<&2, U32>>,
   r5: List<&2, List<&2, U32>>,
   pp: Pass,
-  +ww: U32,
-  +hh: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
+  +hd: Hd
 ) -> Maybe<&2, List<&2, U32>>:
-  match pp:
-    case PBad{}:
+  match pp hd:
+    case PBad{} _h:
       None{}
-    case PGot{r6, t6}:
-      a7.s7(r1, r2, r3, r4, r5, r6, pass.read(t6, ww, png.dn(hh), dd, cc, plte, trns))
+    case PGot{r6, t6} Hd{+ww, +hh, _d, _c, _p, _t}:
+      a7.s7(r1, r2, r3, r4, r5, r6, pass.read(t6, ww, png.dn(hh), hd))
 
 def a7.s5(
   r1: List<&2, List<&2, U32>>,
@@ -1389,106 +1334,75 @@ def a7.s5(
   r3: List<&2, List<&2, U32>>,
   r4: List<&2, List<&2, U32>>,
   pp: Pass,
-  +ww: U32,
-  +hh: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
+  +hd: Hd
 ) -> Maybe<&2, List<&2, U32>>:
-  match pp:
-    case PBad{}:
+  match pp hd:
+    case PBad{} _h:
       None{}
-    case PGot{r5, t5}:
-      a7.s6(r1, r2, r3, r4, r5, pass.read(t5, png.dn(ww), png.up(hh), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+    case PGot{r5, t5} Hd{+ww, +hh, _d, _c, _p, _t}:
+      a7.s6(r1, r2, r3, r4, r5, pass.read(t5, png.dn(ww), png.up(hh), hd), hd)
 
 def a7.s4(
   r1: List<&2, List<&2, U32>>,
   r2: List<&2, List<&2, U32>>,
   r3: List<&2, List<&2, U32>>,
   pp: Pass,
-  +ww: U32,
-  +hh: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
+  +hd: Hd
 ) -> Maybe<&2, List<&2, U32>>:
-  match pp:
-    case PBad{}:
+  match pp hd:
+    case PBad{} _h:
       None{}
-    case PGot{r4, t4}:
+    case PGot{r4, t4} Hd{+ww, +hh, _d, _c, _p, _t}:
       +w1 = png.up(ww)
-      a7.s5(r1, r2, r3, r4, pass.read(t4, w1, png.dn(png.up(hh)), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s5(r1, r2, r3, r4, pass.read(t4, w1, png.dn(png.up(hh)), hd), hd)
 
 def a7.s3(
   r1: List<&2, List<&2, U32>>,
   r2: List<&2, List<&2, U32>>,
   pp: Pass,
-  +ww: U32,
-  +hh: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
+  +hd: Hd
 ) -> Maybe<&2, List<&2, U32>>:
-  match pp:
-    case PBad{}:
+  match pp hd:
+    case PBad{} _h:
       None{}
-    case PGot{r3, t3}:
+    case PGot{r3, t3} Hd{+ww, +hh, _d, _c, _p, _t}:
       +w1 = png.up(ww)
       +h2 = png.up(png.up(hh))
-      a7.s4(r1, r2, r3, pass.read(t3, png.dn(w1), h2, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s4(r1, r2, r3, pass.read(t3, png.dn(w1), h2, hd), hd)
 
 def a7.s2(
   r1: List<&2, List<&2, U32>>,
   pp: Pass,
-  +ww: U32,
-  +hh: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
+  +hd: Hd
 ) -> Maybe<&2, List<&2, U32>>:
-  match pp:
-    case PBad{}:
+  match pp hd:
+    case PBad{} _h:
       None{}
-    case PGot{r2, t2}:
+    case PGot{r2, t2} Hd{+ww, +hh, _d, _c, _p, _t}:
       +w2 = png.up(png.up(ww))
       +h2 = png.up(png.up(hh))
-      a7.s3(r1, r2, pass.read(t2, w2, png.dn(h2), dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s3(r1, r2, pass.read(t2, w2, png.dn(h2), hd), hd)
 
 def a7.s1(
   pp: Pass,
-  +ww: U32,
-  +hh: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
+  +hd: Hd
 ) -> Maybe<&2, List<&2, U32>>:
-  match pp:
-    case PBad{}:
+  match pp hd:
+    case PBad{} _h:
       None{}
-    case PGot{r1, t1}:
+    case PGot{r1, t1} Hd{+ww, +hh, _d, _c, _p, _t}:
       +w2 = png.up(png.up(ww))
       +h3 = png.up(png.up(png.up(hh)))
-      a7.s2(r1, pass.read(t1, png.dn(w2), h3, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+      a7.s2(r1, pass.read(t1, png.dn(w2), h3, hd), hd)
 
 # Adam7 (PNG section 8.2): seven passes in order, each a picture of its own,
 # read at the sizes png.a7.len counts and put back together by a7.merge
-def a7.go(
-  +raw: List<&2, U32>,
-  +ww: U32,
-  +hh: U32,
-  +dd: U32,
-  +cc: U32,
-  +plte: List<&2, U32>,
-  +trns: List<&2, U32>
-) -> Maybe<&2, List<&2, U32>>:
-  +w3 = png.up(png.up(png.up(ww)))
-  +h3 = png.up(png.up(png.up(hh)))
-  a7.s1(pass.read(raw, w3, h3, dd, cc, plte, trns), ww, hh, dd, cc, plte, trns)
+def a7.go(+raw: List<&2, U32>, +hd: Hd) -> Maybe<&2, List<&2, U32>>:
+  match hd:
+    case Hd{+ww, +hh, _d, _c, _p, _t}:
+      +w3 = png.up(png.up(png.up(ww)))
+      +h3 = png.up(png.up(png.up(hh)))
+      a7.s1(pass.read(raw, w3, h3, hd), hd)
 
 # the filtered bytes of a pass of pw by ph pixels: a filter byte and a
 # scanline for each row, none for an empty pass
@@ -1545,9 +1459,9 @@ def png.deep.at(
 ) -> Maybe<&2, List<&2, U32>>:
   match zz:
     case True{}:
-      png.flat(pass.read(raw, ww, hh, dd, cc, plte, trns))
+      png.flat(pass.read(raw, ww, hh, Hd{ww, hh, dd, cc, plte, trns}))
     case False{}:
-      a7.go(raw, ww, hh, dd, cc, plte, trns)
+      a7.go(raw, Hd{ww, hh, dd, cc, plte, trns})
 
 # the picture of any bit depth and interlace method from the inflated data
 def png.deep(
@@ -1575,22 +1489,12 @@ def png.budget8(+ww: U32, +hh: U32, +cc: U32) -> Nat:
 # 8-bit samples without interlacing take png.samples; any other bit depth,
 # or Adam7, png.deep. Either way the inflater stops once the data passes the
 # length the header implies
-def png.finish.go(
-  zenc: Bool,
-  +ww: U32,
-  +hh: U32,
-  +dd: U32,
-  +colour: U32,
-  +ii: U32,
-  idat: List<&2, U32>,
-  plte: List<&2, U32>,
-  trns: List<&2, U32>
-) -> Maybe<&2, Pic>:
-  match zenc:
-    case True{}:
+def png.finish.go(zenc: Bool, +ii: U32, idat: List<&2, U32>, hd: Hd) -> Maybe<&2, Pic>:
+  match zenc hd:
+    case True{} Hd{+ww, +hh, _d, +colour, plte, trns}:
       png.samples(Inf.inflate.upto(png.budget8(ww, hh, colour), List.reverse(&2, U32, idat)), ww, hh, colour, plte,
         trns)
-    case False{}:
+    case False{} Hd{+ww, +hh, +dd, +colour, plte, trns}:
       png.deep(Inf.inflate.upto(png.budget(ww, hh, dd, colour, ii), List.reverse(&2, U32, idat)), ww, hh, dd,
         colour, ii, plte, trns)
 
@@ -1609,7 +1513,7 @@ def png.finish(pg: Pg) -> Maybe<&2, Pic>:
       None{}
     case Pg{+w, +h, +d, +colour, +comp, +f, +i, idat, plte, trns, _run}:
       png.finish.go(Bool.and(U32.is_eq(d, 8), Bool.and(U32.is_zero(comp), Bool.and(U32.is_zero(f), U32.is_zero(i)))),
-        w, h, d, colour, i, idat, png.or.nil(plte), png.or.nil(trns))
+        i, idat, Hd{w, h, d, colour, png.or.nil(plte), png.or.nil(trns)})
 
 # after a judged chunk: none when it was refused, the picture when it was
 # IEND (whatever bytes follow it, as libpng and other decoders stop reading
@@ -1915,57 +1819,51 @@ def enc.bf.at(zz: Bool) -> U32:
 def enc.bf(+nn: U32) -> U32:
   enc.bf.at(U32.is_le(nn, 65535))
 
+# where enc.pour stands in its stored blocks: `room` is the data bytes left
+# in the open block, including this one; `left` counts raw bytes still to
+# come, including this one; `len` and `bf` are the length and BFINAL of the
+# block a new header opens
+type Pb is Data:
+  Pb{+room: U32, +left: U32, +len: U32, +bf: U32}
+
+# a stored block's header bytes, BFINAL first, with the CRC run over them
+def enc.head.crc(+len: U32, +bf: U32, +cc: U32) -> U32:
+  +nlen = (len .^. 65535 : U32)
+  +c1 = Crc.crc.byte(cc, bf)
+  +c2 = Crc.crc.byte(c1, enc.byte(len))
+  +c3 = Crc.crc.byte(c2, enc.hi(len))
+  +c4 = Crc.crc.byte(c3, enc.byte(nlen))
+  Crc.crc.byte(c4, enc.hi(nlen))
+
+# a stored block's header bytes, BFINAL first, consed newest-first
+def enc.head.acc(+len: U32, +bf: U32, acc: List<&2, U32>) -> List<&2, U32>:
+  +nlen = (len .^. 65535 : U32)
+  +a0 = {bf <> acc : List<&2, U32>}
+  +a1 = {enc.byte(len) <> a0 : List<&2, U32>}
+  +a2 = {enc.hi(len) <> a1 : List<&2, U32>}
+  +a3 = {enc.byte(nlen) <> a2 : List<&2, U32>}
+  {enc.hi(nlen) <> a3 : List<&2, U32>}
+
 # stored blocks, newest-first, CRC running over headers and data. `znew` means
 # this byte opens a block of length `len` with BFINAL `bf`. `zlast` means this
-# data byte closes the block. `room` is the data bytes left in the open block,
-# including this one. `left` counts raw bytes still to come, including `h`.
-def enc.pour(
-  xs: List<&2, U32>,
-  znew: Bool,
-  zlast: Bool,
-  +room: U32,
-  +left: U32,
-  +len: U32,
-  +bf: U32,
-  +cc: U32,
-  acc: List<&2, U32>
-) -> U32 & List<&2, U32>:
-  match xs znew zlast:
-    case Nil{} _z _last:
+# data byte closes the block.
+def enc.pour(xs: List<&2, U32>, znew: Bool, zlast: Bool, pb: Pb, +cc: U32, acc: List<&2, U32>) -> U32 & List<&2, U32>:
+  match xs znew zlast pb:
+    case Nil{} _z _last _pb:
       (cc, acc)
-    case +h <> t False{} False{}:
+    case +h <> t False{} False{} Pb{+room, +left, +len, +bf}:
       +room2 = (room - 1 : U32)
-      enc.pour(
-        t, False{}, U32.is_eq(room2, 1), room2, (left - 1 : U32), len, bf, Crc.crc.byte(cc, h),
-        {h <> acc : List<&2, U32>}
-      )
-    case +h <> t False{} True{}:
+      enc.pour(t, False{}, U32.is_eq(room2, 1), Pb{room2, (left - 1 : U32), len, bf}, Crc.crc.byte(cc, h),
+        {h <> acc : List<&2, U32>})
+    case +h <> t False{} True{} Pb{_r, +left, _l, _b}:
       +left2 = (left - 1 : U32)
-      enc.pour(
-        t, True{}, False{}, 0, left2, enc.cap(left2), enc.bf(left2), Crc.crc.byte(cc, h),
-        {h <> acc : List<&2, U32>}
-      )
-    case +h <> t True{} _last:
-      +nlen = (len .^. 65535 : U32)
-      +b1 = enc.byte(len)
-      +b2 = enc.hi(len)
-      +b3 = enc.byte(nlen)
-      +b4 = enc.hi(nlen)
-      +c1 = Crc.crc.byte(cc, bf)
-      +c2 = Crc.crc.byte(c1, b1)
-      +c3 = Crc.crc.byte(c2, b2)
-      +c4 = Crc.crc.byte(c3, b3)
-      +c5 = Crc.crc.byte(c4, b4)
-      +c6 = Crc.crc.byte(c5, h)
-      +a0 = {bf <> acc : List<&2, U32>}
-      +a1 = {b1 <> a0 : List<&2, U32>}
-      +a2 = {b2 <> a1 : List<&2, U32>}
-      +a3 = {b3 <> a2 : List<&2, U32>}
-      +a4 = {b4 <> a3 : List<&2, U32>}
-      +a5 = {h <> a4 : List<&2, U32>}
+      enc.pour(t, True{}, False{}, Pb{0, left2, enc.cap(left2), enc.bf(left2)}, Crc.crc.byte(cc, h),
+        {h <> acc : List<&2, U32>})
+    case +h <> t True{} _last Pb{_r, +left, +len, +bf}:
       +left2 = (left - 1 : U32)
       +room2 = (len - 1 : U32)
-      enc.pour(t, U32.is_zero(room2), U32.is_eq(room2, 1), room2, left2, enc.cap(left2), enc.bf(left2), c6, a5)
+      enc.pour(t, U32.is_zero(room2), U32.is_eq(room2, 1), Pb{room2, left2, enc.cap(left2), enc.bf(left2)},
+        Crc.crc.byte(enc.head.crc(len, bf, cc), h), {h <> enc.head.acc(len, bf, acc) : List<&2, U32>})
 
 # Adler-32, then the CRC field, then IEND, then one reverse of the whole file
 def enc.seal.crc(pp: U32 & List<&2, U32>, ie: List<&2, U32>) -> List<&2, U32>:
@@ -1990,7 +1888,7 @@ def enc.seal.run(
 ) -> List<&2, U32>:
   match pp:
     case (+c, acc):
-      enc.seal.adler(enc.pour(raw, True{}, False{}, 0, nn, enc.cap(nn), enc.bf(nn), c, acc), sum, ie)
+      enc.seal.adler(enc.pour(raw, True{}, False{}, Pb{0, nn, enc.cap(nn), enc.bf(nn)}, c, acc), sum, ie)
 
 # IDAT type, then the zlib stream
 def enc.seal.body(
@@ -2021,148 +1919,89 @@ def enc.add(+ss: U32, +xx: U32) -> U32:
 def enc.rgb.fin(+cc: U32, acc: List<&2, U32>, +aa: U32, +bb: U32) -> (U32 & List<&2, U32>) & U32:
   ((cc, acc), ((bb << 16n : U32) .|. aa : U32))
 
-# stored blocks for colour type 2, one decreasing step at a time. zblock opens
-# a block and zspan counts its raw bytes. The other flags are the cursor: a
-# filter byte, red, green, or the last sample of the row. Block headers match
-# enc.pour. Adler-32 covers the raw bytes only.
-def enc.rgb.go(
-  fuel: Nat,
-  zblock: Bool,
-  zdone: Bool,
-  zspan: Bool,
-  zneed: Bool,
-  filt: Bool,
-  zred: Bool,
-  zgrn: Bool,
-  zlast: Bool,
-  px: List<&2, U32>,
-  +col: U32,
-  +row: U32,
-  +ww: U32,
-  +need: U32,
-  +cc: U32,
-  acc: List<&2, U32>,
-  +aa: U32,
-  +bb: U32,
-  +left: U32,
-  +len: U32
-) -> (U32 & List<&2, U32>) & U32:
-  match fuel:
-    case 0n:
+# where enc.rgb.go's stored blocks stand: zblock opens a block and zdone
+# says no raw bytes are left for one; zspan says a block is open and zneed
+# that it is full. `need` counts the bytes still open in the block, `left`
+# the raw bytes from the open block's start on, and `len` the open block's
+# length
+type Bk is Data:
+  Bk{+zblock: Bool, +zdone: Bool, +zspan: Bool, +zneed: Bool, +need: U32, +left: U32, +len: U32}
+
+# enc.rgb.go's cursor over the samples: a filter byte, red, green, or the
+# last sample of the row is next. px holds the samples after col, the
+# sample being written, and row counts the row's samples from col on, of ww
+type Cr is Data:
+  Cr{+filt: Bool, +zred: Bool, +zgrn: Bool, +zlast: Bool, +px: List<&2, U32>, +col: U32, +row: U32, +ww: U32}
+
+# what enc.rgb.go has written: the running CRC, the newest-first bytes and
+# the two Adler-32 sums
+type Out is Data:
+  Out{+cc: U32, acc: List<&2, U32>, +aa: U32, +bb: U32}
+
+# a stored block's header for the `left` raw bytes still to come, its CRC run
+def enc.rgb.head(+left: U32, +cc: U32, acc: List<&2, U32>, +aa: U32, +bb: U32) -> Out:
+  +len2 = enc.cap(left)
+  +bf = enc.bf(left)
+  Out{enc.head.crc(len2, bf, cc), enc.head.acc(len2, bf, acc), aa, bb}
+
+# the raw byte the cursor is at: 0 for a filter byte (and for red past the
+# samples), else the sample's red, green or blue
+def enc.rgb.byte(cr: Cr) -> U32:
+  match cr:
+    case Cr{True{}, _r, _g, _l, _p, _c, _w, _ww}:
+      0
+    case Cr{False{}, True{}, _g, _l, Nil{}, _c, _w, _ww}:
+      0
+    case Cr{False{}, True{}, _g, _l, Con{+smp, _t}, _c, _w, _ww}:
+      enc.r(smp)
+    case Cr{False{}, False{}, True{}, _l, _p, +col, _w, _ww}:
+      enc.g(col)
+    case Cr{False{}, False{}, False{}, _l, _p, +col, _w, _ww}:
+      enc.b(col)
+
+# the cursor one raw byte on
+def enc.rgb.step(cr: Cr) -> Cr:
+  match cr:
+    case Cr{True{}, _r, _g, _l, +px, +col, +row, +ww}:
+      Cr{False{}, True{}, False{}, False{}, px, col, row, ww}
+    case Cr{False{}, True{}, _g, _l, Nil{}, _c, +row, +ww}:
+      Cr{False{}, False{}, True{}, False{}, [], 0, row, ww}
+    case Cr{False{}, True{}, _g, _l, Con{+smp, +rest}, _c, +row, +ww}:
+      Cr{False{}, False{}, True{}, False{}, rest, smp, row, ww}
+    case Cr{False{}, False{}, True{}, _l, +px, +col, +row, +ww}:
+      Cr{False{}, False{}, False{}, U32.is_eq(row, 1), px, col, row, ww}
+    case Cr{False{}, False{}, False{}, True{}, +px, +col, _r, +ww}:
+      Cr{True{}, True{}, False{}, False{}, px, col, ww, ww}
+    case Cr{False{}, False{}, False{}, False{}, +px, +col, +row, +ww}:
+      Cr{False{}, True{}, False{}, False{}, px, col, (row - 1 : U32), ww}
+
+# one raw byte written: CRC, the bytes, and Adler-32
+def enc.rgb.put(+xx: U32, +cc: U32, acc: List<&2, U32>, +aa: U32, +bb: U32) -> Out:
+  +a2 = enc.add(aa, xx)
+  +b2 = enc.add(bb, a2)
+  Out{Crc.crc.byte(cc, xx), {xx <> acc : List<&2, U32>}, a2, b2}
+
+# stored blocks for colour type 2, one decreasing step at a time: a block's
+# header, a raw byte the cursor gives, or the step that closes a full block.
+# Block headers match enc.pour. Adler-32 covers the raw bytes only.
+def enc.rgb.go(fuel: Nat, bk: Bk, +cr: Cr, out: Out) -> (U32 & List<&2, U32>) & U32:
+  match fuel bk out:
+    case 0n _b Out{+cc, acc, +aa, +bb}:
       enc.rgb.fin(cc, acc, aa, bb)
-    case 1n+p:
-      match zblock:
-        case True{}:
-          match zdone:
-            case True{}:
-              enc.rgb.fin(cc, acc, aa, bb)
-            case False{}:
-              +len2 = enc.cap(left)
-              +bf = enc.bf(left)
-              +nlen = (len2 .^. 65535 : U32)
-              +b1 = enc.byte(len2)
-              +b2 = enc.hi(len2)
-              +b3 = enc.byte(nlen)
-              +b4 = enc.hi(nlen)
-              +c1 = Crc.crc.byte(cc, bf)
-              +c2 = Crc.crc.byte(c1, b1)
-              +c3 = Crc.crc.byte(c2, b2)
-              +c4 = Crc.crc.byte(c3, b3)
-              +c5 = Crc.crc.byte(c4, b4)
-              +a0 = {bf <> acc : List<&2, U32>}
-              +a1 = {b1 <> a0 : List<&2, U32>}
-              +a2 = {b2 <> a1 : List<&2, U32>}
-              +a3 = {b3 <> a2 : List<&2, U32>}
-              +a4 = {b4 <> a3 : List<&2, U32>}
-              enc.rgb.go(
-                p, False{}, False{}, True{}, False{}, filt, zred, zgrn, zlast, px, col, row, ww, len2, c5, a4, aa,
-                bb, left, len2
-              )
-        case False{}:
-          match zdone:
-            case _dn:
-              match zspan:
-                case False{}:
-                  enc.rgb.fin(cc, acc, aa, bb)
-                case True{}:
-                  match zneed:
-                    case True{}:
-                      +left2 = (left - len : U32)
-                      enc.rgb.go(
-                        p, True{}, U32.is_zero(left2), False{}, False{}, filt, zred, zgrn, zlast, px, col, row, ww,
-                        need, cc, acc, aa, bb, left2, len
-                      )
-                    case False{}:
-                      match filt:
-                        case True{}:
-                          +need2 = (need - 1 : U32)
-                          +a2 = enc.add(aa, 0)
-                          +b2 = enc.add(bb, a2)
-                          enc.rgb.go(
-                            p, False{}, False{}, True{}, U32.is_zero(need2), False{}, True{}, False{}, False{}, px,
-                            col, row, ww, need2, Crc.crc.byte(cc, 0), {0 <> acc : List<&2, U32>}, a2, b2, left, len
-                          )
-                        case False{}:
-                          match zred:
-                            case True{}:
-                              match zgrn:
-                                case _gn:
-                                  match zlast:
-                                    case _ls:
-                                      match px:
-                                        case Nil{}:
-                                          +need2 = (need - 1 : U32)
-                                          +a2 = enc.add(aa, 0)
-                                          +b2 = enc.add(bb, a2)
-                                          enc.rgb.go(
-                                            p, False{}, False{}, True{}, U32.is_zero(need2), False{}, False{}, True{},
-                                            False{}, [], 0, row, ww, need2, Crc.crc.byte(cc, 0),
-                                            {0 <> acc : List<&2, U32>}, a2, b2, left, len
-                                          )
-                                        case +s <> t:
-                                          +x = enc.r(s)
-                                          +need2 = (need - 1 : U32)
-                                          +a2 = enc.add(aa, x)
-                                          +b2 = enc.add(bb, a2)
-                                          enc.rgb.go(
-                                            p, False{}, False{}, True{}, U32.is_zero(need2), False{}, False{}, True{},
-                                            False{}, t, s, row, ww, need2, Crc.crc.byte(cc, x),
-                                            {x <> acc : List<&2, U32>}, a2, b2, left, len
-                                          )
-                            case False{}:
-                              match zgrn:
-                                case True{}:
-                                  +x = enc.g(col)
-                                  +need2 = (need - 1 : U32)
-                                  +a2 = enc.add(aa, x)
-                                  +b2 = enc.add(bb, a2)
-                                  enc.rgb.go(
-                                    p, False{}, False{}, True{}, U32.is_zero(need2), False{}, False{}, False{},
-                                    U32.is_eq(row, 1), px, col, row, ww, need2, Crc.crc.byte(cc, x),
-                                    {x <> acc : List<&2, U32>}, a2, b2, left, len
-                                  )
-                                case False{}:
-                                  match zlast:
-                                    case True{}:
-                                      +x = enc.b(col)
-                                      +need2 = (need - 1 : U32)
-                                      +a2 = enc.add(aa, x)
-                                      +b2 = enc.add(bb, a2)
-                                      enc.rgb.go(
-                                        p, False{}, False{}, True{}, U32.is_zero(need2), True{}, True{}, False{},
-                                        False{}, px, col, ww, ww, need2, Crc.crc.byte(cc, x),
-                                        {x <> acc : List<&2, U32>}, a2, b2, left, len
-                                      )
-                                    case False{}:
-                                      +x = enc.b(col)
-                                      +need2 = (need - 1 : U32)
-                                      +a2 = enc.add(aa, x)
-                                      +b2 = enc.add(bb, a2)
-                                      enc.rgb.go(
-                                        p, False{}, False{}, True{}, U32.is_zero(need2), False{}, True{}, False{},
-                                        False{}, px, col, (row - 1 : U32), ww, need2, Crc.crc.byte(cc, x),
-                                        {x <> acc : List<&2, U32>}, a2, b2, left, len
-                                      )
+    case 1n+_p Bk{True{}, True{}, _s, _n, _nd, _l, _ln} Out{+cc, acc, +aa, +bb}:
+      enc.rgb.fin(cc, acc, aa, bb)
+    case 1n+p Bk{True{}, False{}, _s, _n, _nd, +left, _ln} Out{+cc, acc, +aa, +bb}:
+      +len2 = enc.cap(left)
+      enc.rgb.go(p, Bk{False{}, False{}, True{}, False{}, len2, left, len2}, cr, enc.rgb.head(left, cc, acc, aa, bb))
+    case 1n+_p Bk{False{}, _d, False{}, _n, _nd, _l, _ln} Out{+cc, acc, +aa, +bb}:
+      enc.rgb.fin(cc, acc, aa, bb)
+    case 1n+p Bk{False{}, _d, True{}, True{}, +need, +left, +len} Out{+cc, acc, +aa, +bb}:
+      +left2 = (left - len : U32)
+      enc.rgb.go(p, Bk{True{}, U32.is_zero(left2), False{}, False{}, need, left2, len}, cr, Out{cc, acc, aa, bb})
+    case 1n+p Bk{False{}, _d, True{}, False{}, +need, +left, +len} Out{+cc, acc, +aa, +bb}:
+      +need2 = (need - 1 : U32)
+      enc.rgb.go(p, Bk{False{}, False{}, True{}, U32.is_zero(need2), need2, left, len}, enc.rgb.step(cr),
+        enc.rgb.put(enc.rgb.byte(cr), cc, acc, aa, bb))
 
 def enc.wide.rgb.out(pp: (U32 & List<&2, U32>) & U32, ie: List<&2, U32>) -> List<&2, U32>:
   match pp:
@@ -2180,10 +2019,8 @@ def enc.wide.rgb.z(
   match pp:
     case (+c, acc):
       +steps = ((nn + (enc.nblk(nn) * 2 : U32) : U32) - 1 : U32)
-      got = enc.rgb.go(
-        U32.to_nat(steps), True{}, False{}, False{}, False{}, True{}, True{}, False{}, False{}, px, 0, ww, ww, 0, c,
-        acc, 1, 0, nn, 0
-      )
+      got = enc.rgb.go(U32.to_nat(steps), Bk{True{}, False{}, False{}, False{}, 0, nn, 0},
+        Cr{True{}, True{}, False{}, False{}, px, 0, ww, ww}, Out{c, acc, 1, 0})
       enc.wide.rgb.out(got, ie)
 
 # IDAT type, then the zlib stream

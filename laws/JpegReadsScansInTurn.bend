@@ -66,9 +66,9 @@ law jpeg_scans_in_turn:
   for +tabs2: Jpeg.Tabs
   for +ent2: List<&2, U32>
   for +ri2: U32
-  for h_next: {Jpeg.decode.walk(List.reverse(&2, U32, acc), Jpeg.decode.mark(mark, frame, Jpeg.decode.scan0(), tabs, [],
-    ri, 1, 0)) == Jpeg.St{Jpeg.Stop{}, frame, Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, tabs2, ent2, ri2, 1, 0} :
-    Jpeg.St}
+  for h_next: {Jpeg.decode.walk(List.reverse(&2, U32, acc), Jpeg.decode.mark(mark, Jpeg.Rd{frame, Jpeg.decode.scan0(),
+    tabs, [], ri, 1, 0})) == Jpeg.St{Jpeg.Stop{}, frame, Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, tabs2, ent2, ri2, 1,
+    0} : Jpeg.St}
   {Img.decode_jpeg(bytes) == Img.decode_jpeg.out(Jpeg.decode.passes(frame, [Jpeg.Pass{scan, tabs, List.reverse(&2, U32,
     ent), ri}, Jpeg.Pass{Jpeg.Scan{ns, sids, td, ta, ss, se, ah}, tabs2, List.reverse(&2, U32, ent2), ri2}],
     Jpeg.decode.rgb.of(Jpeg.decode.facts(bytes), frame))) : Maybe<&2, Img.Raster>}

@@ -234,7 +234,7 @@ def nf1.pk(
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> pk.Ty(pic.px(Jpeg.decode.done.nf1(one, nf, rgb, ww, hh, ups, yy, cb, cr))):
+) -> pk.Ty(pic.px(Jpeg.decode.done.nf1(one, nf, rgb, ww, hh, ups, Jpeg.Planes{yy, cb, cr}))):
   match one:
     case True{}:
       match ups:
@@ -277,7 +277,8 @@ def blocks.pk(
   cb: Array<U32>,
   cr: Array<U32>,
   +ok: U32
-) -> pk.Ty(pic.px(Jpeg.decode.blocks(left, live, blk, ctrl, preds, frame, scan, tabs, ri, rgb, yy, cb, cr, ok))):
+) -> pk.Ty(pic.px(Jpeg.decode.blocks(left, live, blk, ctrl, preds, Jpeg.Job{frame, scan, tabs, ri}, rgb,
+  Jpeg.Paint{ok, yy, cb, cr}))):
   match left:
     case 0n:
       match live:
@@ -320,7 +321,7 @@ def start.pk(
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
-) -> pk.Ty(pic.px(Jpeg.decode.start(nn, bits, frame, scan, tabs, ri, rgb, yy, cb, cr))):
+) -> pk.Ty(pic.px(Jpeg.decode.start(nn, bits, Jpeg.Job{frame, scan, tabs, ri}, rgb, yy, cb, cr))):
   match nn:
     case 0n:
       none.pk()
@@ -341,7 +342,7 @@ def runf.pk(
   ent: List<&2, U32>,
   +ri: U32,
   +rgb: Bool
-) -> pk.Ty(pic.px(Jpeg.decode.run.fit(fit, nb, ww, hh, frame, scan, tabs, ent, ri, rgb))):
+) -> pk.Ty(pic.px(Jpeg.decode.run.fit(fit, nb, ww, hh, Jpeg.Job{frame, scan, tabs, ri}, ent, rgb))):
   match fit:
     case False{}:
       none.pk()
@@ -360,7 +361,7 @@ def runn.pk(
   +ent: List<&2, U32>,
   +ri: U32,
   +rgb: Bool
-) -> pk.Ty(pic.px(Jpeg.decode.run.n(empty, ww, hh, frame, scan, tabs, ent, ri, rgb))):
+) -> pk.Ty(pic.px(Jpeg.decode.run.n(empty, ww, hh, Jpeg.Job{frame, scan, tabs, ri}, ent, rgb))):
   match empty:
     case True{}:
       none.pk()
@@ -415,7 +416,7 @@ def fph.pk(
   +kind: U32,
   +bad: U32,
   +facts: U32
-) -> pk.Ty(pic.px(Jpeg.decode.finish.ph(done, frame, scan, tabs, ent, ri, kind, bad, facts))):
+) -> pk.Ty(pic.px(Jpeg.decode.finish.ph(done, frame, Jpeg.Pass{scan, tabs, ent, ri}, kind, bad, facts))):
   match done:
     case True{}:
       fok.pk(Bool.and(U32.is_eq(kind, 1), Jpeg.decode.facts.soi(facts)), U32.is_eq(bad, 0), frame, scan, tabs, ent,
@@ -493,7 +494,7 @@ def fat.pk(
   +kind: U32,
   +bad: U32,
   +facts: U32
-) -> pk.Ty(pic.px(Jpeg.decode.finish.at(phase, frame, scan, tabs, ent, ri, kind, bad, facts))):
+) -> pk.Ty(pic.px(Jpeg.decode.finish.at(phase, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}, facts))):
   match phase:
     case Jpeg.Rest{+mark, +acc}:
       +st = {Jpeg.St{Jpeg.Rest{mark, acc}, frame, scan, tabs, ent, ri, kind, bad} : Jpeg.St}

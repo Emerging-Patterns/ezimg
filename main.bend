@@ -364,27 +364,15 @@ def blit.join(
       U32.to_nat(sw)),
     skip.rows(U32.to_nat(rows), rest, wn)))
 
-def blit.y(
-  inside: Bool,
-  +dp: List<&2, U32>,
-  +sp: List<&2, U32>,
-  +dw: U32,
-  +dh: U32,
-  +sw: U32,
-  +sh: U32,
-  +ox: U32,
-  +oy: U32
-) -> List<&2, U32>:
-  match inside:
-    case False{}:
+def blit.y(inside: Bool, +dp: List<&2, U32>, src: Raster, +dw: U32, +dh: U32, +ox: U32, +oy: U32) -> List<&2, U32>:
+  match inside src:
+    case False{} _src:
       dp
-    case True{}:
+    case True{} Raster{+sw, +sh, +sp}:
       blit.join(dp, sp, dw, dh, sw, sh, ox, oy)
 
 def blit.src(src: Raster, +dw: U32, +dh: U32, dp: List<&2, U32>, +xx: U32, +yy: U32) -> Raster:
-  match src:
-    case Raster{+sw, +sh, +sp}:
-      Raster{dw, dh, blit.y(U32.is_lt(yy, dh), dp, sp, dw, dh, sw, sh, xx, yy)}
+  Raster{dw, dh, blit.y(U32.is_lt(yy, dh), dp, src, dw, dh, xx, yy)}
 
 # src pasted onto dst at (x, y). dst keeps its size; samples past its edge are
 # dropped, and an overlapping sample takes the source.

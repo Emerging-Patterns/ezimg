@@ -75,28 +75,34 @@ def anc.at(
   +e4: {z4 == False{} : Bool},
   +e5: {z5 == False{} : Bool},
   +ea: {an == True{} : Bool}
-) -> {Png.png.apply.go(z1, z2, z3, z4, z5, an, run, st, sp, colour, data, pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}:
+) -> {Png.png.apply.go(Png.Tags{z1, z2, z3, z4, z5, an}, Png.Seen{run, st, sp, colour}, data,
+  pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}:
   match z1 z2 z3 z4 z5 an:
     case False{} False{} False{} False{} False{} True{}:
       {==}
     case True{} _z2 _z3 _z4 _z5 _an:
-      Empty.absurd({Png.png.apply.go(True{}, _z2, _z3, _z4, _z5, _an, run, st, sp, colour, data, pg) ==
+      Empty.absurd({Png.png.apply.go(Png.Tags{True{}, _z2, _z3, _z4, _z5, _an}, Png.Seen{run, st, sp, colour}, data,
+        pg) ==
         Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e1)))
     case False{} True{} _z3 _z4 _z5 _an:
-      Empty.absurd({Png.png.apply.go(False{}, True{}, _z3, _z4, _z5, _an, run, st, sp, colour, data, pg) ==
+      Empty.absurd({Png.png.apply.go(Png.Tags{False{}, True{}, _z3, _z4, _z5, _an}, Png.Seen{run, st, sp, colour},
+        data, pg) ==
         Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e2)))
     case False{} False{} True{} _z4 _z5 _an:
-      Empty.absurd({Png.png.apply.go(False{}, False{}, True{}, _z4, _z5, _an, run, st, sp, colour, data, pg) ==
+      Empty.absurd({Png.png.apply.go(Png.Tags{False{}, False{}, True{}, _z4, _z5, _an}, Png.Seen{run, st, sp, colour},
+        data, pg) ==
         Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e3)))
     case False{} False{} False{} True{} _z5 _an:
-      Empty.absurd({Png.png.apply.go(False{}, False{}, False{}, True{}, _z5, _an, run, st, sp, colour, data, pg) ==
+      Empty.absurd({Png.png.apply.go(Png.Tags{False{}, False{}, False{}, True{}, _z5, _an}, Png.Seen{run, st, sp,
+        colour}, data, pg) ==
         Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e4)))
     case False{} False{} False{} False{} True{} _an:
-      Empty.absurd({Png.png.apply.go(False{}, False{}, False{}, False{}, True{}, _an, run, st, sp, colour, data, pg) ==
+      Empty.absurd({Png.png.apply.go(Png.Tags{False{}, False{}, False{}, False{}, True{}, _an}, Png.Seen{run, st, sp,
+        colour}, data, pg) ==
         Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(Equal.sym(Bool, True{}, False{}, e5)))
     case False{} False{} False{} False{} False{} False{}:
-      Empty.absurd({Png.png.apply.go(False{}, False{}, False{}, False{}, False{}, False{}, run, st, sp, colour, data,
-        pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(ea))
+      Empty.absurd({Png.png.apply.go(Png.Tags{False{}, False{}, False{}, False{}, False{}, False{}}, Png.Seen{run, st,
+        sp, colour}, data, pg) == Png.NMore{Png.png.seal(pg)} : Png.Nx}, M1.false_true(ea))
 
 # a type with the ancillary bit is not one whose bit is clear, once is_eq's answer is named
 def neq.at(

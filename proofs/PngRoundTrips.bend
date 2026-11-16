@@ -1413,7 +1413,8 @@ def pour.bs(
   +bf: U32,
   +cc: U32,
   +acc: List<&2, U32>
-) -> {Png.enc.pour(xs, znew, zlast, room, left, len, bf, cc, acc) == Png.enc.crc.list(M1.bs(xs, znew, zlast, room, left,
+) -> {Png.enc.pour(xs, znew, zlast, Png.Pb{room, left, len, bf}, cc, acc) == Png.enc.crc.list(M1.bs(xs, znew, zlast,
+  room, left,
   len, bf), cc, acc) : U32 & List<&2, U32>}:
   match xs znew zlast:
     case Nil{} _z _last:
@@ -3127,7 +3128,8 @@ def wide.front(
   +aa: List<&2, U32>,
   +ie: List<&2, U32>
 ) -> {Png.enc.seal.body(Png.enc.crc.list(Png.enc.be(Png.tag.idat()), 4294967295, aa), raw, nn, sum, ie) ==
-  Png.enc.seal.adler(M1.fr(M1.t0(M1.bs(raw, True{}, False{}, 0, nn, Png.enc.cap(nn), Png.enc.bf(nn))), 4294967295, aa), sum,  # noqa: S002
+  Png.enc.seal.adler(M1.fr(M1.t0(M1.bs(raw, True{}, False{}, 0, nn, Png.enc.cap(nn), Png.enc.bf(nn))), 4294967295,
+    aa), sum,
   ie) : List<&2, U32>}:
   +bi = Png.enc.be(Png.tag.idat())
   +bb = M1.bs(raw, True{}, False{}, 0, nn, Png.enc.cap(nn), Png.enc.bf(nn))
@@ -3148,9 +3150,10 @@ def wide.front(
       Equal.cong(U32 & List<&2, U32>, List<&2, U32>, pp => Png.enc.seal.run(pp, raw, nn, sum, ie),
         Png.enc.crc.list([120, 1], c1, a1), M1.fr([120, 1], c1, a1), crcl([120, 1], c1, a1)),
       Equal.cong(U32 & List<&2, U32>, List<&2, U32>, pp => Png.enc.seal.adler(pp, sum, ie), Png.enc.pour(raw, True{},
-        False{}, 0, nn, Png.enc.cap(nn), Png.enc.bf(nn), c2, a2), M1.fr(M1.t0(bb), 4294967295, aa),
-        Equal.trans(U32 & List<&2, U32>, Png.enc.pour(raw, True{}, False{}, 0, nn, Png.enc.cap(nn), Png.enc.bf(nn), c2,
-          a2), Png.enc.crc.list(bb, c2, a2), M1.fr(M1.t0(bb), 4294967295, aa), pour.bs(raw, True{}, False{}, 0, nn,
+        False{}, Png.Pb{0, nn, Png.enc.cap(nn), Png.enc.bf(nn)}, c2, a2), M1.fr(M1.t0(bb), 4294967295, aa),
+        Equal.trans(U32 & List<&2, U32>, Png.enc.pour(raw, True{}, False{}, Png.Pb{0, nn, Png.enc.cap(nn),
+          Png.enc.bf(nn)}, c2, a2), Png.enc.crc.list(bb, c2, a2), M1.fr(M1.t0(bb), 4294967295, aa), pour.bs(raw,
+          True{}, False{}, 0, nn,
           Png.enc.cap(nn), Png.enc.bf(nn), c2, a2),
           Equal.trans(U32 & List<&2, U32>, Png.enc.crc.list(bb, c2, a2), M1.fr(bb, c2, a2), M1.fr(M1.t0(bb),
               4294967295, aa),
@@ -3760,8 +3763,9 @@ def rg(
   hk: M1.kok(xn, kk, U32.to_nat(mx)),
   +hw: {Nat.is_le(rgw(filt, zred, zgrn, px, col, row, wp, zblock, kk), 1n+fuel) == True{} : Bool},
   hb: rg.hyp(zblock, zdone, zspan, zneed, curl(filt, zred, zgrn, px, col, row, wp), left, len, need, pl, plen, pbf)
-) -> {Png.enc.rgb.go(fuel, zblock, zdone, zspan, zneed, filt, zred, zgrn, zlast, px, col, row, ww, need, cc, acc, aa,
-  bb, left, len) == rg.val(zblock, M3.cur(filt, zred, zgrn, px, col, row, 1n+wp), cc, acc, aa, bb, left, need, pl, plen,
+) -> {Png.enc.rgb.go(fuel, Png.Bk{zblock, zdone, zspan, zneed, need, left, len}, Png.Cr{filt, zred, zgrn, zlast, px,
+  col, row, ww}, Png.Out{cc, acc, aa, bb}) == rg.val(zblock, M3.cur(filt, zred, zgrn, px, col, row, 1n+wp), cc, acc,
+  aa, bb, left, need, pl, plen,
   pbf) : (U32 & List<&2, U32>) & U32}:
   match fuel:
     case 0n:
@@ -3792,8 +3796,9 @@ def rg(
                   +e_r0 = {Equal.trans(Nat, U32.to_nat(left), List.length(&2, U32, rr), 0n, e_l, Equal.trans(Nat,
                     List.length(&2, U32, rr), xn, 0n, Equal.sym(Nat, xn, List.length(&2, U32, rr), hx), hk)) :
                     {U32.to_nat(left) == 0n : Nat}}
-                  Empty.absurd({Png.enc.rgb.go(1n+pp, True{}, False{}, zspan, zneed, filt, zred, zgrn, zlast, px, col,
-                    row, ww, need, cc, acc, aa, bb, left, len) == rg.val(True{}, rr, cc, acc, aa, bb, left, need, pl,
+                  Empty.absurd({Png.enc.rgb.go(1n+pp, Png.Bk{True{}, False{}, zspan, zneed, need, left, len},
+                    Png.Cr{filt, zred, zgrn, zlast, px, col, row, ww}, Png.Out{cc, acc, aa, bb}) == rg.val(True{}, rr,
+                    cc, acc, aa, bb, left, need, pl,
                     plen, pbf) : (U32 & List<&2, U32>) & U32}, M1.false_true(Equal.trans(Bool, False{},
                     U32.is_zero(left), True{}, e_zd, zero.is(left, e_r0))))
                 case 1n+(+kp):
@@ -3861,21 +3866,20 @@ def rg(
                           hbl,
                         hx2, hk2, hw2, ({==}, ({==}, (Equal.sym(Bool, U32.is_zero(cp), False{}, nz_cp), (e_l, (ell2,
                         M1.edge.no(cp, left, Png.enc.cap(l1), Png.enc.bf(l1), nz_cp))))))) : {Png.enc.rgb.go(pp,
-                            False{},
-                        False{}, True{}, False{}, filt, zred, zgrn, zlast, px, col, row, ww, cp, c5, a4, aa, bb, left,
-                          cp)
+                          Png.Bk{False{}, False{}, True{}, False{}, cp, left, cp}, Png.Cr{filt, zred, zgrn, zlast, px,
+                          col, row, ww}, Png.Out{c5, a4, aa, bb})
                         == (M1.fr(M1.bs(rr, U32.is_zero(cp), U32.is_eq(cp, 1), cp, left, Png.enc.cap(l1),
                             Png.enc.bf(l1)), c5,
                         a4), M1.afold(rr, aa, bb)) : (U32 & List<&2, U32>) & U32}}
-                      Equal.trans((U32 & List<&2, U32>) & U32, Png.enc.rgb.go(pp, False{}, False{}, True{}, False{},
-                        filt,
-                        zred, zgrn, zlast, px, col, row, ww, cp, c5, a4, aa, bb, left, cp), (M1.fr(bb2, c5, a4),
+                      Equal.trans((U32 & List<&2, U32>) & U32, Png.enc.rgb.go(pp, Png.Bk{False{}, False{}, True{},
+                        False{}, cp, left, cp}, Png.Cr{filt, zred, zgrn, zlast, px, col, row, ww}, Png.Out{c5, a4, aa,
+                        bb}), (M1.fr(bb2, c5, a4),
                             M1.afold(rr,
                           aa,
                         bb)), rg.val(True{}, rr, cc, acc, aa, bb, left, need, pl, plen, pbf),
-                        Equal.trans((U32 & List<&2, U32>) & U32, Png.enc.rgb.go(pp, False{}, False{}, True{}, False{},
-                          filt,
-                          zred, zgrn, zlast, px, col, row, ww, cp, c5, a4, aa, bb, left, cp), (M1.fr(M1.bs(rr,
+                        Equal.trans((U32 & List<&2, U32>) & U32, Png.enc.rgb.go(pp, Png.Bk{False{}, False{}, True{},
+                          False{}, cp, left, cp}, Png.Cr{filt, zred, zgrn, zlast, px, col, row, ww}, Png.Out{c5, a4,
+                          aa, bb}), (M1.fr(M1.bs(rr,
                             U32.is_zero(cp),
                           U32.is_eq(cp, 1), cp, left, Png.enc.cap(l1), Png.enc.bf(l1)), c5, a4), M1.afold(rr, aa, bb)),
                           (M1.fr(bb2, c5, a4), M1.afold(rr, aa, bb)), ih, Equal.cong(Bool, (U32 & List<&2, U32>) & U32,
@@ -3902,8 +3906,9 @@ def rg(
           match zdone:
             case True{}:
               (e_d, _rest) = hb
-              Empty.absurd({Png.enc.rgb.go(1n+pp, False{}, True{}, zspan, zneed, filt, zred, zgrn, zlast, px, col, row,
-                ww, need, cc, acc, aa, bb, left, len) == rg.val(False{}, M3.cur(filt, zred, zgrn, px, col, row, 1n+wp),
+              Empty.absurd({Png.enc.rgb.go(1n+pp, Png.Bk{False{}, True{}, zspan, zneed, need, left, len}, Png.Cr{filt,
+                zred, zgrn, zlast, px, col, row, ww}, Png.Out{cc, acc, aa, bb}) == rg.val(False{}, M3.cur(filt, zred,
+                zgrn, px, col, row, 1n+wp),
                     cc,
                 acc, aa, bb, left, need, pl, plen, pbf) : (U32 & List<&2, U32>) & U32}, M1.false_true(Equal.sym(Bool,
                 True{}, False{}, e_d)))
@@ -3911,8 +3916,9 @@ def rg(
               match zspan:
                 case False{}:
                   (_e_d, (e_s, _rest)) = hb
-                  Empty.absurd({Png.enc.rgb.go(1n+pp, False{}, False{}, False{}, zneed, filt, zred, zgrn, zlast, px,
-                    col, row, ww, need, cc, acc, aa, bb, left, len) == rg.val(False{}, M3.cur(filt, zred, zgrn, px, col,
+                  Empty.absurd({Png.enc.rgb.go(1n+pp, Png.Bk{False{}, False{}, False{}, zneed, need, left, len},
+                    Png.Cr{filt, zred, zgrn, zlast, px, col, row, ww}, Png.Out{cc, acc, aa, bb}) == rg.val(False{},
+                    M3.cur(filt, zred, zgrn, px, col,
                     row, 1n+wp), cc, acc, aa, bb, left, need, pl, plen, pbf) : (U32 & List<&2, U32>) & U32},
                     M1.false_true(e_s))
                 case True{}:
@@ -3947,13 +3953,15 @@ def rg(
                       +ih = {rg(pp, True{}, U32.is_zero(l2), False{}, False{}, filt, zred, zgrn, zlast, px, col, row,
                         ww,
                         need, cc, acc, aa, bb, l2, len, pl, plen, pbf, kk, xn, wp, mx, emx, ew, hrow, hfw, hbl, hx2, hk,
-                        hw.end(nr, Nat.double(kk), pp, hw), ({==}, e_l2)) : {Png.enc.rgb.go(pp, True{},
-                        U32.is_zero(l2), False{}, False{}, filt, zred, zgrn, zlast, px, col, row, ww, need, cc, acc, aa,
-                        bb, l2, len) == (M1.fr(M1.bs(rr, True{}, False{}, 0, l2, Png.enc.cap(l2), Png.enc.bf(l2)), cc,
+                        hw.end(nr, Nat.double(kk), pp, hw), ({==}, e_l2)) : {Png.enc.rgb.go(pp, Png.Bk{True{},
+                          U32.is_zero(l2), False{}, False{}, need, l2, len}, Png.Cr{filt, zred, zgrn, zlast, px, col,
+                          row, ww}, Png.Out{cc, acc, aa, bb}) == (M1.fr(M1.bs(rr, True{}, False{}, 0, l2,
+                          Png.enc.cap(l2), Png.enc.bf(l2)), cc,
                             acc),
                         M1.afold(rr, aa, bb)) : (U32 & List<&2, U32>) & U32}}
-                      Equal.trans((U32 & List<&2, U32>) & U32, Png.enc.rgb.go(pp, True{}, U32.is_zero(l2), False{},
-                        False{}, filt, zred, zgrn, zlast, px, col, row, ww, need, cc, acc, aa, bb, l2, len),
+                      Equal.trans((U32 & List<&2, U32>) & U32, Png.enc.rgb.go(pp, Png.Bk{True{}, U32.is_zero(l2),
+                        False{}, False{}, need, l2, len}, Png.Cr{filt, zred, zgrn, zlast, px, col, row, ww},
+                        Png.Out{cc, acc, aa, bb}),
                         (M1.fr(M1.bs(rr, True{}, False{}, 0, l2, Png.enc.cap(l2), Png.enc.bf(l2)), cc, acc),
                             M1.afold(rr, aa,
                         bb)), rg.val(False{}, rr, cc, acc, aa, bb, left, need, pl, plen, pbf), ih,
@@ -3969,8 +3977,9 @@ def rg(
                             match px:
                               case Nil{}:
                                 (_e_d, (_e_s, (e_zn, _rest))) = hb
-                                Empty.absurd({Png.enc.rgb.go(1n+pp, False{}, False{}, True{}, False{}, True{}, zred,
-                                  zgrn, zlast, [], col, row, ww, need, cc, acc, aa, bb, left, len) == rg.val(False{},
+                                Empty.absurd({Png.enc.rgb.go(1n+pp, Png.Bk{False{}, False{}, True{}, False{}, need,
+                                  left, len}, Png.Cr{True{}, zred, zgrn, zlast, [], col, row, ww}, Png.Out{cc, acc,
+                                  aa, bb}) == rg.val(False{},
                                     M3.cur(True{}, zred, zgrn, [], col, row, 1n+wp), cc, acc, aa, bb, left, need, pl,
                                     plen, pbf) : (U32 & List<&2, U32>) & U32}, need.nil(need, xn, e_zn, hx))
                               case +s <> +t:
@@ -3981,10 +3990,11 @@ def rg(
                                   hfw({==})), ew)) : {M3.cur(True{}, zred, zgrn, s <> t, col, row, 1n+wp) ==
                                     0 <> r2 : List<&2, U32>}}
                                 rg.byte(pp, 0, M3.cur(True{}, zred, zgrn, s <> t, col, row, 1n+wp), r2, need, pl, plen,
-                                  pbf, cc, acc, aa, bb, left, len, kk, xn, Png.enc.rgb.go(pp, False{}, False{}, True{},
-                                  U32.is_zero((need - 1 : U32)), False{}, True{}, False{}, False{}, s <> t, col, row,
-                                    ww, (need - 1 : U32), Crc.crc.byte(cc, 0), 0 <> acc, Png.enc.add(aa, 0),
-                                    Png.enc.add(bb, Png.enc.add(aa, 0)), left, len), e_R, e_zn, hx, hw, e_pl, e_ll,
+                                  pbf, cc, acc, aa, bb, left, len, kk, xn, Png.enc.rgb.go(pp, Png.Bk{False{}, False{},
+                                    True{}, U32.is_zero((need - 1 : U32)), (need - 1 : U32), left, len},
+                                    Png.Cr{False{}, True{}, False{}, False{}, s <> t, col, row, ww},
+                                    Png.Out{Crc.crc.byte(cc, 0), 0 <> acc, Png.enc.add(aa, 0), Png.enc.add(bb,
+                                    Png.enc.add(aa, 0))}), e_R, e_zn, hx, hw, e_pl, e_ll,
                                     xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{},
                                     U32.is_zero((need - 1 : U32)), False{}, True{}, False{}, False{}, s <> t, col, row,
                                     ww, (need - 1 : U32), Crc.crc.byte(cc, 0), 0 <> acc, Png.enc.add(aa, 0),
@@ -4003,9 +4013,10 @@ def rg(
                                         match px:
                                           case Nil{}:
                                             (_e_d, (_e_s, (e_zn, _rest))) = hb
-                                            Empty.absurd({Png.enc.rgb.go(1n+pp, False{}, False{}, True{}, False{},
-                                              False{}, True{}, _gn, _ls, [], col, row, ww, need, cc, acc, aa, bb, left,
-                                                len) == rg.val(False{}, M3.cur(False{}, True{}, _gn, [], col, row,
+                                            Empty.absurd({Png.enc.rgb.go(1n+pp, Png.Bk{False{}, False{}, True{},
+                                              False{}, need, left, len}, Png.Cr{False{}, True{}, _gn, _ls, [], col,
+                                              row, ww}, Png.Out{cc, acc, aa, bb}) == rg.val(False{}, M3.cur(False{},
+                                              True{}, _gn, [], col, row,
                                                     1n+wp),
                                                 cc, acc, aa, bb, left, need, pl, plen, pbf) : (U32 & List<&2,
                                                 U32>) & U32}, need.nil(need, xn, e_zn, hx))
@@ -4016,11 +4027,12 @@ def rg(
                                               s <> t, col, row, 1n+wp) == Png.enc.r(s) <> r2 : List<&2, U32>}}
                                             rg.byte(pp, Png.enc.r(s), M3.cur(False{}, True{}, _gn, s <> t, col, row,
                                               1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn,
-                                                Png.enc.rgb.go(pp, False{}, False{}, True{},
-                                                U32.is_zero((need - 1 : U32)), False{}, False{}, True{}, False{}, t, s,
-                                                row, ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.r(s)),
-                                                Png.enc.r(s) <> acc, Png.enc.add(aa, Png.enc.r(s)), Png.enc.add(bb,
-                                                Png.enc.add(aa, Png.enc.r(s))), left, len), e_R, e_zn, hx, hw, e_pl,
+                                                Png.enc.rgb.go(pp, Png.Bk{False{}, False{}, True{},
+                                                  U32.is_zero((need - 1 : U32)), (need - 1 : U32), left, len},
+                                                  Png.Cr{False{}, False{}, True{}, False{}, t, s, row, ww},
+                                                  Png.Out{Crc.crc.byte(cc, Png.enc.r(s)), Png.enc.r(s) <> acc,
+                                                  Png.enc.add(aa, Png.enc.r(s)), Png.enc.add(bb, Png.enc.add(aa,
+                                                  Png.enc.r(s)))}), e_R, e_zn, hx, hw, e_pl,
                                                 e_ll, xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{},
                                                 False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, False{},
                                                 True{}, False{}, t, s, row, ww, (need - 1 : U32), Crc.crc.byte(cc,
@@ -4041,10 +4053,11 @@ def rg(
                                     rg.byte(pp, Png.enc.g(col), M3.cur(False{}, False{}, True{}, px, col, row, 1n+wp),
                                         r2,
                                       need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn, Png.enc.rgb.go(pp,
-                                      False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, False{},
-                                        False{}, U32.is_eq(row, 1), px, col, row, ww, (need - 1 : U32),
-                                        Crc.crc.byte(cc, Png.enc.g(col)), Png.enc.g(col) <> acc, Png.enc.add(aa,
-                                        Png.enc.g(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.g(col))), left, len),
+                                        Png.Bk{False{}, False{}, True{}, U32.is_zero((need - 1 : U32)),
+                                        (need - 1 : U32), left, len}, Png.Cr{False{}, False{}, False{}, U32.is_eq(row,
+                                        1), px, col, row, ww}, Png.Out{Crc.crc.byte(cc, Png.enc.g(col)),
+                                        Png.enc.g(col) <> acc, Png.enc.add(aa, Png.enc.g(col)), Png.enc.add(bb,
+                                        Png.enc.add(aa, Png.enc.g(col)))}),
                                         e_R, e_zn, hx, hw, e_pl, e_ll, xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp,
                                         False{}, False{}, True{}, U32.is_zero((need - 1 : U32)), False{}, False{},
                                         False{}, U32.is_eq(row, 1), px, col, row, ww, (need - 1 : U32),
@@ -4063,11 +4076,12 @@ def rg(
                                             U32>}}
                                         rg.byte(pp, Png.enc.b(col), M3.cur(False{}, False{}, False{}, px, col, row,
                                           1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn,
-                                            Png.enc.rgb.go(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)),
-                                            True{}, True{}, False{}, False{}, px, col, ww, ww, (need - 1 : U32),
-                                            Crc.crc.byte(cc, Png.enc.b(col)), Png.enc.b(col) <> acc, Png.enc.add(aa,
-                                            Png.enc.b(col)), Png.enc.add(bb, Png.enc.add(aa, Png.enc.b(col))), left,
-                                            len), e_R, e_zn, hx, hw, e_pl, e_ll,
+                                            Png.enc.rgb.go(pp, Png.Bk{False{}, False{}, True{},
+                                              U32.is_zero((need - 1 : U32)), (need - 1 : U32), left, len},
+                                              Png.Cr{True{}, True{}, False{}, False{}, px, col, ww, ww},
+                                              Png.Out{Crc.crc.byte(cc, Png.enc.b(col)), Png.enc.b(col) <> acc,
+                                              Png.enc.add(aa, Png.enc.b(col)), Png.enc.add(bb, Png.enc.add(aa,
+                                              Png.enc.b(col)))}), e_R, e_zn, hx, hw, e_pl, e_ll,
                                             xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{},
                                             U32.is_zero((need - 1 : U32)), True{}, True{}, False{}, False{}, px, col,
                                             ww, ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.b(col)),
@@ -4085,11 +4099,12 @@ def rg(
                                           px, col, row, 1n+wp) == Png.enc.b(col) <> r2 : List<&2, U32>}}
                                         rg.byte(pp, Png.enc.b(col), M3.cur(False{}, False{}, False{}, px, col, row,
                                           1n+wp), r2, need, pl, plen, pbf, cc, acc, aa, bb, left, len, kk, xn,
-                                            Png.enc.rgb.go(pp, False{}, False{}, True{}, U32.is_zero((need - 1 : U32)),
-                                            False{}, True{}, False{}, False{}, px, col, (row - 1 : U32), ww,
-                                            (need - 1 : U32), Crc.crc.byte(cc, Png.enc.b(col)), Png.enc.b(col) <> acc,
-                                            Png.enc.add(aa, Png.enc.b(col)), Png.enc.add(bb, Png.enc.add(aa,
-                                            Png.enc.b(col))), left, len), e_R, e_zn, hx, hw, e_pl, e_ll,
+                                            Png.enc.rgb.go(pp, Png.Bk{False{}, False{}, True{},
+                                              U32.is_zero((need - 1 : U32)), (need - 1 : U32), left, len},
+                                              Png.Cr{False{}, True{}, False{}, False{}, px, col, (row - 1 : U32), ww},
+                                              Png.Out{Crc.crc.byte(cc, Png.enc.b(col)), Png.enc.b(col) <> acc,
+                                              Png.enc.add(aa, Png.enc.b(col)), Png.enc.add(bb, Png.enc.add(aa,
+                                              Png.enc.b(col)))}), e_R, e_zn, hx, hw, e_pl, e_ll,
                                             xx => yy => h1 => h2 => h3 => h4 => h5 => rg(pp, False{}, False{}, True{},
                                             U32.is_zero((need - 1 : U32)), False{}, True{}, False{}, False{}, px, col,
                                             (row - 1 : U32), ww, (need - 1 : U32), Crc.crc.byte(cc, Png.enc.b(col)),
@@ -4489,9 +4504,8 @@ def rgb.tail(
       ys =>
     Png.enc.len(M1.zb(ys, sum), 0), bl, bb, e_b)) : {ll == Png.enc.len(M1.zb(bb, sum), 0) : U32}}
   +nz = {big.nz.at(U32.is_zero(nn), nn, {==}, hbig) : {U32.is_zero(nn) == False{} : Bool}}
-  -go = Png.enc.rgb.go(U32.to_nat(steps), True{}, False{}, False{}, False{}, True{}, True{}, False{}, False{}, px, 0,
-    ww,
-    ww, 0, c2, a2, 1, 0, nn, 0)
+  -go = Png.enc.rgb.go(U32.to_nat(steps), Png.Bk{True{}, False{}, False{}, False{}, 0, nn, 0}, Png.Cr{True{}, True{},
+    False{}, False{}, px, 0, ww, ww}, Png.Out{c2, a2, 1, 0})
   +e_go = {rg(U32.to_nat(steps), True{}, False{}, False{}, False{}, True{}, True{}, False{}, False{}, px, 0, ww, ww, 0,
     c2,
     a2, 1, 0, nn, 0, nn, 0, 0, kn, nr, wp, mx, emx, ew, M1.u32_nonzero(ww, wp, ew), _ef => {==}, ef =>

@@ -53,7 +53,8 @@ def dht.inv(
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {M1.inv(Jpeg.decode.read.dht(xs, ok, sym, phase, cls, id, counts, syms, frame, scan, tabs, ent, ri, kind, bad))
+) -> {M1.inv(Jpeg.decode.read.dht(xs, Jpeg.Dh{ok, sym, phase, cls, id, counts, syms, Jpeg.Rd{frame, scan, tabs, ent,
+  ri, kind, bad}}))
   == U32.is_eq(kind, 0) : Bool}:
   match xs:
     case Nil{}:
@@ -125,7 +126,8 @@ def dqt.inv(
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {M1.inv(Jpeg.decode.read.dqt(xs, ok, phase, id, wide, acc, frame, scan, tabs, ent, ri, kind, bad))
+) -> {M1.inv(Jpeg.decode.read.dqt(xs, Jpeg.Dq{ok, phase, id, wide, acc, Jpeg.Rd{frame, scan, tabs, ent, ri, kind,
+  bad}}))
   == U32.is_eq(kind, 0) : Bool}:
   match xs:
     case Nil{}:
@@ -166,12 +168,13 @@ def sos.ok.inv(
   +ta: List<&2, U32>,
   +ns: U32,
   +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
   +tabs: Jpeg.Tabs,
   +ent: List<&2, U32>,
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {M1.inv(Jpeg.decode.read.sos.ok(ss0, se63, ah0, sids, td, ta, ns, frame, tabs, ent, ri, kind, bad))
+) -> {M1.inv(Jpeg.decode.read.sos.ok(ss0, se63, ah0, sids, td, ta, ns, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}))
   == U32.is_eq(kind, 0) : Bool}:
   match ss0 se63 ah0:
     case False{} _se _ah:
@@ -193,12 +196,13 @@ def sos.cs.inv(
   +ta: List<&2, U32>,
   +ns: U32,
   +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
   +tabs: Jpeg.Tabs,
   +ent: List<&2, U32>,
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {M1.inv(Jpeg.decode.read.sos.cs(left, xs, tok, sids, td, ta, ns, frame, tabs, ent, ri, kind, bad))
+) -> {M1.inv(Jpeg.decode.read.sos.cs(left, xs, tok, sids, td, ta, ns, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}))
   == U32.is_eq(kind, 0) : Bool}:
   match left:
     case 0n:
@@ -211,7 +215,7 @@ def sos.cs.inv(
           {==}
         case +ss <> +se <> +ah <> _rest:
           sos.ok.inv(Bool.and(tok, U32.is_eq(ss, 0)), U32.is_eq(se, 63), U32.is_eq(ah, 0), sids, td, ta, ns, frame,
-            tabs, ent, ri, kind, bad)
+            scan, tabs, ent, ri, kind, bad)
     case 1n+pp:
       match xs:
         case Nil{}:
@@ -220,21 +224,23 @@ def sos.cs.inv(
           {==}
         case +id <> +tdta <> rest:
           sos.cs.inv(pp, rest, Bool.and(tok, Bool.and(U32.is_le(U32.shrn(tdta, 4n), 3), U32.is_le(U32.and(tdta, 15),
-            3))), id <> sids, U32.shrn(tdta, 4n) <> td, U32.and(tdta, 15) <> ta, ns, frame, tabs, ent, ri, kind, bad)
+            3))), id <> sids, U32.shrn(tdta, 4n) <> td, U32.and(tdta, 15) <> ta, ns, frame, scan, tabs, ent, ri,
+              kind, bad)
 
 # an SOS body leaves kind as it found it, and the walk in the scan or stopped
 def sos.inv(
   xs: List<&2, U32>,
   +frame: Jpeg.Frame,
+  +scan: Jpeg.Scan,
   +tabs: Jpeg.Tabs,
   +ent: List<&2, U32>,
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {M1.inv(Jpeg.decode.read.sos(xs, frame, tabs, ent, ri, kind, bad)) == U32.is_eq(kind, 0) : Bool}:
+) -> {M1.inv(Jpeg.decode.read.sos(xs, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad})) == U32.is_eq(kind, 0) : Bool}:
   match xs:
     case +ns <> rest:
-      sos.cs.inv(U32.to_nat(ns), rest, True{}, [], [], [], ns, frame, tabs, ent, ri, kind, bad)
+      sos.cs.inv(U32.to_nat(ns), rest, True{}, [], [], [], ns, frame, scan, tabs, ent, ri, kind, bad)
     case Nil{}:
       {==}
 
@@ -245,9 +251,10 @@ def dri.inv(
   +scan: Jpeg.Scan,
   +tabs: Jpeg.Tabs,
   +ent: List<&2, U32>,
+  +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {M1.inv(Jpeg.decode.read.dri(xs, frame, scan, tabs, ent, kind, bad)) == U32.is_eq(kind, 0) : Bool}:
+) -> {M1.inv(Jpeg.decode.read.dri(xs, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad})) == U32.is_eq(kind, 0) : Bool}:
   match xs:
     case Nil{}:
       {==}
@@ -385,7 +392,7 @@ def mk.mark(
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {Jpeg.decode.mark(Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad)
+) -> {Jpeg.decode.mark(Laws.mk.byte(mk), Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad})
   == Jpeg.St{Jpeg.LenHi{Laws.mk.byte(mk)}, frame, scan, tabs, ent, ri, kind, bad} : Jpeg.St}:
   match mk:
     case Laws.MDht{}:
@@ -446,9 +453,9 @@ def ent.none(
   +kind: U32,
   +bad: U32,
   hk: {U32.is_eq(kind, 0) == True{} : Bool}
-) -> {Jpeg.decode.ent.next(U32.is_eq(kind, 1), bb, frame, scan, tabs, ent, ri, kind, bad)
+) -> {Jpeg.decode.ent.next(U32.is_eq(kind, 1), bb, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad})
   == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1} : Jpeg.St}:
-  Equal.cong(Bool, Jpeg.St, kk => Jpeg.decode.ent.next(kk, bb, frame, scan, tabs, ent, ri, kind, bad),
+  Equal.cong(Bool, Jpeg.St, kk => Jpeg.decode.ent.next(kk, bb, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}),
     U32.is_eq(kind, 1), False{}, k0.not1(kind, hk))
 
 # a segment marker inside a scan stops the walk on an error
@@ -462,7 +469,7 @@ def mk.ent(
   +kind: U32,
   +bad: U32,
   hk: {U32.is_eq(kind, 0) == True{} : Bool}
-) -> {Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.mk.byte(mk), frame, scan, tabs, ent, ri, kind, bad)
+) -> {Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.mk.byte(mk), Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad})
   == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1} : Jpeg.St}:
   match mk:
     case Laws.MDht{}:
@@ -519,7 +526,7 @@ def mk.disp(
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {M1.inv(Jpeg.decode.dispatch(Laws.mk.byte(mk), body, frame, scan, tabs, ent, ri, kind, bad))
+) -> {M1.inv(Jpeg.decode.dispatch(Laws.mk.byte(mk), body, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}))
   == U32.is_eq(kind, 0) : Bool}:
   match mk:
     case Laws.MDht{}:
@@ -527,9 +534,9 @@ def mk.disp(
     case Laws.MDqt{}:
       dqt.inv(body, True{}, 0n, 0, False{}, [], frame, scan, tabs, ent, ri, kind, bad)
     case Laws.MSos{}:
-      sos.inv(body, frame, tabs, ent, ri, kind, bad)
+      sos.inv(body, frame, scan, tabs, ent, ri, kind, bad)
     case Laws.MDri{}:
-      dri.inv(body, frame, scan, tabs, ent, kind, bad)
+      dri.inv(body, frame, scan, tabs, ent, ri, kind, bad)
     case Laws.MCom{}:
       {==}
     case Laws.MApp0{}:
@@ -575,7 +582,7 @@ def sofn.mark(
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {Jpeg.decode.mark(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad)
+) -> {Jpeg.decode.mark(Laws.sofn.byte(sn), Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad})
   == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, 2, 1} : Jpeg.St}:
   match sn:
     case Laws.Sof2{}:
@@ -612,7 +619,7 @@ def sofn.ent(
   +kind: U32,
   +bad: U32,
   hk: {U32.is_eq(kind, 0) == True{} : Bool}
-) -> {Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad)
+) -> {Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.sofn.byte(sn), Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad})
   == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1} : Jpeg.St}:
   match sn:
     case Laws.Sof2{}:
@@ -679,15 +686,17 @@ def seg.ph(
       +tail = {hi <> (lo <> body) : List<&2, U32>}
       +mm = Laws.mk.byte(mk)
       +lenhi = {Jpeg.St{Jpeg.LenHi{mm}, frame, scan, tabs, ent, ri, kind, bad} : Jpeg.St}
-      +disp = Jpeg.decode.dispatch(mm, body, frame, scan, tabs, ent, ri, kind, bad)
-      Equal.trans(Bool, M1.inv(Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, frame, scan, tabs, ent, ri, kind, bad))),
+      +disp = Jpeg.decode.dispatch(mm, body, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad})
+      Equal.trans(Bool, M1.inv(Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, Jpeg.Rd{frame, scan, tabs, ent, ri, kind,
+        bad}))),
         M1.inv(disp), True{},
         Equal.cong(Jpeg.St, Bool, ss => M1.inv(ss),
-          Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, frame, scan, tabs, ent, ri, kind, bad)), disp,
-          Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, frame, scan, tabs, ent, ri, kind, bad)),
+          Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad})), disp,
+          Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, Jpeg.Rd{frame, scan, tabs, ent, ri, kind,
+            bad})),
             Jpeg.decode.walk(tail, lenhi), disp,
             Equal.cong(Jpeg.St, Jpeg.St, ss => Jpeg.decode.walk(tail, ss),
-              Jpeg.decode.mark(mm, frame, scan, tabs, ent, ri, kind, bad), lenhi,
+              Jpeg.decode.mark(mm, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}), lenhi,
               mk.mark(mk, frame, scan, tabs, ent, ri, kind, bad)),
             M2.seg.read(U32.is_lt(Laws.seg.len(hi, lo), 2), Laws.seg.len(hi, lo), body, mm, frame, scan, tabs, ent, ri,
               kind, bad, e_lt, e_len))),
@@ -784,11 +793,13 @@ def sofn.ph(
 ) -> fin.Goal(255 <> (Laws.sofn.byte(sn) <> rest), Jpeg.St{ph, frame, scan, tabs, ent, ri, kind, bad}, facts):
   match ph:
     case Jpeg.Seek{}:
-      fin.after(rest, Jpeg.decode.mark(Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad), frame, scan, tabs,
+      fin.after(rest, Jpeg.decode.mark(Laws.sofn.byte(sn), Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}), frame,
+        scan, tabs,
         ent, ri, 2, 1, facts, sofn.mark(sn, frame, scan, tabs, ent, ri, kind, bad), fin.bad(frame, scan, tabs, ent, ri,
         2, facts))
     case Jpeg.Ent{}:
-      fin.after(rest, Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.sofn.byte(sn), frame, scan, tabs, ent, ri, kind, bad),
+      fin.after(rest, Jpeg.decode.step.ph(Jpeg.EntFF{}, Laws.sofn.byte(sn), Jpeg.Rd{frame, scan, tabs, ent, ri, kind,
+        bad}),
         frame, scan, tabs, ent, ri, kind, 1, facts, sofn.ent(sn, frame, scan, tabs, ent, ri, kind, bad, h_inv),
         fin.bad(frame, scan, tabs, ent, ri, kind, facts))
     case Jpeg.Stop{}:
@@ -877,10 +888,12 @@ def PrecMk(
   +kind: U32,
   +bad: U32
 ) -> Type:
-  {Jpeg.decode.mark(mm, frame, scan, tabs, ent, ri, kind, bad) == Jpeg.St{Jpeg.LenHi{mm}, frame, scan, tabs, ent, ri,
-    kind, bad} : Jpeg.St} & {Jpeg.decode.dispatch(mm, body, frame, scan, tabs, ent, ri, kind, bad) ==
+  {Jpeg.decode.mark(mm, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}) == Jpeg.St{Jpeg.LenHi{mm}, frame, scan, tabs,
+    ent, ri,
+    kind, bad} : Jpeg.St} & {Jpeg.decode.dispatch(mm, body, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}) ==
     Jpeg.decode.read.sof(body, scan, tabs, ent, ri, kind, bad) : Jpeg.St} & {Jpeg.decode.step.ph(Jpeg.EntFF{}, mm,
-    frame, scan, tabs, ent, ri, kind, bad) == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1} : Jpeg.St}
+      Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}) == Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind,
+      1} : Jpeg.St}
 
 # SOF0 and SOF1 are such markers
 def prec.mk(
@@ -938,15 +951,17 @@ def prec.ph(
           Jpeg.decode.walk(List.append(&2, U32, sof, rest), st), Jpeg.decode.walk(rest, Jpeg.decode.walk(sof, st)),
           walk.app(sof, rest, st)),
         fin.after(rest, Jpeg.decode.walk(sof, st), Jpeg.decode.frame0(), scan, tabs, ent, ri, kind, 1, facts,
-          Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, frame, scan, tabs, ent, ri, kind, bad)),
+          Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, Jpeg.decode.mark(mm, Jpeg.Rd{frame, scan, tabs, ent, ri, kind,
+            bad})),
             Jpeg.decode.walk(tail, lenhi), Jpeg.St{Jpeg.Stop{}, Jpeg.decode.frame0(), scan, tabs, ent, ri, kind, 1},
-            Equal.cong(Jpeg.St, Jpeg.St, ss => Jpeg.decode.walk(tail, ss), Jpeg.decode.mark(mm, frame, scan, tabs, ent,
-              ri, kind, bad), lenhi, e_mark),
-            Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, lenhi), Jpeg.decode.dispatch(mm, pp <> body, frame, scan, tabs,
-              ent, ri, kind, bad), Jpeg.St{Jpeg.Stop{}, Jpeg.decode.frame0(), scan, tabs, ent, ri, kind, 1},
+            Equal.cong(Jpeg.St, Jpeg.St, ss => Jpeg.decode.walk(tail, ss), Jpeg.decode.mark(mm, Jpeg.Rd{frame, scan,
+              tabs, ent, ri, kind, bad}), lenhi, e_mark),
+            Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, lenhi), Jpeg.decode.dispatch(mm, pp <> body, Jpeg.Rd{frame,
+              scan, tabs, ent, ri, kind, bad}), Jpeg.St{Jpeg.Stop{}, Jpeg.decode.frame0(), scan, tabs, ent, ri, kind,
+              1},
               M2.seg.read(U32.is_lt(Laws.seg.len(hi, lo), 2), Laws.seg.len(hi, lo), pp <> body, mm, frame, scan, tabs,
                 ent, ri, kind, bad, e_lt, e_len),
-              Equal.trans(Jpeg.St, Jpeg.decode.dispatch(mm, pp <> body, frame, scan, tabs, ent, ri, kind, bad),
+              Equal.trans(Jpeg.St, Jpeg.decode.dispatch(mm, pp <> body, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}),
                 Jpeg.decode.read.sof.p(U32.is_eq(pp, 8), body, scan, tabs, ent, ri, kind, bad),
                 Jpeg.St{Jpeg.Stop{}, Jpeg.decode.frame0(), scan, tabs, ent, ri, kind, 1}, e_disp,
                 Equal.cong(Bool, Jpeg.St, bb => Jpeg.decode.read.sof.p(bb, body, scan, tabs, ent, ri, kind, bad),
@@ -964,9 +979,10 @@ def prec.ph(
           Jpeg.decode.walk(List.append(&2, U32, sof, rest), st), Jpeg.decode.walk(rest, Jpeg.decode.walk(sof, st)),
           walk.app(sof, rest, st)),
         fin.after(rest, Jpeg.decode.walk(sof, st), frame, scan, tabs, ent, ri, kind, 1, facts,
-          Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, Jpeg.decode.step.ph(Jpeg.EntFF{}, mm, frame, scan, tabs, ent, ri,
-            kind, bad)), Jpeg.decode.walk(tail, stop), stop, Equal.cong(Jpeg.St, Jpeg.St, ss => Jpeg.decode.walk(tail,
-            ss), Jpeg.decode.step.ph(Jpeg.EntFF{}, mm, frame, scan, tabs, ent, ri, kind, bad), stop, e_ent),
+          Equal.trans(Jpeg.St, Jpeg.decode.walk(tail, Jpeg.decode.step.ph(Jpeg.EntFF{}, mm, Jpeg.Rd{frame, scan, tabs,
+            ent, ri, kind, bad})), Jpeg.decode.walk(tail, stop), stop, Equal.cong(Jpeg.St, Jpeg.St,
+            ss => Jpeg.decode.walk(tail,
+            ss), Jpeg.decode.step.ph(Jpeg.EntFF{}, mm, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}), stop, e_ent),
             stop.walk(tail, frame, scan, tabs, ent, ri, kind, 1)),
           fin.bad(frame, scan, tabs, ent, ri, kind, facts)))
     case Jpeg.Stop{}:

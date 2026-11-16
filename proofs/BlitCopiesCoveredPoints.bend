@@ -1073,7 +1073,7 @@ def bl.wf_y(
   +h_dst: {D2.wf(Img.Raster{dw, dh, dp}) == True{} : Bool},
   h_src: {D2.wf(Img.Raster{sw, sh, sp}) == True{} : Bool},
   +ey: {Nat.is_lt(U32.to_nat(oy), U32.to_nat(dh)) == yin : Bool}
-) -> {Nat.is_eq(List.length(&2, U32, Img.blit.y(yin, dp, sp, dw, dh, sw, sh, ox, oy)),
+) -> {Nat.is_eq(List.length(&2, U32, Img.blit.y(yin, dp, Img.Raster{sw, sh, sp}, dw, dh, ox, oy)),
   Nat.mul(U32.to_nat(dw), U32.to_nat(dh))) == True{} : Bool}:
   match yin:
     case False{}:
@@ -1098,11 +1098,12 @@ def Laws.blit_wf(dst, src, xx, yy, h_dst, h_src):
   match dst src:
     case Img.Raster{+dw, +dh, +dp} Img.Raster{+sw, +sh, +sp}:
       +wh = Nat.mul(U32.to_nat(dw), U32.to_nat(dh))
-      Equal.trans(Bool, Nat.is_eq(List.length(&2, U32, Img.blit.y(U32.is_lt(yy, dh), dp, sp, dw, dh, sw, sh, xx,
-        yy)), wh),
-        Nat.is_eq(List.length(&2, U32, Img.blit.y(Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), dp, sp, dw, dh, sw, sh, xx,
-          yy)), wh), True{},
-        Equal.cong(Bool, Bool, bb => Nat.is_eq(List.length(&2, U32, Img.blit.y(bb, dp, sp, dw, dh, sw, sh, xx, yy)),
+      Equal.trans(Bool, Nat.is_eq(List.length(&2, U32, Img.blit.y(U32.is_lt(yy, dh), dp, Img.Raster{sw, sh, sp}, dw,
+        dh, xx, yy)), wh),
+        Nat.is_eq(List.length(&2, U32, Img.blit.y(Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), dp, Img.Raster{sw, sh,
+          sp}, dw, dh, xx, yy)), wh), True{},
+        Equal.cong(Bool, Bool, bb => Nat.is_eq(List.length(&2, U32, Img.blit.y(bb, dp, Img.Raster{sw, sh, sp}, dw, dh,
+          xx, yy)),
           wh),
           U32.is_lt(yy, dh), Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), M5.u32_lt(yy, dh)),
         bl.wf_y(Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), dp, sp, dw, dh, sw, sh, xx, yy, h_dst,
@@ -1206,10 +1207,12 @@ def Laws.blit_in(dst, src, xx, yy, h_dst, h_src, ii, jj, hi, hj, h_cov):
       +b1 = {M1.and_left(b1b, b2b, cy) : {b1b == True{} : Bool}}
       +hy = {M1.le_lt_trans(yn, jj, U32.to_nat(dh), b1, hj) : {Nat.is_lt(yn, U32.to_nat(dh)) == True{} : Bool}}
       +kk = Nat.add(Nat.mul(jj, U32.to_nat(dw)), ii)
-      Equal.trans(Maybe<&2, U32>, List.get(&2, U32, Img.blit.y(U32.is_lt(yy, dh), dp, sp, dw, dh, sw, sh, xx, yy), kk),
-        List.get(&2, U32, Img.blit.y(True{}, dp, sp, dw, dh, sw, sh, xx, yy), kk),
+      Equal.trans(Maybe<&2, U32>, List.get(&2, U32, Img.blit.y(U32.is_lt(yy, dh), dp, Img.Raster{sw, sh, sp}, dw, dh,
+        xx, yy), kk),
+        List.get(&2, U32, Img.blit.y(True{}, dp, Img.Raster{sw, sh, sp}, dw, dh, xx, yy), kk),
         List.get(&2, U32, sp, Nat.add(Nat.mul(Nat.sub(jj, yn), U32.to_nat(sw)), Nat.sub(ii, xn))),
-        Equal.cong(Bool, Maybe<&2, U32>, bb => List.get(&2, U32, Img.blit.y(bb, dp, sp, dw, dh, sw, sh, xx, yy), kk),
+        Equal.cong(Bool, Maybe<&2, U32>, bb => List.get(&2, U32, Img.blit.y(bb, dp, Img.Raster{sw, sh, sp}, dw, dh,
+          xx, yy), kk),
           U32.is_lt(yy, dh), True{}, M3.ras.lt(yy, dh, hy)),
         bl.in_go(dp, sp, dw, dh, sw, sh, xx, yy, h_dst, h_src, ii, jj, hi, hj,
           M1.and_left(a1b, a2b, cx), M1.and_right(a1b, a2b, cx), b1, M1.and_right(b1b, b2b, cy), hy))
@@ -1519,7 +1522,8 @@ def bl.out_y(
   +hi: {Nat.is_lt(ii, U32.to_nat(dw)) == True{} : Bool},
   +h_cov: {D1.covers(ox, oy, Img.Raster{sw, sh, sp}, ii, jj) == False{} : Bool},
   ey: {Nat.is_lt(U32.to_nat(oy), U32.to_nat(dh)) == yin : Bool}
-) -> {List.get(&2, U32, Img.blit.y(yin, dp, sp, dw, dh, sw, sh, ox, oy), Nat.add(Nat.mul(jj, U32.to_nat(dw)), ii)) ==
+) -> {List.get(&2, U32, Img.blit.y(yin, dp, Img.Raster{sw, sh, sp}, dw, dh, ox, oy), Nat.add(Nat.mul(jj,
+  U32.to_nat(dw)), ii)) ==
   List.get(&2, U32, dp, Nat.add(Nat.mul(jj, U32.to_nat(dw)), ii)) : Maybe<&2, U32>}:
   match yin:
     case False{}:
@@ -1539,10 +1543,13 @@ def Laws.blit_out(dst, src, xx, yy, h_dst, h_src, ii, jj, hi, _hj, h_cov):
   match dst src:
     case Img.Raster{+dw, +dh, +dp} Img.Raster{+sw, +sh, +sp}:
       +kk = Nat.add(Nat.mul(jj, U32.to_nat(dw)), ii)
-      Equal.trans(Maybe<&2, U32>, List.get(&2, U32, Img.blit.y(U32.is_lt(yy, dh), dp, sp, dw, dh, sw, sh, xx, yy), kk),
-        List.get(&2, U32, Img.blit.y(Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), dp, sp, dw, dh, sw, sh, xx, yy), kk),
+      Equal.trans(Maybe<&2, U32>, List.get(&2, U32, Img.blit.y(U32.is_lt(yy, dh), dp, Img.Raster{sw, sh, sp}, dw, dh,
+        xx, yy), kk),
+        List.get(&2, U32, Img.blit.y(Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), dp, Img.Raster{sw, sh, sp}, dw, dh,
+          xx, yy), kk),
         List.get(&2, U32, dp, kk),
-        Equal.cong(Bool, Maybe<&2, U32>, bb => List.get(&2, U32, Img.blit.y(bb, dp, sp, dw, dh, sw, sh, xx, yy), kk),
+        Equal.cong(Bool, Maybe<&2, U32>, bb => List.get(&2, U32, Img.blit.y(bb, dp, Img.Raster{sw, sh, sp}, dw, dh,
+          xx, yy), kk),
           U32.is_lt(yy, dh), Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), M5.u32_lt(yy, dh)),
         bl.out_y(Nat.is_lt(U32.to_nat(yy), U32.to_nat(dh)), dp, sp, dw, dh, sw, sh, xx, yy, h_dst,
           h_src, ii,

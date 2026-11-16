@@ -134,28 +134,28 @@ def tr.get(dd: Nat, tt: Tr, zz: Bool, +ix: U32) -> U32:
       tr.get(p, hi, tr.lo(i2), i2)
 
 # write the leaf at the index whose top `dd` bits are the path
-def tr.set(dd: Nat, tt: Tr, zz: Bool, +ix: U32, +vv: U32) -> Tr:
+def tr.set(dd: Nat, tt: Tr, zz: Bool, +ix: U32, +val: U32) -> Tr:
   match dd tt zz:
     case 0n _t _z:
-      TLeaf{vv}
+      TLeaf{val}
     case 1n+p TNone{} True{}:
       +i2 = (ix << 1n : U32)
-      TNode{tr.set(p, TNone{}, tr.lo(i2), i2, vv), TNone{}}
+      TNode{tr.set(p, TNone{}, tr.lo(i2), i2, val), TNone{}}
     case 1n+p TNone{} False{}:
       +i2 = (ix << 1n : U32)
-      TNode{TNone{}, tr.set(p, TNone{}, tr.lo(i2), i2, vv)}
+      TNode{TNone{}, tr.set(p, TNone{}, tr.lo(i2), i2, val)}
     case 1n+p TLeaf{_v} True{}:
       +i2 = (ix << 1n : U32)
-      TNode{tr.set(p, TNone{}, tr.lo(i2), i2, vv), TNone{}}
+      TNode{tr.set(p, TNone{}, tr.lo(i2), i2, val), TNone{}}
     case 1n+p TLeaf{_v} False{}:
       +i2 = (ix << 1n : U32)
-      TNode{TNone{}, tr.set(p, TNone{}, tr.lo(i2), i2, vv)}
+      TNode{TNone{}, tr.set(p, TNone{}, tr.lo(i2), i2, val)}
     case 1n+p TNode{lo, hi} True{}:
       +i2 = (ix << 1n : U32)
-      TNode{tr.set(p, lo, tr.lo(i2), i2, vv), hi}
+      TNode{tr.set(p, lo, tr.lo(i2), i2, val), hi}
     case 1n+p TNode{lo, hi} False{}:
       +i2 = (ix << 1n : U32)
-      TNode{lo, tr.set(p, hi, tr.lo(i2), i2, vv)}
+      TNode{lo, tr.set(p, hi, tr.lo(i2), i2, val)}
 
 # one leaf per value
 def tr.leaves(xs: List<&2, U32>) -> List<&2, Tr>:
@@ -1134,23 +1134,18 @@ def rd.raw(zz: Bool, md: Md, +acc: U32, +got: U32, +need: U32, +skew: U32, cx: C
     case True{}:
       rd.field(md, acc, skew, cx)
 
+# where a canonical Huffman walk stands: the bits read so far, the first code
+# of their length and that code's index in canonical order
+type Walk is Data:
+  Walk{+code: U32, +first: U32, +index: U32}
+
 # the code is `index + code - first` in canonical order when it is below
 # `first + count`; otherwise try the next length
-def rd.hbit.at(
-  zz: Bool,
-  rest: List<&2, U32>,
-  +wh: Wh,
-  +code: U32,
-  +first: U32,
-  +index: U32,
-  +cnt: U32,
-  +skew: U32,
-  +cx: Cx
-) -> St:
-  match zz:
-    case True{}:
+def rd.hbit.at(zz: Bool, rest: List<&2, U32>, +wh: Wh, wk: Walk, +cnt: U32, +skew: U32, +cx: Cx) -> St:
+  match zz wk:
+    case True{} Walk{+code, +first, +index}:
       rd.symbol(wh, cx.sym(wh, cx, ((index + code : U32) - first : U32)), skew, cx)
-    case False{}:
+    case False{} Walk{+code, +first, +index}:
       St{PSym{}, MBlk{}, wh, (code << 1n : U32), ((first + cnt : U32) << 1n : U32), (index + cnt : U32), rest, skew,
         cx}
 
@@ -1160,40 +1155,30 @@ def rd.hbit(cur: List<&2, U32>, +wh: Wh, +code: U32, +first: U32, +index: U32, +
     case Nil{}:
       st.fail()
     case Con{+cnt, rest}:
-      rd.hbit.at(U32.is_lt(code, (first + cnt : U32)), rest, wh, code, first, index, cnt, skew, cx)
+      rd.hbit.at(U32.is_lt(code, (first + cnt : U32)), rest, wh, Walk{code, first, index}, cnt, skew, cx)
 
-# one bit of the phase the reader is in
-def rd.on(
-  ph: Ph,
-  md: Md,
-  wh: Wh,
-  +acc: U32,
-  +got: U32,
-  +need: U32,
-  cur: List<&2, U32>,
-  +skew: U32,
-  cx: Cx,
-  +bit: U32
-) -> St:
-  match ph:
-    case PFail{}:
-      st.fail()
-    case PDone{}:
-      St{PDone{}, md, wh, acc, got, need, cur, skew, cx}
-    case PAlign{}:
-      rd.align(U32.is_zero(skew), md, skew, cx)
-    case PByte{}:
-      +acc2 = ((bit << U32.to_nat(got) : U32) .|. acc : U32)
-      +got2 = (got + 1 : U32)
-      rd.raw(U32.is_eq(got2, need), md, acc2, got2, need, skew, cx)
-    case PSym{}:
-      rd.hbit(cur, wh, (acc .|. bit : U32), got, need, skew, cx)
+# the bit count mod 8 after one more bit
+def rd.skew(+skew: U32) -> U32:
+  ((skew + 1 : U32) .&. 7 : U32)
 
-# advance one bit. The bit count mod 8 tracks byte alignment.
+# advance one bit, in the phase the reader is in. The bit count mod 8 tracks
+# byte alignment.
 def rd.step(st: St, +bit: U32) -> St:
   match st:
     case St{ph, md, wh, +acc, +got, +need, cur, +skew, cx}:
-      rd.on(ph, md, wh, acc, got, need, cur, ((skew + 1 : U32) .&. 7 : U32), cx, bit)
+      match ph:
+        case PFail{}:
+          st.fail()
+        case PDone{}:
+          St{PDone{}, md, wh, acc, got, need, cur, rd.skew(skew), cx}
+        case PAlign{}:
+          rd.align(U32.is_zero(rd.skew(skew)), md, rd.skew(skew), cx)
+        case PByte{}:
+          +acc2 = ((bit << U32.to_nat(got) : U32) .|. acc : U32)
+          +got2 = (got + 1 : U32)
+          rd.raw(U32.is_eq(got2, need), md, acc2, got2, need, rd.skew(skew), cx)
+        case PSym{}:
+          rd.hbit(cur, wh, (acc .|. bit : U32), got, need, rd.skew(skew), cx)
 
 # advance the eight bits of a byte, low bit first
 def rd.step8(st: St, +bb: U32) -> St:
