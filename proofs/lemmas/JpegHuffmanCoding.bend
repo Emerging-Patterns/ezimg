@@ -42,8 +42,8 @@ def pay.go(
   +kind: U32,
   +bad: U32
 ) -> {Jpeg.decode.walk(bb <> tt, Jpeg.St{Jpeg.Pay{mark, 1n+List.length(&2, U32, tt), acc}, frame, scan, tabs, ent, ri,
-  kind, bad}) == Jpeg.decode.dispatch(mark, List.reverse.go(&2, U32, acc, bb <> tt), frame, scan, tabs, ent, ri, kind,
-  bad) : Jpeg.St}:
+  kind, bad}) == Jpeg.decode.dispatch(mark, List.reverse.go(&2, U32, acc, bb <> tt), Jpeg.Rd{frame, scan, tabs, ent,
+    ri, kind, bad}) : Jpeg.St}:
   match tt:
     case Nil{}:
       {==}
@@ -61,8 +61,8 @@ def pay.all(
   +ri: U32,
   +kind: U32,
   +bad: U32
-) -> {Jpeg.decode.walk(body, Jpeg.decode.step.pay0(List.length(&2, U32, body), mark, frame, scan, tabs, ent, ri, kind,
-  bad)) == Jpeg.decode.dispatch(mark, body, frame, scan, tabs, ent, ri, kind, bad) : Jpeg.St}:
+) -> {Jpeg.decode.walk(body, Jpeg.decode.step.pay0(List.length(&2, U32, body), mark, Jpeg.Rd{frame, scan, tabs, ent,
+  ri, kind, bad})) == Jpeg.decode.dispatch(mark, body, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}) : Jpeg.St}:
   match body:
     case Nil{}:
       {==}
@@ -84,21 +84,22 @@ def seg.read(
   +bad: U32,
   e_lt: {lt == False{} : Bool},
   e_len: {U32.to_nat((len - 2 : U32)) == List.length(&2, U32, body) : Nat}
-) -> {Jpeg.decode.walk(body, Jpeg.decode.step.len.b(lt, mark, len, frame, scan, tabs, ent, ri, kind, bad))
-  == Jpeg.decode.dispatch(mark, body, frame, scan, tabs, ent, ri, kind, bad) : Jpeg.St}:
+) -> {Jpeg.decode.walk(body, Jpeg.decode.step.len.b(lt, mark, len, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}))
+  == Jpeg.decode.dispatch(mark, body, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}) : Jpeg.St}:
   match lt:
     case True{}:
       Empty.absurd({Jpeg.decode.walk(body, Jpeg.St{Jpeg.Stop{}, frame, scan, tabs, ent, ri, kind, 1})
-        == Jpeg.decode.dispatch(mark, body, frame, scan, tabs, ent, ri, kind, bad) : Jpeg.St}, M1.jst.true_false(e_lt))
+        == Jpeg.decode.dispatch(mark, body, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}) : Jpeg.St},
+          M1.jst.true_false(e_lt))
     case False{}:
       Equal.trans(Jpeg.St,
-        Jpeg.decode.walk(body, Jpeg.decode.step.pay0(U32.to_nat((len - 2 : U32)), mark, frame, scan, tabs, ent, ri,
-          kind, bad)),
-        Jpeg.decode.walk(body, Jpeg.decode.step.pay0(List.length(&2, U32, body), mark, frame, scan, tabs, ent, ri, kind,
-          bad)),
-        Jpeg.decode.dispatch(mark, body, frame, scan, tabs, ent, ri, kind, bad),
-        Equal.cong(Nat, Jpeg.St, nn => Jpeg.decode.walk(body, Jpeg.decode.step.pay0(nn, mark, frame, scan, tabs, ent,
-          ri, kind, bad)), U32.to_nat((len - 2 : U32)), List.length(&2, U32, body), e_len),
+        Jpeg.decode.walk(body, Jpeg.decode.step.pay0(U32.to_nat((len - 2 : U32)), mark, Jpeg.Rd{frame, scan, tabs,
+          ent, ri, kind, bad})),
+        Jpeg.decode.walk(body, Jpeg.decode.step.pay0(List.length(&2, U32, body), mark, Jpeg.Rd{frame, scan, tabs, ent,
+          ri, kind, bad})),
+        Jpeg.decode.dispatch(mark, body, Jpeg.Rd{frame, scan, tabs, ent, ri, kind, bad}),
+        Equal.cong(Nat, Jpeg.St, nn => Jpeg.decode.walk(body, Jpeg.decode.step.pay0(nn, mark, Jpeg.Rd{frame, scan,
+          tabs, ent, ri, kind, bad})), U32.to_nat((len - 2 : U32)), List.length(&2, U32, body), e_len),
         pay.all(body, mark, frame, scan, tabs, ent, ri, kind, bad))
 
 # walking two byte lists one after the other is walking the second from
@@ -3245,8 +3246,9 @@ def McuOut(
 ) -> Type:
   &s1: U32 -> &x1: List<&2, Bool> -> &a1: List<&2, L1.JTok> -> &s2: U32 -> &x2: List<&2, Bool> -> &a2: List<&2,
     L1.JTok> -> &s3: U32 -> &x3: List<&2, Bool> -> &a3: List<&2, L1.JTok> -> &aa: Array<U32> -> &d1: U32 -> &d2: U32
-    -> &d3: U32 -> &_e: {Jenc.encode.step.tile(tt, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), bit, py, pb,
-    pr, kern(), Jpeg.decode.zig(), ql, qc) == (aa, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3,
+    -> &d3: U32 -> &_e: {Jenc.encode.step.tile(tt, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), bit, py,
+      pb, pr, Jenc.Ctx{kern(), Jpeg.decode.zig(), ql, qc}) == (aa, Jenc.encode.bookof(False{}),
+      Jenc.encode.bookof(True{}), d1, d2, d3,
     feed3b(L1.JBlkTok{False{}, s1, x1, a1}, L1.JBlkTok{True{}, s2, x2, a2}, L1.JBlkTok{True{}, s3, x3, a3}, bit)) :
     Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put} -> &_h1: {U32.is_lt(d1, 2048) == True{} : Bool}
     -> &_h2: {U32.is_lt(d2, 2048) == True{} : Bool} -> &_h3: {U32.is_lt(d3, 2048) == True{} : Bool} -> &_w1:
@@ -3340,23 +3342,25 @@ def mcu3(
   +p3 = L1.jpg.feed(L1.jpg.blkbits(t3), p2)
   (s1, x1, a1, s2, x2, a2, s3, x3, a3, pix, d1, d2, d3,
     Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
-    Jenc.encode.step.cb(Jenc.encode.chan.go(fy, ys,
-    Jenc.encode.bookof(False{}), bit, py, kn, zg, ql), Jenc.encode.bookof(True{}), pix, bs, rs, fb, fr, pb, pr, kn,
-      zg, qc), Jenc.encode.step.cb((Jenc.encode.bookof(False{}), d1, p1), Jenc.encode.bookof(True{}), pix,
-    bs, rs, fb, fr, pb, pr, kn, zg, qc), (pix, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3,
+    Jenc.encode.step.cb(Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn, zg, ql),
+      Jenc.encode.bookof(True{}), pix, Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, pb, pr, Jenc.Coder{kn, zg, qc}),
+      Jenc.encode.step.cb((Jenc.encode.bookof(False{}), d1, p1), Jenc.encode.bookof(True{}), pix, Jenc.Plane{bs, fb},
+      Jenc.Plane{rs, fr}, pb, pr, Jenc.Coder{kn, zg, qc}), (pix, Jenc.encode.bookof(False{}),
+      Jenc.encode.bookof(True{}), d1, d2, d3,
       p3), Equal.cong(Jenc.Book & U32 & Jenc.Put, Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put, gg =>
-    Jenc.encode.step.cb(gg, Jenc.encode.bookof(True{}), pix, bs, rs, fb, fr, pb, pr, kn, zg, qc),
+    Jenc.encode.step.cb(gg, Jenc.encode.bookof(True{}), pix, Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, pb, pr,
+      Jenc.Coder{kn, zg, qc}),
       Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn,
     zg, ql), (Jenc.encode.bookof(False{}), d1, p1), e1),
       Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
-      Jenc.encode.step.cr(Jenc.encode.chan.go(fb, bs, Jenc.encode.bookof(True{}), p1, pb, kn, zg,
-    qc), Jenc.encode.bookof(False{}), pix, rs, fr, d1, pr, kn, zg, qc),
-      Jenc.encode.step.cr((Jenc.encode.bookof(True{}), d2, p2), Jenc.encode.bookof(False{}), pix, rs, fr, d1, pr, kn,
-      zg, qc),
+      Jenc.encode.step.cr(Jenc.encode.chan.go(fb, bs, Jenc.encode.bookof(True{}), p1, pb, kn, zg, qc),
+        Jenc.encode.bookof(False{}), pix, Jenc.Plane{rs, fr}, d1, pr, Jenc.Coder{kn, zg, qc}),
+      Jenc.encode.step.cr((Jenc.encode.bookof(True{}), d2, p2), Jenc.encode.bookof(False{}), pix, Jenc.Plane{rs, fr},
+        d1, pr, Jenc.Coder{kn, zg, qc}),
     (pix, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3, p3),
       Equal.cong(Jenc.Book & U32 & Jenc.Put, Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
-      gg => Jenc.encode.step.cr(gg, Jenc.encode.bookof(False{}), pix,
-    rs, fr, d1, pr, kn, zg, qc), Jenc.encode.chan.go(fb, bs, Jenc.encode.bookof(True{}), p1, pb, kn, zg, qc),
+      gg => Jenc.encode.step.cr(gg, Jenc.encode.bookof(False{}), pix, Jenc.Plane{rs, fr}, d1, pr, Jenc.Coder{kn, zg,
+        qc}), Jenc.encode.chan.go(fb, bs, Jenc.encode.bookof(True{}), p1, pb, kn, zg, qc),
       (Jenc.encode.bookof(True{}), d2, p2), e2),
     Equal.cong(Jenc.Book & U32 & Jenc.Put, Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
       gg => Jenc.encode.step.end(gg, Jenc.encode.bookof(False{}), pix, d1, d2), Jenc.encode.chan.go(fr,

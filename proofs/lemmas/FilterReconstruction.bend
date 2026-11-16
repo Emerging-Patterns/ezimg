@@ -649,7 +649,7 @@ def row.code(
   +left: U32,
   +ft: L1.Ft
 ) -> Maybe<&2, List<&2, U32>>:
-  Png.uf.go(xs, Png.UBody{}, zz, bpp, stride, nr, prest, phist, cur, all, left, L1.ft.code(ft))
+  Png.uf.go(xs, Png.UBody{}, zz, bpp, stride, nr, Png.Ur{prest, phist, cur, left, L1.ft.code(ft)}, all)
 
 # unfilter at the next filter byte, once the row `row` is read after `cur` and `all`
 def row.done(
@@ -661,8 +661,8 @@ def row.done(
   +all: List<&2, U32>,
   +row: List<&2, U32>
 ) -> Maybe<&2, List<&2, U32>>:
-  Png.uf.go(tail, Png.UFilt{}, False{}, bpp, stride, nr, List.reverse(&2, U32, List.reverse.go(&2, U32, row, cur)), [],
-    [], List.reverse.go(&2, U32, row, all), 0, 0)
+  Png.uf.go(tail, Png.UFilt{}, False{}, bpp, stride, nr, Png.Ur{List.reverse(&2, U32, List.reverse.go(&2, U32, row,
+    cur)), [], [], 0, 0}, List.reverse.go(&2, U32, row, all))
 
 # row.code one byte on: vv the byte just read, pn and pb the previous row's rest and byte above
 def row.mid(
@@ -733,8 +733,8 @@ def row_go(rr, xx, ft, bpp, stride, nr, prest, phist, cur, all, left, zz, ez, ok
           Equal.cong(Nat, Bool, nn => L1.flt.bytes(xx <> Nil{}, 1n+nn, ok), U32.to_nat(left), 0n, e0)),
         h_row)
       Equal.cong(U32, Maybe<&2, List<&2, U32>>,
-        vv => Png.uf.go(tail, Png.UFilt{}, False{}, bpp, stride, nr, List.reverse(&2, U32, vv <> cur), [], [],
-          vv <> all, 0, 0),
+        vv => Png.uf.go(tail, Png.UFilt{}, False{}, bpp, stride, nr, Png.Ur{List.reverse(&2, U32, vv <> cur), [], [],
+          0, 0}, vv <> all),
         Png.uf.recon(U32.and(255, U32.sub(xx, pred.at(ft, bpp, prest, phist, cur))), L1.ft.code(ft), bpp, prest,
           phist, cur), xx,
         recon_eq(ft, bpp, xx, prest, phist, cur, M1.and_right(ok, U32.is_lt(xx, 256), h0)))
@@ -867,7 +867,7 @@ def rows.ph(
   +left: U32,
   +cd: U32
 ) -> Maybe<&2, List<&2, U32>>:
-  Png.uf.go(xs, ph, zz, bpp, stride, nr, prev, [], [], all, left, cd)
+  Png.uf.go(xs, ph, zz, bpp, stride, nr, Png.Ur{prev, [], [], left, cd}, all)
 
 # unfilter at a filter byte, with prev the row above
 def rows.at(
@@ -878,7 +878,7 @@ def rows.at(
   +prev: List<&2, U32>,
   +all: List<&2, U32>
 ) -> Maybe<&2, List<&2, U32>>:
-  Png.uf.go(xs, Png.UFilt{}, False{}, bpp, stride, nr, prev, [], [], all, 0, 0)
+  Png.uf.go(xs, Png.UFilt{}, False{}, bpp, stride, nr, Png.Ur{prev, [], [], 0, 0}, all)
 
 # what rows_go proves
 def rows.ty(

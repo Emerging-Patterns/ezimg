@@ -166,7 +166,7 @@ def jpg.blocks(
     case 0n:
       []
     case 1n+pp:
-      Jpeg.decode.geom.go(0, bi, mx, my, ww, hh, hmax, vmax, [0], [0], [hi], [vi]) <>
+      Jpeg.decode.geom.at(bi, mx, my, hi, vi, Jpeg.Dims{ww, hh, hmax, vmax}) <>
         jpg.blocks(pp, (bi + 1 : U32), hi, vi, mx, my, hmax, vmax, ww, hh)
 
 # LAW: for sampling factors 1, 2 or 4, the decoder places a component's hi * vi data units of an MCU
@@ -586,7 +586,8 @@ def jpg.blocks.of(
     case 0n:
       []
     case 1n+pp:
-      Jpeg.decode.geom.go(comp, bi, mx, my, ww, hh, hmax, vmax, sids, ids, hs, vs) <>
+      Jpeg.decode.geom.at(bi, mx, my, jpg.fac.of(comp, sids, ids, hs), jpg.fac.of(comp, sids, ids, vs),
+        Jpeg.Dims{ww, hh, hmax, vmax}) <>
         jpg.blocks.of(pp, (bi + 1 : U32), comp, sids, ids, hs, vs, mx, my, hmax, vmax, ww, hh)
 
 # LAW: for every scan component, not only the frame's first, whose frame component has sampling factors
@@ -1090,7 +1091,8 @@ law jpeg_blocks_paint:
   for cb: Array<U32>
   for cr: Array<U32>
   for +ok: U32
-  {Jpeg.decode.blocks(left, Jpeg.decode.blk.live(blk), blk, ctrl, preds, frame, scan, tabs, ri, rgb, yy, cb, cr, ok) ==
+  {Jpeg.decode.blocks(left, Jpeg.decode.blk.live(blk), blk, ctrl, preds, Jpeg.Job{frame, scan, tabs, ri}, rgb,
+    Jpeg.Paint{ok, yy, cb, cr}) ==
     Jpeg.decode.done(jpg.run.ok(left, Jpeg.decode.blk.live(blk), blk, ctrl, preds, frame, scan, tabs, ri, ok), frame,
     rgb, jpg.paint.all(jpg.units.run(left, blk, ctrl, preds, frame, scan, tabs, ri), 0, frame, scan, yy),
     jpg.paint.all(jpg.units.run(left, blk, ctrl, preds, frame, scan, tabs, ri), 1, frame, scan, cb),

@@ -369,62 +369,55 @@ def decode.head.is(xs: List<&2, U32>, +want: U32) -> Bool:
     case +bb <> _rest:
       U32.is_eq(bb, want)
 
-# left more bits onto acc, most significant first. nn bits remain in buf, top bit first at bit 7; eq
-# says buf is empty. ff says the byte before xs was a 255, and h255 and h0 whether xs opens with 255
-# or 0, each asked with U32.is_eq so a law reaches a symbolic byte. After a 255, 0 is a stuffed 255
-# (eight one bits) and 255 a fill byte; any other byte is a marker, and it or the end of the bytes
-# reads zero bits and sets ok to 0.
-def decode.nbits(
-  left: Nat,
-  eq: Bool,
-  xs: List<&2, U32>,
-  ff: Bool,
-  h255: Bool,
-  h0: Bool,
-  +nn: U32,
-  +buf: U32,
-  +ok: U32,
-  +acc: U32
-) -> Bits & U32:
-  match left:
-    case 0n:
+# the bit reader inside decode.nbits, apart from its bytes and whether buf is empty: ff says the byte
+# before the bytes was a 255, and h255 and h0 whether they open with 255 or 0, each asked with U32.is_eq
+# so a law reaches a symbolic byte. nn bits remain in buf, top bit first at bit 7; acc holds the bits read
+# so far.
+type Nb is Data:
+  Nb{ff: Bool, h255: Bool, h0: Bool, +nn: U32, +buf: U32, +ok: U32, +acc: U32}
+
+# the reader at rest, the bytes after one it took, with nn bits of that byte left in buf
+def decode.nbits.at(+rest: List<&2, U32>, +nn: U32, +buf: U32, +ok: U32, +acc: U32) -> Nb:
+  Nb{False{}, decode.head.is(rest, 255), decode.head.is(rest, 0), nn, buf, ok, acc}
+
+# the byte after a 255 that is not 255 itself: 0 is a stuffed 255 (eight one bits); any other byte is a
+# marker, which reads zero bits and sets ok to 0
+def decode.nbits.ff(h0: Bool, +rest: List<&2, U32>, +ok: U32, +acc: U32) -> Nb:
+  match h0:
+    case True{}:
+      decode.nbits.at(rest, 7, 254, ok, U32.or(1, U32.shl(acc)))
+    case False{}:
+      decode.nbits.at(rest, 7, 0, 0, U32.shl(acc))
+
+# a 255 just taken: read with the byte after it, a fill byte after a 255 included
+def decode.nbits.hold(+rest: List<&2, U32>, +ok: U32, +acc: U32) -> Nb:
+  Nb{True{}, decode.head.is(rest, 255), decode.head.is(rest, 0), 0, 0, ok, acc}
+
+# left more bits onto acc from bytes xs, most significant first; eq says the buffer is empty. After a
+# 255, 0 is a stuffed 255 (eight one bits) and 255 a fill byte; any other byte is a marker, and it or the
+# end of the bytes reads zero bits and sets ok to 0.
+def decode.nbits(left: Nat, eq: Bool, xs: List<&2, U32>, nb: Nb) -> Bits & U32:
+  match left eq xs nb:
+    case 0n _eq xs Nb{_ff, _h255, _h0, +nn, +buf, +ok, +acc}:
       (Bits{nn, ok, buf, xs}, acc)
-    case 1n+p:
-      match eq:
-        case False{}:
-          decode.nbits(p, U32.is_eq((nn - 1 : U32), 0), xs, ff, h255, h0, (nn - 1 : U32), U32.and(255, U32.shl(buf)),
-            ok, U32.or(U32.shrn(buf, 7n), U32.shl(acc)))
-        case True{}:
-          match xs:
-            case Nil{}:
-              decode.nbits(p, False{}, [], False{}, False{}, False{}, 7, 0, 0, U32.shl(acc))
-            case +bb <> +rest:
-              match ff:
-                case False{}:
-                  match h255:
-                    case True{}:
-                      decode.nbits(Succ{p}, True{}, rest, True{}, decode.head.is(rest, 255), decode.head.is(rest, 0),
-                        0, 0, ok, acc)
-                    case False{}:
-                      decode.nbits(p, False{}, rest, False{}, decode.head.is(rest, 255), decode.head.is(rest, 0), 7,
-                        U32.and(255, U32.shl(bb)), ok, U32.or(U32.shrn(bb, 7n), U32.shl(acc)))
-                case True{}:
-                  match h255:
-                    case True{}:
-                      decode.nbits(Succ{p}, True{}, rest, True{}, decode.head.is(rest, 255), decode.head.is(rest, 0),
-                        0, 0, ok, acc)
-                    case False{}:
-                      match h0:
-                        case True{}:
-                          decode.nbits(p, False{}, rest, False{}, decode.head.is(rest, 255), decode.head.is(rest, 0),
-                            7, 254, ok, U32.or(1, U32.shl(acc)))
-                        case False{}:
-                          decode.nbits(p, False{}, rest, False{}, decode.head.is(rest, 255), decode.head.is(rest, 0),
-                            7, 0, 0, U32.shl(acc))
+    case 1n+pp False{} xs Nb{ff, h255, h0, +nn, +buf, +ok, +acc}:
+      decode.nbits(pp, U32.is_eq((nn - 1 : U32), 0), xs, Nb{ff, h255, h0, (nn - 1 : U32), U32.and(255,
+        U32.shl(buf)), ok, U32.or(U32.shrn(buf, 7n), U32.shl(acc))})
+    case 1n+pp True{} Nil{} Nb{_ff, _h255, _h0, _nn, _buf, _ok, +acc}:
+      decode.nbits(pp, False{}, [], Nb{False{}, False{}, False{}, 7, 0, 0, U32.shl(acc)})
+    case 1n+pp True{} Con{+bb, +rest} Nb{False{}, True{}, _h0, _nn, _buf, +ok, +acc}:
+      decode.nbits(Succ{pp}, True{}, rest, decode.nbits.hold(rest, ok, acc))
+    case 1n+pp True{} Con{+bb, +rest} Nb{False{}, False{}, _h0, _nn, _buf, +ok, +acc}:
+      decode.nbits(pp, False{}, rest, decode.nbits.at(rest, 7, U32.and(255, U32.shl(bb)), ok, U32.or(U32.shrn(bb,
+        7n), U32.shl(acc))))
+    case 1n+pp True{} Con{+bb, +rest} Nb{True{}, True{}, _h0, _nn, _buf, +ok, +acc}:
+      decode.nbits(Succ{pp}, True{}, rest, decode.nbits.hold(rest, ok, acc))
+    case 1n+pp True{} Con{+bb, +rest} Nb{True{}, False{}, h0, _nn, _buf, +ok, +acc}:
+      decode.nbits(pp, False{}, rest, decode.nbits.ff(h0, rest, ok, acc))
 
 # nn more bits from a reader, the first of them at the next byte when its buffer is empty
 def decode.nbits.of(left: Nat, +xs: List<&2, U32>, +nn: U32, +buf: U32, +ok: U32) -> Bits & U32:
-  decode.nbits(left, U32.is_eq(nn, 0), xs, False{}, decode.head.is(xs, 255), decode.head.is(xs, 0), nn, buf, ok, 0)
+  decode.nbits(left, U32.is_eq(nn, 0), xs, Nb{False{}, decode.head.is(xs, 255), decode.head.is(xs, 0), nn, buf, ok, 0})
 
 def decode.one(bits: Bits) -> Bits & U32:
   match bits:
@@ -456,26 +449,22 @@ def decode.huff.next(got: Bits & U32, zero: Huff, one: Huff) -> Walk:
 # the symbol a walk ends at: a leaf is its symbol, the reader left after its code; a node reads one more bit and
 # goes on from the side it leads to, at most left more bits; a gap, or a code longer than that, is no symbol, ok 0
 def decode.huff.walk(left: Nat, ww: Walk) -> Hit:
-  match left:
-    case 0n:
-      match ww:
-        case Walk{tab, bits}:
-          match tab:
-            case HLeaf{+s}:
-              decode.huff.hit(s, bits)
-            case _:
-              +_t = tab
-              Hit{0, bits, 0}
-    case 1n+p:
-      match ww:
-        case Walk{tab, bits}:
-          match tab:
-            case HLeaf{+s}:
-              decode.huff.hit(s, bits)
-            case HGap{}:
-              Hit{0, bits, 0}
-            case HNode{zero, one}:
-              decode.huff.walk(p, decode.huff.next(decode.one(bits), zero, one))
+  match left ww:
+    case 0n Walk{tab, bits}:
+      match tab:
+        case HLeaf{+s}:
+          decode.huff.hit(s, bits)
+        case _:
+          +_t = tab
+          Hit{0, bits, 0}
+    case 1n+p Walk{tab, bits}:
+      match tab:
+        case HLeaf{+s}:
+          decode.huff.hit(s, bits)
+        case HGap{}:
+          Hit{0, bits, 0}
+        case HNode{zero, one}:
+          decode.huff.walk(p, decode.huff.next(decode.one(bits), zero, one))
 
 # the symbol whose code the reader holds next, from a table's code tree (T.81 C), codes of at most left bits (T.81
 # F.2.2.3 decodes codes of at most 16 bits)
@@ -638,35 +627,35 @@ def decode.zig.at(+kk: U32) -> U32:
     case _:
       63
 
-# a row with column cc set to vv
-def decode.r8.set(rr: R8, +cc: U32, +vv: U32) -> R8:
+# a row with column cc set to val
+def decode.r8.set(rr: R8, +cc: U32, +val: U32) -> R8:
   match rr:
     case R8{+v0, +v1, +v2, +v3, +v4, +v5, +v6, +v7}:
       match cc:
         case 0:
           +_x = v0
-          R8{vv, v1, v2, v3, v4, v5, v6, v7}
+          R8{val, v1, v2, v3, v4, v5, v6, v7}
         case 1:
           +_x = v1
-          R8{v0, vv, v2, v3, v4, v5, v6, v7}
+          R8{v0, val, v2, v3, v4, v5, v6, v7}
         case 2:
           +_x = v2
-          R8{v0, v1, vv, v3, v4, v5, v6, v7}
+          R8{v0, v1, val, v3, v4, v5, v6, v7}
         case 3:
           +_x = v3
-          R8{v0, v1, v2, vv, v4, v5, v6, v7}
+          R8{v0, v1, v2, val, v4, v5, v6, v7}
         case 4:
           +_x = v4
-          R8{v0, v1, v2, v3, vv, v5, v6, v7}
+          R8{v0, v1, v2, v3, val, v5, v6, v7}
         case 5:
           +_x = v5
-          R8{v0, v1, v2, v3, v4, vv, v6, v7}
+          R8{v0, v1, v2, v3, v4, val, v6, v7}
         case 6:
           +_x = v6
-          R8{v0, v1, v2, v3, v4, v5, vv, v7}
+          R8{v0, v1, v2, v3, v4, v5, val, v7}
         case _:
           +_x = v7
-          R8{v0, v1, v2, v3, v4, v5, v6, vv}
+          R8{v0, v1, v2, v3, v4, v5, v6, val}
 
 # a block with row rw, column cc set to vv
 def decode.b8.set(bb: B8, +rw: U32, +cc: U32, +vv: U32) -> B8:
@@ -749,17 +738,8 @@ def decode.ac.store(got: Bits & U32, +sz: U32, +nk: U32, +run: U32, zz: B8, +qs:
 def decode.ac.bad(zz: B8, qs: List<&2, U32>, bits: Bits) -> Ac:
   Ac{64, zz, qs, bits, 1, 0}
 
-def decode.ac.run.b(
-  zzz: Bool,
-  over: Bool,
-  +sz: U32,
-  +nk: U32,
-  +run: U32,
-  bits: Bits,
-  zz: B8,
-  qs: List<&2, U32>,
-  +ok: U32
-) -> Ac:
+# a run/size symbol sym after coefficient kk: size 0 here, or a run past the block, is a bad code
+def decode.ac.run.b(zzz: Bool, over: Bool, +sym: U32, +kk: U32, bits: Bits, zz: B8, qs: List<&2, U32>, +ok: U32) -> Ac:
   match zzz:
     case True{}:
       decode.ac.bad(zz, qs, bits)
@@ -768,13 +748,12 @@ def decode.ac.run.b(
         case True{}:
           decode.ac.bad(zz, qs, bits)
         case False{}:
-          decode.ac.store(decode.read.n(sz, bits), sz, nk, run, zz, qs, ok)
+          +sz = U32.and(15, sym)
+          decode.ac.store(decode.read.n(sz, bits), sz, (kk + U32.shrn(sym, 4n) : U32), U32.shrn(sym, 4n), zz, qs, ok)
 
 def decode.ac.run(+sym: U32, bits: Bits, +kk: U32, zz: B8, qs: List<&2, U32>, +ok: U32) -> Ac:
-  +sz = U32.and(15, sym)
-  +run = U32.shrn(sym, 4n)
-  +nk = (kk + run : U32)
-  decode.ac.run.b(U32.is_eq(sz, 0), U32.is_ge(nk, 64), sz, nk, run, bits, zz, qs, ok)
+  decode.ac.run.b(U32.is_eq(U32.and(15, sym), 0), U32.is_ge((kk + U32.shrn(sym, 4n) : U32), 64), sym, kk, bits, zz,
+    qs, ok)
 
 def decode.ac.zrl.eq(eq: Bool, zz: B8, qs: List<&2, U32>, bits: Bits, +ok: U32) -> Ac:
   match eq:
@@ -827,33 +806,25 @@ def decode.ac.step(hit: Hit, +kk: U32, zz: B8, qs: List<&2, U32>, +ok: U32) -> A
       decode.ac.sym(sym, bits, kk, zz, qs, (ok * hok : U32))
 
 def decode.ac.full(done: Bool, short: Bool, ac: Ac) -> Ac:
-  match done:
-    case True{}:
-      ac
-    case False{}:
-      match short:
-        case False{}:
-          ac
-        case True{}:
-          match ac:
-            case Ac{k, zz, qs, bits, _d, _o}:
-              Ac{k, zz, qs, bits, 1, 0}
+  match done short ac:
+    case True{} _short whole:
+      whole
+    case False{} False{} whole:
+      whole
+    case False{} True{} Ac{k, zz, qs, bits, _d, _o}:
+      Ac{k, zz, qs, bits, 1, 0}
 
 def decode.ac(left: Nat, ac: Ac, +tab: Huff) -> Ac:
-  match left:
-    case 0n:
-      match ac:
-        case Ac{+k, _zz, _qs, _bits, +done, _ok}:
-          decode.ac.full(U32.is_eq(done, 1), U32.is_lt(k, 64), ac)
-    case 1n+p:
-      match ac:
-        case Ac{+k, +zz, +qs, bits, +done, +ok}:
-          match done:
-            case 0:
-              decode.ac(p, decode.ac.step(decode.huff(16n, tab, bits), k, zz, qs, ok), tab)
-            case _:
-              +_t = tab
-              ac
+  match left ac:
+    case 0n Ac{+k, zz, qs, bits, +done, ok}:
+      decode.ac.full(U32.is_eq(done, 1), U32.is_lt(k, 64), Ac{k, zz, qs, bits, done, ok})
+    case 1n+p Ac{+k, +zz, +qs, bits, +done, +ok}:
+      match done:
+        case 0:
+          decode.ac(p, decode.ac.step(decode.huff(16n, tab, bits), k, zz, qs, ok), tab)
+        case _:
+          +_t = tab
+          Ac{k, zz, qs, bits, done, ok}
 
 def decode.zig() -> List<&2, U32>:
   [0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7,
@@ -1079,19 +1050,11 @@ def decode.preds.next(due: U32, preds: Preds, +comp: U32, +pred: U32) -> Preds:
           decode.pred.zero()
 
 def decode.block.of(bits: Bits, +comp: U32, preds: Preds, frame: Frame, scan: Scan, +tabs: Tabs) -> Blk:
-  match bits:
-    case bs:
-      match comp:
-        case +c:
-          match preds:
-            case ps:
-              match frame:
-                case Frame{_w, _h, _nf, +ids, _hs, _vs, +tq, _hmax, _vmax}:
-                  match scan:
-                    case Scan{_ns, +sids, +td, +ta, _ss, _se, _ah}:
-                      decode.block.go(bs, decode.pred.get(ps, c), decode.dc.get(tabs, decode.at(td, c)),
-                        decode.ac.get(tabs, decode.at(ta, c)),
-                        decode.q.get(tabs, decode.at(tq, decode.index(ids, False{}, decode.at(sids, c), 0))))
+  match frame scan:
+    case Frame{_w, _h, _nf, +ids, _hs, _vs, +tq, _hmax, _vmax} Scan{_ns, +sids, +td, +ta, _ss, _se, _ah}:
+      decode.block.go(bits, decode.pred.get(preds, comp), decode.dc.get(tabs, decode.at(td, comp)),
+        decode.ac.get(tabs, decode.at(ta, comp)),
+        decode.q.get(tabs, decode.at(tq, decode.index(ids, False{}, decode.at(sids, comp), 0))))
 
 def decode.rst.ok(eq: Bool, rest: List<&2, U32>) -> Bits:
   match eq:
@@ -1153,71 +1116,33 @@ def decode.adv.mx(inb: Bool, +mcu: U32, +mx: U32, +my: U32, +rst: U32, +ri: U32)
 def decode.adv.mcu(+mcu: U32, +mx: U32, +my: U32, +rst: U32, +ww: U32, +hmax: U32, +ri: U32) -> Adv:
   decode.adv.mx(U32.is_lt(mx, decode.ceil(ww, (hmax * 8 : U32))), mcu, mx, my, rst, ri)
 
-def decode.adv.comp(
-  more: Bool,
-  +comp: U32,
-  +mx: U32,
-  +my: U32,
-  +mcu: U32,
-  +rst: U32,
-  +ww: U32,
-  +hmax: U32,
-  +ri: U32
-) -> Adv:
-  match more:
-    case True{}:
+# the frame's width, its largest horizontal sampling factor and the restart interval: what moving to the
+# next MCU reads
+type Lay is Data:
+  Lay{ww: U32, hmax: U32, ri: U32}
+
+def decode.adv.comp(more: Bool, +comp: U32, +mx: U32, +my: U32, +mcu: U32, +rst: U32, lay: Lay) -> Adv:
+  match more lay:
+    case True{} Lay{_ww, _hmax, _ri}:
       Adv{Ctrl{(comp + 1 : U32), 0, mx, my, mcu, rst}, 0, rst}
-    case False{}:
+    case False{} Lay{+ww, +hmax, +ri}:
       decode.adv.mcu((mcu + 1 : U32), (mx + 1 : U32), my, rst, ww, hmax, ri)
 
-def decode.adv.bi(
-  more: Bool,
-  +comp: U32,
-  +bi: U32,
-  +mx: U32,
-  +my: U32,
-  +mcu: U32,
-  +rst: U32,
-  +ww: U32,
-  +hmax: U32,
-  +ns: U32,
-  +ri: U32
-) -> Adv:
-  match more:
-    case True{}:
+def decode.adv.bi(more: Bool, ctrl: Ctrl, +ww: U32, +hmax: U32, +ns: U32, +ri: U32) -> Adv:
+  match more ctrl:
+    case True{} Ctrl{+comp, +bi, +mx, +my, +mcu, +rst}:
       Adv{Ctrl{comp, (bi + 1 : U32), mx, my, mcu, rst}, 0, rst}
-    case False{}:
-      decode.adv.comp(U32.is_lt((comp + 1 : U32), ns), comp, mx, my, mcu, rst, ww, hmax, ri)
-
-def decode.adv.go(
-  +comp: U32,
-  +bi: U32,
-  +mx: U32,
-  +my: U32,
-  +mcu: U32,
-  +rst: U32,
-  +ww: U32,
-  +hmax: U32,
-  +ns: U32,
-  sids: List<&2, U32>,
-  ids: List<&2, U32>,
-  hs: List<&2, U32>,
-  vs: List<&2, U32>,
-  +ri: U32
-) -> Adv:
-  +fi = decode.index(ids, False{}, decode.at(sids, comp), 0)
-  +hi = decode.at(hs, fi)
-  +vi = decode.at(vs, fi)
-  decode.adv.bi(U32.is_lt((bi + 1 : U32), (hi * vi : U32)), comp, bi, mx, my, mcu, rst, ww, hmax, ns, ri)
+    case False{} Ctrl{+comp, _bi, +mx, +my, +mcu, +rst}:
+      decode.adv.comp(U32.is_lt((comp + 1 : U32), ns), comp, mx, my, mcu, rst, Lay{ww, hmax, ri})
 
 def decode.adv(ctrl: Ctrl, frame: Frame, scan: Scan, +ri: U32) -> Adv:
-  match ctrl:
-    case Ctrl{+comp, +bi, +mx, +my, +mcu, +rst}:
-      match frame:
-        case Frame{+w, _h, _nf, +ids, +hs, +vs, _tq, +hmax, _vmax}:
-          match scan:
-            case Scan{+ns, +sids, _td, _ta, _ss, _se, _ah}:
-              decode.adv.go(comp, bi, mx, my, mcu, rst, w, hmax, ns, sids, ids, hs, vs, ri)
+  match ctrl frame scan:
+    case Ctrl{+comp, +bi, +mx, +my, +mcu, +rst} Frame{+w, _h, _nf, +ids, +hs, +vs, _tq, +hmax, _vmax}
+      Scan{+ns, +sids, _td, _ta, _ss, _se, _ah}:
+      +fi = decode.index(ids, False{}, decode.at(sids, comp), 0)
+      +hi = decode.at(hs, fi)
+      +vi = decode.at(vs, fi)
+      decode.adv.bi(U32.is_lt((bi + 1 : U32), (hi * vi : U32)), Ctrl{comp, bi, mx, my, mcu, rst}, w, hmax, ns, ri)
 
 def decode.block.next.go(
   adv: Adv,
@@ -1257,40 +1182,28 @@ def decode.geom.nz(+nn: U32) -> U32:
     case _:
       nn
 
-# where block bi of a component sits in its MCU: a component's hi * vi blocks
-# run left to right, hi to a row, then top to bottom (T.81 A.2.3), so its
-# column is bi mod hi and its row bi div hi
-def decode.geom.go(
-  +comp: U32,
-  +bi: U32,
-  +mx: U32,
-  +my: U32,
-  +ww: U32,
-  +hh: U32,
-  +hmax: U32,
-  +vmax: U32,
-  sids: List<&2, U32>,
-  ids: List<&2, U32>,
-  hs: List<&2, U32>,
-  vs: List<&2, U32>
-) -> Geom:
-  +fi = decode.index(ids, False{}, decode.at(sids, comp), 0)
-  +hi = decode.at(hs, fi)
-  +vi = decode.at(vs, fi)
-  +pw = U32.div(hmax, decode.geom.nz(hi))
-  +ph = U32.div(vmax, decode.geom.nz(vi))
-  +bx = U32.mod(bi, decode.geom.nz(hi))
-  +by = U32.div(bi, decode.geom.nz(hi))
-  Geom{(mx * hmax * 8 + bx * 8 * pw : U32), (my * vmax * 8 + by * 8 * ph : U32), pw, ph, ww, hh}
+# the frame's size and its largest sampling factors
+type Dims is Data:
+  Dims{ww: U32, hh: U32, hmax: U32, vmax: U32}
+
+# where block bi of a component with factors hi and vi sits in MCU (mx, my): a component's hi * vi
+# blocks run left to right, hi to a row, then top to bottom (T.81 A.2.3), so its column is bi mod hi and
+# its row bi div hi
+def decode.geom.at(+bi: U32, +mx: U32, +my: U32, +hi: U32, +vi: U32, dims: Dims) -> Geom:
+  match dims:
+    case Dims{+ww, +hh, +hmax, +vmax}:
+      +pw = U32.div(hmax, decode.geom.nz(hi))
+      +ph = U32.div(vmax, decode.geom.nz(vi))
+      +bx = U32.mod(bi, decode.geom.nz(hi))
+      +by = U32.div(bi, decode.geom.nz(hi))
+      Geom{(mx * hmax * 8 + bx * 8 * pw : U32), (my * vmax * 8 + by * 8 * ph : U32), pw, ph, ww, hh}
 
 def decode.geom(ctrl: Ctrl, frame: Frame, scan: Scan) -> Geom:
-  match ctrl:
-    case Ctrl{+comp, +bi, +mx, +my, _mcu, _rst}:
-      match frame:
-        case Frame{+w, +h, _nf, +ids, +hs, +vs, _tq, +hmax, +vmax}:
-          match scan:
-            case Scan{_ns, +sids, _td, _ta, _ss, _se, _ah}:
-              decode.geom.go(comp, bi, mx, my, w, h, hmax, vmax, sids, ids, hs, vs)
+  match ctrl frame scan:
+    case Ctrl{+comp, +bi, +mx, +my, _mcu, _rst} Frame{+w, +h, _nf, +ids, +hs, +vs, _tq, +hmax, +vmax}
+      Scan{_ns, +sids, _td, _ta, _ss, _se, _ah}:
+      +fi = decode.index(ids, False{}, decode.at(sids, comp), 0)
+      decode.geom.at(bi, mx, my, decode.at(hs, fi), decode.at(vs, fi), Dims{w, h, hmax, vmax})
 
 def decode.splat.in(xin: Bool, yin: Bool, plane: Array<U32>, +xx: U32, +yy: U32, +ww: U32, +sample: U32) -> Array<U32>:
   match xin:
@@ -1322,6 +1235,10 @@ def decode.splat.px(
       decode.splat.px(p, decode.splat.in(U32.is_lt((x0 + px : U32), ww), U32.is_lt(yy, hh), plane, (x0 + px : U32), yy,
         ww, vv), x0, yy, (px + 1 : U32), ww, hh, vv)
 
+# the frame's width and height, which bound the pixels a sample may write
+type Wh is Data:
+  Wh{ww: U32, hh: U32}
+
 # the pw by ph pixels one sample covers, from (x0, y0 + py), row by row
 def decode.splat.py(
   left: Nat,
@@ -1330,82 +1247,43 @@ def decode.splat.py(
   +y0: U32,
   +py: U32,
   +pw: U32,
-  +ww: U32,
-  +hh: U32,
+  wh: Wh,
   +vv: U32
 ) -> Array<U32>:
-  match left:
-    case 0n:
+  match left wh:
+    case 0n _wh:
       plane
-    case 1n+p:
+    case 1n+p Wh{+ww, +hh}:
       decode.splat.py(p, decode.splat.px(U32.to_nat(pw), plane, x0, (y0 + py : U32), 0, ww, hh, vv), x0, y0,
-        (py + 1 : U32), pw, ww, hh, vv)
+        (py + 1 : U32), pw, Wh{ww, hh}, vv)
 
-# the samples xs of one block row from column col on, each over the pw by ph pixels at (ox + col * pw, oy + row * ph):
-# xs's first sample at column col, the next at col + 1, 0 for a sample past the end of xs
-def decode.splat.col(
-  left: Nat,
-  plane: Array<U32>,
-  +xs: List<&2, U32>,
-  +row: U32,
-  +col: U32,
-  +ox: U32,
-  +oy: U32,
-  +pw: U32,
-  +ph: U32,
-  +ww: U32,
-  +hh: U32
-) -> Array<U32>:
-  match left:
-    case 0n:
+# the samples xs of one block row from column col on, each over the pw by ph pixels at (ox + col * pw, oy + row * ph)
+# of gg: xs's first sample at column col, the next at col + 1, 0 for a sample past the end of xs
+def decode.splat.col(left: Nat, plane: Array<U32>, +xs: List<&2, U32>, +row: U32, +col: U32, gg: Geom) -> Array<U32>:
+  match left gg:
+    case 0n _gg:
       plane
-    case 1n+p:
+    case 1n+p Geom{+ox, +oy, +pw, +ph, +ww, +hh}:
       decode.splat.col(p, decode.splat.py(U32.to_nat(ph), plane, (ox + col * pw : U32), (oy + row * ph : U32), 0, pw,
-        ww, hh, decode.nth(0n, xs)), decode.skip(1n, xs), row, (col + 1 : U32), ox, oy, pw, ph, ww, hh)
+        Wh{ww, hh}, decode.nth(0n, xs)), decode.skip(1n, xs), row, (col + 1 : U32), Geom{ox, oy, pw, ph, ww, hh})
 
 # the rows of an 8 by 8 block from row down, xs its samples from that row's first, each sample replicated over pw by
-# ph pixels; a block's samples are read once, in order
-def decode.splat(
-  left: Nat,
-  plane: Array<U32>,
-  +xs: List<&2, U32>,
-  +row: U32,
-  +ox: U32,
-  +oy: U32,
-  +pw: U32,
-  +ph: U32,
-  +ww: U32,
-  +hh: U32
-) -> Array<U32>:
+# ph pixels at gg; a block's samples are read once, in order
+def decode.splat(left: Nat, plane: Array<U32>, +xs: List<&2, U32>, +row: U32, +gg: Geom) -> Array<U32>:
   match left:
     case 0n:
       plane
     case 1n+p:
-      decode.splat(p, decode.splat.col(8n, plane, xs, row, 0, ox, oy, pw, ph, ww, hh), decode.skip(8n, xs),
-        (row + 1 : U32), ox, oy, pw, ph, ww, hh)
+      decode.splat(p, decode.splat.col(8n, plane, xs, row, 0, gg), decode.skip(8n, xs), (row + 1 : U32), gg)
 
-def decode.paint.which(
-  which: Bool,
-  samples: List<&2, U32>,
-  plane: Array<U32>,
-  +ox: U32,
-  +oy: U32,
-  +pw: U32,
-  +ph: U32,
-  +ww: U32,
-  +hh: U32
-) -> Array<U32>:
+def decode.paint.use(gg: Geom, which: Bool, samples: List<&2, U32>, plane: Array<U32>) -> Array<U32>:
   match which:
     case False{}:
       +_s = samples
+      +_g = gg
       plane
     case True{}:
-      decode.splat(8n, plane, samples, 0, ox, oy, pw, ph, ww, hh)
-
-def decode.paint.use(gg: Geom, which: Bool, samples: List<&2, U32>, plane: Array<U32>) -> Array<U32>:
-  match gg:
-    case Geom{+ox, +oy, +pw, +ph, +w, +h}:
-      decode.paint.which(which, samples, plane, ox, oy, pw, ph, w, h)
+      decode.splat(8n, plane, samples, 0, gg)
 
 def decode.ctrl.comp(ctrl: Ctrl) -> U32:
   match ctrl:
@@ -1521,14 +1399,12 @@ def decode.up.cell.c(
   +mode: U32,
   +xx: U32,
   +yy: U32,
-  +xf: U32,
-  +yf: U32,
-  +ww: U32,
+  +at: U32,
   +v0: U32,
   +vh: U32
 ) -> Array<U32> & U32:
   (a, vv) = got
-  decode.up.cell.d(Array.get(U32, a, (yf * ww + xf : U32)), mode, xx, yy, v0, vh, vv)
+  decode.up.cell.d(Array.get(U32, a, at), mode, xx, yy, v0, vh, vv)
 
 def decode.up.cell.b(
   got: Array<U32> & U32,
@@ -1541,7 +1417,7 @@ def decode.up.cell.b(
   +v0: U32
 ) -> Array<U32> & U32:
   (a, vh) = got
-  decode.up.cell.c(Array.get(U32, a, (yf * ww + xx : U32)), mode, xx, yy, xf, yf, ww, v0, vh)
+  decode.up.cell.c(Array.get(U32, a, (yf * ww + xx : U32)), mode, xx, yy, (yf * ww + xf : U32), v0, vh)
 
 def decode.up.cell.a(
   got: Array<U32> & U32,
@@ -1559,40 +1435,38 @@ def decode.up.cell(+mode: U32, +xx: U32, +yy: U32, +ww: U32, +hh: U32, plane: Ar
   decode.up.cell.a(Array.get(U32, plane, (yy * ww + xx : U32)), mode, xx, yy, decode.up.far(xx, ww),
     decode.up.far(yy, hh), ww)
 
-# the pixels from (xx, yy) on: lx more of row yy after it, then ly more rows of 1 + wn pixels. got holds the plane
-# and pixel (xx, yy), just read.
+# how a plane is upsampled: its filter mode, width and height
+type Grid is Data:
+  Grid{+mode: U32, +ww: U32, +hh: U32}
+
+# the pixels from (col, row) on: lx more of row `row` after it, then ly more rows of 1 + wn pixels. got holds the
+# plane and pixel (col, row), just read.
 def decode.up.walk(
   ly: Nat,
   lx: Nat,
+  grid: Grid,
   got: Array<U32> & U32,
-  +xx: U32,
-  +yy: U32,
-  +mode: U32,
-  +ww: U32,
-  +hh: U32,
+  +col: U32,
+  +row: U32,
   +wn: Nat
 ) -> List<&2, U32>:
-  match ly:
-    case 0n:
-      match lx:
-        case 0n:
-          (a, v) = got
-          +_a = decode.sink(a)
-          [v]
-        case 1n+p:
-          (a, v) = got
-          v <> decode.up.walk(0n, p, decode.up.cell(mode, (xx + 1 : U32), yy, ww, hh, a), (xx + 1 : U32), yy, mode,
-            ww, hh, wn)
-    case 1n+q:
-      match lx:
-        case 0n:
-          (a, v) = got
-          v <> decode.up.walk(q, wn, decode.up.cell(mode, 0, (yy + 1 : U32), ww, hh, a), 0, (yy + 1 : U32), mode,
-            ww, hh, wn)
-        case 1n+p:
-          (a, v) = got
-          v <> decode.up.walk(1n+q, p, decode.up.cell(mode, (xx + 1 : U32), yy, ww, hh, a), (xx + 1 : U32), yy,
-            mode, ww, hh, wn)
+  match ly lx grid:
+    case 0n 0n _g:
+      (a, v) = got
+      +_a = decode.sink(a)
+      [v]
+    case 0n 1n+p Grid{+mode, +ww, +hh}:
+      (a, v) = got
+      v <> decode.up.walk(0n, p, Grid{mode, ww, hh}, decode.up.cell(mode, (col + 1 : U32), row, ww, hh, a),
+        (col + 1 : U32), row, wn)
+    case 1n+q 0n Grid{+mode, +ww, +hh}:
+      (a, v) = got
+      v <> decode.up.walk(q, wn, Grid{mode, ww, hh}, decode.up.cell(mode, 0, (row + 1 : U32), ww, hh, a), 0,
+        (row + 1 : U32), wn)
+    case 1n+q 1n+p Grid{+mode, +ww, +hh}:
+      (a, v) = got
+      v <> decode.up.walk(1n+q, p, Grid{mode, ww, hh}, decode.up.cell(mode, (col + 1 : U32), row, ww, hh, a),
+        (col + 1 : U32), row, wn)
 
 # a plane's rows of ww pixels, hn of them, filtered
 def decode.up.rows(hn: Nat, wn: Nat, +mode: U32, +ww: U32, +hh: U32, plane: Array<U32>) -> List<&2, U32>:
@@ -1607,7 +1481,7 @@ def decode.up.rows(hn: Nat, wn: Nat, +mode: U32, +ww: U32, +hh: U32, plane: Arra
           +_a = decode.sink(plane)
           []
         case 1n+(+p):
-          decode.up.walk(q, p, decode.up.cell(mode, 0, 0, ww, hh, plane), 0, 0, mode, ww, hh, p)
+          decode.up.walk(q, p, Grid{mode, ww, hh}, decode.up.cell(mode, 0, 0, ww, hh, plane), 0, 0, p)
 
 # a plane's nn = ww * hh points in order, upsampled by mode: as painted for mode 0, else filtered
 def decode.up.out.z(zero: Bool, +mode: U32, +nn: Nat, +ww: U32, +hh: U32, plane: Array<U32>) -> List<&2, U32>:
@@ -1693,47 +1567,51 @@ def direct(+rr: U32, +gg: U32, +bb: U32) -> U32:
 
 # every R, G, B triple of a picture coded without a colour transform, as many as the shortest list holds
 def decode.directs(rs: List<&2, U32>, gs: List<&2, U32>, bs: List<&2, U32>) -> List<&2, U32>:
-  match rs:
-    case Nil{}:
-      +_g = decode.drop(gs)
-      +_b = decode.drop(bs)
+  match rs gs bs:
+    case Nil{} gl bl:
+      +_g = decode.drop(gl)
+      +_b = decode.drop(bl)
       Nil{}
-    case rv <> rt:
-      match gs:
-        case Nil{}:
-          +_r = decode.drop(rv <> rt)
-          +_b = decode.drop(bs)
-          Nil{}
-        case gv <> gt:
-          match bs:
-            case Nil{}:
-              +_r = decode.drop(rv <> rt)
-              +_g = decode.drop(gv <> gt)
-              Nil{}
-            case bv <> bt:
-              direct(rv, gv, bv) <> decode.directs(rt, gt, bt)
+    case rv <> rt Nil{} bl:
+      +_r = decode.drop(rv <> rt)
+      +_b = decode.drop(bl)
+      Nil{}
+    case rv <> rt gv <> gt Nil{}:
+      +_r = decode.drop(rv <> rt)
+      +_g = decode.drop(gv <> gt)
+      Nil{}
+    case rv <> rt gv <> gt bv <> bt:
+      direct(rv, gv, bv) <> decode.directs(rt, gt, bt)
 
 # every Y, Cb, Cr triple of a picture as a packed opaque sample, as many as the shortest list holds
 def decode.rgbs(ys: List<&2, U32>, bs: List<&2, U32>, rs: List<&2, U32>) -> List<&2, U32>:
-  match ys:
-    case Nil{}:
-      +_b = decode.drop(bs)
-      +_r = decode.drop(rs)
+  match ys bs rs:
+    case Nil{} bl rl:
+      +_b = decode.drop(bl)
+      +_r = decode.drop(rl)
       Nil{}
-    case yv <> yt:
-      match bs:
-        case Nil{}:
-          +_y = decode.drop(yv <> yt)
-          +_r = decode.drop(rs)
-          Nil{}
-        case bv <> bt:
-          match rs:
-            case Nil{}:
-              +_y = decode.drop(yv <> yt)
-              +_b = decode.drop(bv <> bt)
-              Nil{}
-            case rv <> rt:
-              rgb(yv, bv, rv) <> decode.rgbs(yt, bt, rt)
+    case yv <> yt Nil{} rl:
+      +_y = decode.drop(yv <> yt)
+      +_r = decode.drop(rl)
+      Nil{}
+    case yv <> yt bv <> bt Nil{}:
+      +_y = decode.drop(yv <> yt)
+      +_b = decode.drop(bv <> bt)
+      Nil{}
+    case yv <> yt bv <> bt rv <> rt:
+      rgb(yv, bv, rv) <> decode.rgbs(yt, bt, rt)
+
+# the three planes, Y (or R), Cb (or G) and Cr (or B)
+type Planes is Type:
+  Planes{yy: Array<U32>, cb: Array<U32>, cr: Array<U32>}
+
+# what a block run reads and does not change: the frame, the scan, the tables in force and the restart interval
+type Job is Data:
+  Job{+frame: Frame, +scan: Scan, +tabs: Tabs, +ri: U32}
+
+# what a block run has made so far: 1 while every block decoded (else 0) and the three planes painted
+type Paint is Type:
+  Paint{+ok: U32, yy: Array<U32>, cb: Array<U32>, cr: Array<U32>}
 
 def decode.done.drop(yy: Array<U32>, cb: Array<U32>, cr: Array<U32>) -> Maybe<&2, Pic>:
   +_a = decode.sink(yy)
@@ -1804,22 +1682,12 @@ def decode.done.nf3(
       decode.done.drop(yy, cb, cr)
 
 # one component is gray; the rest is decided by decode.done.nf3
-def decode.done.nf1(
-  one: Bool,
-  +nf: U32,
-  rgb: Bool,
-  +ww: U32,
-  +hh: U32,
-  ups: Ups,
-  yy: Array<U32>,
-  cb: Array<U32>,
-  cr: Array<U32>
-) -> Maybe<&2, Pic>:
-  match one:
-    case True{}:
+def decode.done.nf1(one: Bool, +nf: U32, rgb: Bool, +ww: U32, +hh: U32, ups: Ups, planes: Planes) -> Maybe<&2, Pic>:
+  match one planes:
+    case True{} Planes{yy, cb, cr}:
       +_r = rgb
       decode.done.gray(ww, hh, ups, yy, cb, cr)
-    case False{}:
+    case False{} Planes{yy, cb, cr}:
       decode.done.nf3(U32.is_eq(nf, 3), rgb, ww, hh, ups, yy, cb, cr)
 
 # the picture by its component count. U32.is_eq, not a literal pattern, so a law reaches every count.
@@ -1833,7 +1701,7 @@ def decode.done.nf(
   cb: Array<U32>,
   cr: Array<U32>
 ) -> Maybe<&2, Pic>:
-  decode.done.nf1(U32.is_eq(nf, 1), nf, rgb, ww, hh, ups, yy, cb, cr)
+  decode.done.nf1(U32.is_eq(nf, 1), nf, rgb, ww, hh, ups, Planes{yy, cb, cr})
 
 # a failed scan is none; otherwise the picture by the frame's component count
 def decode.done.ok(
@@ -1871,7 +1739,7 @@ def decode.adv.duef(adv: Adv) -> U32:
 def decode.blk.live(blk: Blk) -> Bool:
   match blk:
     case Blk{_samples, _bits, _pred, +ok}:
-      Bool.not(U32.is_eq(ok, 0))
+      U32.is_ne(ok, 0)
 
 # the block run from blk, left more after it, live saying blk decoded. A block that failed stops the run, none,
 # before another block is read; otherwise each block is painted onto its component's plane
@@ -1881,44 +1749,27 @@ def decode.blocks(
   blk: Blk,
   +ctrl: Ctrl,
   +preds: Preds,
-  +frame: Frame,
-  +scan: Scan,
-  +tabs: Tabs,
-  +ri: U32,
+  +job: Job,
   +rgb: Bool,
-  yy: Array<U32>,
-  cb: Array<U32>,
-  cr: Array<U32>,
-  +ok: U32
+  paint: Paint
 ) -> Maybe<&2, Pic>:
-  match left:
-    case 0n:
-      match live:
-        case _live:
-          match blk:
-            case Blk{+samples, _bits, _pred, +bok}:
-              +gg = decode.geom(ctrl, frame, scan)
-              +cc = decode.ctrl.comp(ctrl)
-              decode.done((ok * bok : U32), frame, rgb, decode.paint.use(gg, U32.is_eq(cc, 0), samples, yy),
-                decode.paint.use(gg, U32.is_eq(cc, 1), samples, cb), decode.paint.use(gg, U32.is_eq(cc, 2), samples,
-                cr))
-    case 1n+p:
-      match live:
-        case False{}:
-          +_b = blk
-          decode.done(0, frame, rgb, yy, cb, cr)
-        case True{}:
-          match blk:
-            case Blk{+samples, +bits, +pred, +bok}:
-              match ctrl:
-                case Ctrl{+comp, _bi, _mx, _my, _mcu, _rst}:
-                  +av = decode.adv(ctrl, frame, scan, ri)
-                  +gg = decode.geom(ctrl, frame, scan)
-                  +nx = decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri)
-                  decode.blocks(p, decode.blk.live(nx), nx, decode.adv.ctrl(av), decode.preds.next(decode.adv.duef(av),
-                    preds, comp, pred), frame, scan, tabs, ri, rgb, decode.paint.use(gg, U32.is_eq(comp, 0), samples,
-                    yy), decode.paint.use(gg, U32.is_eq(comp, 1), samples, cb), decode.paint.use(gg, U32.is_eq(comp, 2),
-                    samples, cr), (ok * bok : U32))
+  match left live blk ctrl job paint:
+    case 0n _live Blk{+samples, _bits, _pred, +bok} _ctrl Job{+frame, +scan, _tabs, _ri} Paint{+ok, yy, cb, cr}:
+      +gg = decode.geom(ctrl, frame, scan)
+      +cc = decode.ctrl.comp(ctrl)
+      decode.done((ok * bok : U32), frame, rgb, decode.paint.use(gg, U32.is_eq(cc, 0), samples, yy),
+        decode.paint.use(gg, U32.is_eq(cc, 1), samples, cb), decode.paint.use(gg, U32.is_eq(cc, 2), samples, cr))
+    case 1n+_p False{} _blk _ctrl Job{+frame, _scan, _tabs, _ri} Paint{_ok, yy, cb, cr}:
+      decode.done(0, frame, rgb, yy, cb, cr)
+    case 1n+p True{} Blk{+samples, +bits, +pred, +bok} Ctrl{+comp, _bi, _mx, _my, _mcu, _rst} Job{+frame, +scan, +tabs,
+      +ri} Paint{+ok, yy, cb, cr}:
+      +av = decode.adv(ctrl, frame, scan, ri)
+      +gg = decode.geom(ctrl, frame, scan)
+      +nx = decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri)
+      decode.blocks(p, decode.blk.live(nx), nx, decode.adv.ctrl(av), decode.preds.next(decode.adv.duef(av), preds,
+        comp, pred), Job{frame, scan, tabs, ri}, rgb, Paint{(ok * bok : U32), decode.paint.use(gg, U32.is_eq(comp, 0),
+        samples, yy), decode.paint.use(gg, U32.is_eq(comp, 1), samples, cb), decode.paint.use(gg, U32.is_eq(comp, 2),
+        samples, cr)})
 
 def decode.blocks.sum(hs: List<&2, U32>, vs: List<&2, U32>, +nn: U32) -> U32:
   match hs:
@@ -1936,23 +1787,20 @@ def decode.blocks.sum(hs: List<&2, U32>, vs: List<&2, U32>, +nn: U32) -> U32:
 def decode.start(
   nn: Nat,
   bits: Bits,
-  +frame: Frame,
-  +scan: Scan,
-  +tabs: Tabs,
-  +ri: U32,
+  +job: Job,
   +rgb: Bool,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
 ) -> Maybe<&2, Pic>:
-  match nn:
-    case 0n:
+  match nn job:
+    case 0n _job:
       +_r = rgb
       decode.done.drop(yy, cb, cr)
-    case 1n+p:
+    case 1n+p Job{+frame, +scan, +tabs, +ri}:
       +b0 = decode.block.of(bits, 0, decode.pred.zero(), frame, scan, tabs)
-      decode.blocks(p, decode.blk.live(b0), b0, Ctrl{0, 0, 0, 0, 0, 0}, decode.pred.zero(), frame, scan, tabs, ri, rgb,
-        yy, cb, cr, 1)
+      decode.blocks(p, decode.blk.live(b0), b0, Ctrl{0, 0, 0, 0, 0, 0}, decode.pred.zero(), Job{frame, scan, tabs, ri},
+        rgb, Paint{1, yy, cb, cr})
 
 # the blocks a scan of the frame holds: ceil(w / 8 hmax) * ceil(h / 8 vmax) MCUs, each with the frame's
 # components' hi * vi data units
@@ -2029,52 +1877,28 @@ def decode.fits(
       Bool.and(decode.area.ok(ww, hh), Bool.and(Nat.is_le(decode.need.bits(U32.to_nat(nb)), decode.ent.bits(ent)),
         decode.scan.match(ns, nf, sids, ids)))
 
-def decode.run.fit(
-  fit: Bool,
-  +nb: U32,
-  +ww: U32,
-  +hh: U32,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +rgb: Bool
-) -> Maybe<&2, Pic>:
+def decode.run.fit(fit: Bool, +nb: U32, +ww: U32, +hh: U32, job: Job, ent: List<&2, U32>, +rgb: Bool) -> Maybe<&2, Pic>:
   match fit:
     case False{}:
       None{}
     case True{}:
-      decode.start(U32.to_nat(nb), Bits{0, 1, 0, ent}, frame, scan, tabs, ri, rgb, decode.plane((ww * hh : U32)),
+      decode.start(U32.to_nat(nb), Bits{0, 1, 0, ent}, job, rgb, decode.plane((ww * hh : U32)),
         decode.plane((ww * hh : U32)), decode.plane((ww * hh : U32)))
 
-def decode.run.n(
-  empty: Bool,
-  +ww: U32,
-  +hh: U32,
-  frame: Frame,
-  +scan: Scan,
-  tabs: Tabs,
-  +ent: List<&2, U32>,
-  +ri: U32,
-  +rgb: Bool
-) -> Maybe<&2, Pic>:
-  match empty:
-    case True{}:
+def decode.run.n(empty: Bool, +ww: U32, +hh: U32, job: Job, +ent: List<&2, U32>, +rgb: Bool) -> Maybe<&2, Pic>:
+  match empty job:
+    case True{} _job:
       None{}
-    case False{}:
-      match frame:
-        case Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
-          +nb = decode.nblocks(ww, hh, hs, vs, hmax, vmax)
-          decode.run.fit(decode.fits(ww, hh, nb, ent, nf, ids, scan), nb, ww, hh, {Frame{w, h, nf, ids, hs, vs, tq,
-            hmax,
-            vmax} : Frame}, scan, tabs, ent, ri, rgb)
+    case False{} Job{Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}, +scan, tabs, +ri}:
+      +nb = decode.nblocks(ww, hh, hs, vs, hmax, vmax)
+      decode.run.fit(decode.fits(ww, hh, nb, ent, nf, ids, scan), nb, ww, hh, Job{Frame{w, h, nf, ids, hs, vs, tq, hmax,
+        vmax}, scan, tabs, ri}, ent, rgb)
 
 # the scan decode of a frame. rgb says three components are R, G and B as coded, not YCbCr.
 def decode.run(frame: Frame, scan: Scan, tabs: Tabs, ent: List<&2, U32>, +ri: U32, +rgb: Bool) -> Maybe<&2, Pic>:
   match frame:
     case Frame{+w, +h, _nf, _ids, _hs, _vs, _tq, _hmax, _vmax}:
-      decode.run.n(Bool.or(U32.is_eq(w, 0), U32.is_eq(h, 0)), w, h, frame, scan, tabs, ent, ri, rgb)
+      decode.run.n(Bool.or(U32.is_eq(w, 0), U32.is_eq(h, 0)), w, h, Job{frame, scan, tabs, ri}, ent, rgb)
 
 # ---- files of several scans (T.81 B.2.3, E.2) ----
 # A sequential frame may code its components over several scans, each holding one component (non-interleaved, A.2.2)
@@ -2152,25 +1976,12 @@ def decode.units(ix: List<&2, U32>, +hs: List<&2, U32>, +vs: List<&2, U32>, +acc
 # the frame a scan is decoded over. An interleaved scan keeps the frame: its MCUs hold each of its components' hi * vi
 # blocks (A.2.3). A scan of one component has one block to an MCU, in raster order over that component's blocks
 # (A.2.2): the frame of that component alone, sampled 1 by 1, with hmax / hi by vmax / vi pixels to a sample.
-def decode.pass.frame(
-  one: Bool,
-  +ww: U32,
-  +hh: U32,
-  +nf: U32,
-  +ids: List<&2, U32>,
-  hs: List<&2, U32>,
-  vs: List<&2, U32>,
-  tq: List<&2, U32>,
-  +hmax: U32,
-  +vmax: U32,
-  +sid: U32,
-  +fi: U32
-) -> Frame:
-  match one:
-    case False{}:
+def decode.pass.frame(one: Bool, frame: Frame, +sid: U32, +fi: U32) -> Frame:
+  match one frame:
+    case False{} Frame{+ww, +hh, +nf, +ids, hs, vs, tq, +hmax, +vmax}:
       +_s = (sid - sid : U32)
       Frame{ww, hh, nf, ids, hs, vs, tq, hmax, vmax}
-    case True{}:
+    case True{} Frame{+ww, +hh, +nf, +ids, hs, vs, tq, +hmax, +vmax}:
       +_d = decode.drop(ids)
       +_n = (nf - nf : U32)
       Frame{ww, hh, 1, [sid], [1], [1], [decode.at(tq, fi)], U32.div(hmax, decode.geom.nz(decode.at(hs, fi))),
@@ -2204,7 +2015,7 @@ def decode.plan.go(+ns: U32, sids: List<&2, U32>, +ix: List<&2, U32>, frame: Fra
   match frame:
     case Frame{+w, +h, +nf, +ids, +hs, +vs, +tq, +hmax, +vmax}:
       +one = U32.is_eq(ns, 1)
-      +pf = decode.pass.frame(one, w, h, nf, ids, hs, vs, tq, hmax, vmax, decode.at(sids, 0), decode.at(ix, 0))
+      +pf = decode.pass.frame(one, Frame{w, h, nf, ids, hs, vs, tq, hmax, vmax}, decode.at(sids, 0), decode.at(ix, 0))
       Plan{ix, decode.ix.mask(ix, True{}, 0, nf, 0), pf, decode.pass.nb(pf, decode.pass.units(one, ix, hs, vs))}
 
 def decode.plan(scan: Scan, +frame: Frame) -> Plan:
@@ -2247,7 +2058,7 @@ def decode.passes.ok(passes: List<&2, Pass>, +frame: Frame, +mask: U32, ok: Bool
     case Pass{scan, _tabs, ent, _ri} <> rest:
       +pl = decode.plan(scan, frame)
       +bits = decode.plan.mask(pl)
-      decode.passes.ok(rest, frame, U32.or(mask, bits), Bool.and(ok, Bool.and(Bool.not(U32.is_eq(bits, 0)),
+      decode.passes.ok(rest, frame, U32.or(mask, bits), Bool.and(ok, Bool.and(U32.is_ne(bits, 0),
         Bool.and(U32.is_eq(U32.and(mask, bits), 0), Nat.is_le(decode.need.bits(U32.to_nat(decode.plan.nb(pl))),
         decode.ent.bits(ent))))))
 
@@ -2260,65 +2071,46 @@ def decode.pass.blocks(
   blk: Blk,
   +ctrl: Ctrl,
   +preds: Preds,
-  +frame: Frame,
-  +scan: Scan,
-  +tabs: Tabs,
-  +ri: U32,
+  +job: Job,
   +ix: List<&2, U32>,
-  yy: Array<U32>,
-  cb: Array<U32>,
-  cr: Array<U32>,
-  +ok: U32
+  paint: Paint
 ) -> U32 & Array<U32> & Array<U32> & Array<U32>:
-  match left:
-    case 0n:
-      match live:
-        case _live:
-          match blk:
-            case Blk{+samples, _bits, _pred, +bok}:
-              +gg = decode.geom(ctrl, frame, scan)
-              +fi = decode.at(ix, decode.ctrl.comp(ctrl))
-              ((ok * bok : U32), decode.paint.use(gg, U32.is_eq(fi, 0), samples, yy), decode.paint.use(gg,
-                U32.is_eq(fi, 1), samples, cb), decode.paint.use(gg, U32.is_eq(fi, 2), samples, cr))
-    case 1n+p:
-      match live:
-        case False{}:
-          +_b = blk
-          (0, yy, cb, cr)
-        case True{}:
-          match blk:
-            case Blk{+samples, +bits, +pred, +bok}:
-              match ctrl:
-                case Ctrl{+comp, _bi, _mx, _my, _mcu, _rst}:
-                  +av = decode.adv(ctrl, frame, scan, ri)
-                  +gg = decode.geom(ctrl, frame, scan)
-                  +fi = decode.at(ix, comp)
-                  +nx = decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri)
-                  decode.pass.blocks(p, decode.blk.live(nx), nx, decode.adv.ctrl(av), decode.preds.next(
-                    decode.adv.duef(av), preds, comp, pred), frame, scan, tabs, ri, ix, decode.paint.use(gg,
-                    U32.is_eq(fi, 0), samples, yy), decode.paint.use(gg, U32.is_eq(fi, 1), samples, cb),
-                    decode.paint.use(gg, U32.is_eq(fi, 2), samples, cr), (ok * bok : U32))
+  match left live blk ctrl job paint:
+    case 0n _live Blk{+samples, _bits, _pred, +bok} _ctrl Job{+frame, +scan, _tabs, _ri} Paint{+ok, yy, cb, cr}:
+      +gg = decode.geom(ctrl, frame, scan)
+      +fi = decode.at(ix, decode.ctrl.comp(ctrl))
+      ((ok * bok : U32), decode.paint.use(gg, U32.is_eq(fi, 0), samples, yy), decode.paint.use(gg, U32.is_eq(fi, 1),
+        samples, cb), decode.paint.use(gg, U32.is_eq(fi, 2), samples, cr))
+    case 1n+_p False{} _blk _ctrl _job Paint{_ok, yy, cb, cr}:
+      (0, yy, cb, cr)
+    case 1n+p True{} Blk{+samples, +bits, +pred, +bok} Ctrl{+comp, _bi, _mx, _my, _mcu, _rst} Job{+frame, +scan, +tabs,
+      +ri} Paint{+ok, yy, cb, cr}:
+      +av = decode.adv(ctrl, frame, scan, ri)
+      +gg = decode.geom(ctrl, frame, scan)
+      +fi = decode.at(ix, comp)
+      +nx = decode.block.next(bits, preds, pred, ctrl, frame, scan, tabs, ri)
+      decode.pass.blocks(p, decode.blk.live(nx), nx, decode.adv.ctrl(av), decode.preds.next(decode.adv.duef(av),
+        preds, comp, pred), Job{frame, scan, tabs, ri}, ix, Paint{(ok * bok : U32), decode.paint.use(gg,
+        U32.is_eq(fi, 0), samples, yy), decode.paint.use(gg, U32.is_eq(fi, 1), samples, cb), decode.paint.use(gg,
+        U32.is_eq(fi, 2), samples, cr)})
 
 # the nn blocks of a pass from its first, predictors and restart count starting afresh (E.2.4, F.2.1.3.1)
 def decode.pass.start(
   nn: Nat,
   bits: Bits,
-  +frame: Frame,
-  +scan: Scan,
-  +tabs: Tabs,
-  +ri: U32,
+  +job: Job,
   +ix: List<&2, U32>,
   yy: Array<U32>,
   cb: Array<U32>,
   cr: Array<U32>
 ) -> U32 & Array<U32> & Array<U32> & Array<U32>:
-  match nn:
-    case 0n:
+  match nn job:
+    case 0n _job:
       (1, yy, cb, cr)
-    case 1n+p:
+    case 1n+p Job{+frame, +scan, +tabs, +ri}:
       +b0 = decode.block.of(bits, 0, decode.pred.zero(), frame, scan, tabs)
-      decode.pass.blocks(p, decode.blk.live(b0), b0, Ctrl{0, 0, 0, 0, 0, 0}, decode.pred.zero(), frame, scan, tabs, ri,
-        ix, yy, cb, cr, 1)
+      decode.pass.blocks(p, decode.blk.live(b0), b0, Ctrl{0, 0, 0, 0, 0, 0}, decode.pred.zero(), Job{frame, scan,
+        tabs, ri}, ix, Paint{1, yy, cb, cr})
 
 # the planes after one more pass: ok is 0 once a pass has failed, and a failed pass stops the passes after it
 def decode.pass.then(
@@ -2346,7 +2138,7 @@ def decode.pass.run(
         case Pass{+scan, +tabs, +ent, +ri}:
           +pl = decode.plan(scan, frame)
           decode.pass.then(ok, decode.pass.start(U32.to_nat(decode.plan.nb(pl)), Bits{0, 1, 0, ent},
-            decode.plan.frame(pl), scan, tabs, ri, decode.plan.ix(pl), yy, cb, cr))
+            Job{decode.plan.frame(pl), scan, tabs, ri}, decode.plan.ix(pl), yy, cb, cr))
 
 def decode.pass.ok.at(
   +ok: U32,
@@ -2356,7 +2148,7 @@ def decode.pass.ok.at(
   cb: Array<U32>,
   cr: Array<U32>
 ) -> U32 & Array<U32> & Array<U32> & Array<U32>:
-  decode.pass.run(Bool.not(U32.is_eq(ok, 0)), pass, frame, ok, yy, cb, cr)
+  decode.pass.run(U32.is_ne(ok, 0), pass, frame, ok, yy, cb, cr)
 
 # a pass painted onto the planes got holds, with the ok flag before it
 def decode.pass.at(
@@ -2466,22 +2258,12 @@ def decode.finish.ok(
         case True{}:
           decode.run(frame, scan, tabs, List.reverse(&2, U32, ent), ri, rgb)
 
-def decode.finish.ph(
-  done: Bool,
-  +frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32,
-  +facts: U32
-) -> Maybe<&2, Pic>:
-  match done:
-    case True{}:
+def decode.finish.ph(done: Bool, +frame: Frame, pass: Pass, +kind: U32, +bad: U32, +facts: U32) -> Maybe<&2, Pic>:
+  match done pass:
+    case True{} Pass{scan, tabs, ent, +ri}:
       decode.finish.ok(Bool.and(U32.is_eq(kind, 1), decode.facts.soi(facts)), U32.is_eq(bad, 0), frame, scan, tabs,
         ent, ri, decode.rgb.of(facts, frame))
-    case False{}:
+    case False{} _pass:
       None{}
 
 def decode.max.b(gt: Bool, +aa: U32, +bb: U32) -> U32:
@@ -2548,61 +2330,25 @@ def decode.read.cs(
         case _:
           Comps{[], [], [], [], False{}}
 
-def decode.read.sof.ok(
-  good: Bool,
-  zmax: Bool,
-  +ww: U32,
-  +hh: U32,
-  +nf: U32,
-  ids: List<&2, U32>,
-  +hs: List<&2, U32>,
-  +vs: List<&2, U32>,
-  tq: List<&2, U32>,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32
-) -> St:
-  match good:
-    case False{}:
+def decode.read.sof.ok(good: Bool, zmax: Bool, frame: Frame, pass: Pass, +kind: U32) -> St:
+  match good zmax pass kind:
+    case False{} _zmax Pass{scan, tabs, ent, +ri} _kind:
       St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
-    case True{}:
-      match zmax:
-        case True{}:
-          St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
-        case False{}:
-          match kind:
-            case 0:
-              St{Seek{}, Frame{ww, hh, nf, ids, hs, vs, tq, decode.vmax(hs, 0), decode.vmax(vs, 0)}, scan, tabs, ent,
-                ri, 1, 0}
-            case _:
-              St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
+    case True{} True{} Pass{scan, tabs, ent, +ri} _kind:
+      St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
+    case True{} False{} Pass{scan, tabs, ent, +ri} 0:
+      St{Seek{}, frame, scan, tabs, ent, ri, 1, 0}
+    case True{} False{} Pass{scan, tabs, ent, +ri} _kind:
+      St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
 
 # the components first: a factor outside 1, 2 and 4, or a short component
 # list, refuses the file before the count and the refusals so far are asked
-def decode.read.sof.c(
-  cok: Bool,
-  good: Bool,
-  zmax: Bool,
-  +ww: U32,
-  +hh: U32,
-  +nf: U32,
-  ids: List<&2, U32>,
-  +hs: List<&2, U32>,
-  +vs: List<&2, U32>,
-  tq: List<&2, U32>,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32
-) -> St:
-  match cok:
-    case False{}:
+def decode.read.sof.c(cok: Bool, good: Bool, zmax: Bool, frame: Frame, pass: Pass, +kind: U32) -> St:
+  match cok pass:
+    case False{} Pass{scan, tabs, ent, +ri}:
       St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
-    case True{}:
-      decode.read.sof.ok(good, zmax, ww, hh, nf, ids, hs, vs, tq, scan, tabs, ent, ri, kind)
+    case True{} Pass{scan, tabs, ent, +ri}:
+      decode.read.sof.ok(good, zmax, frame, Pass{scan, tabs, ent, ri}, kind)
 
 # a sampling factor T.81 B.2.2 allows: 1 to 4
 def decode.fac.any(+ff: U32) -> Bool:
@@ -2630,47 +2376,18 @@ def decode.fac.one(hs: List<&2, U32>, vs: List<&2, U32>) -> Bool:
 # component H is Hmax, so that is the grid of a component sampled 1 by 1, which is how such a frame is kept,
 # whatever factors 1 to 4 its SOF names. A frame of three components is read as its SOF says, each factor 1, 2
 # or 4 (laws/JpegPlacesComponentSamples.bend).
-def decode.read.sof.n1(
-  one: Bool,
-  cok: Bool,
-  +ww: U32,
-  +hh: U32,
-  +nf: U32,
-  +ids: List<&2, U32>,
-  +hs: List<&2, U32>,
-  +vs: List<&2, U32>,
-  +tq: List<&2, U32>,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
-  match one:
-    case True{}:
+def decode.read.sof.n1(one: Bool, cc: Comps, +ww: U32, +hh: U32, +nf: U32, pass: Pass, +kind: U32, +bad: U32) -> St:
+  match one cc:
+    case True{} Comps{+ids, +hs, +vs, +tq, cok}:
       +_c = cok
-      decode.read.sof.c(decode.fac.one(hs, vs), U32.is_eq(bad, 0), False{}, ww, hh, nf, ids, [1], [1], tq, scan,
-        tabs, ent, ri, kind)
-    case False{}:
-      decode.read.sof.c(cok, Bool.and(decode.nf.ok(nf), U32.is_eq(bad, 0)), U32.is_eq(decode.vmax(hs, 0), 0), ww,
-        hh, nf, ids, hs, vs, tq, scan, tabs, ent, ri, kind)
+      decode.read.sof.c(decode.fac.one(hs, vs), U32.is_eq(bad, 0), False{}, Frame{ww, hh, nf, ids, [1], [1], tq,
+        decode.vmax([1], 0), decode.vmax([1], 0)}, pass, kind)
+    case False{} Comps{+ids, +hs, +vs, +tq, cok}:
+      decode.read.sof.c(cok, Bool.and(decode.nf.ok(nf), U32.is_eq(bad, 0)), U32.is_eq(decode.vmax(hs, 0), 0),
+        Frame{ww, hh, nf, ids, hs, vs, tq, decode.vmax(hs, 0), decode.vmax(vs, 0)}, pass, kind)
 
-def decode.read.sof.f(
-  cc: Comps,
-  +ww: U32,
-  +hh: U32,
-  +nf: U32,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
-  match cc:
-    case Comps{+ids, +hs, +vs, +tq, cok}:
-      decode.read.sof.n1(U32.is_eq(nf, 1), cok, ww, hh, nf, ids, hs, vs, tq, scan, tabs, ent, ri, kind, bad)
+def decode.read.sof.f(cc: Comps, +ww: U32, +hh: U32, +nf: U32, pass: Pass, +kind: U32, +bad: U32) -> St:
+  decode.read.sof.n1(U32.is_eq(nf, 1), cc, ww, hh, nf, pass, kind, bad)
 
 # the SOF0 body after its precision byte: precision 8 goes on to the size and the components, any other stops
 def decode.read.sof.p(
@@ -2688,7 +2405,7 @@ def decode.read.sof.p(
       match xs:
         case hh <> hl <> wh <> wl <> +nf <> rest:
           decode.read.sof.f(decode.read.cs(U32.to_nat(nf), rest, [], [], [], [], True{}), decode.u16(wh, wl),
-            decode.u16(hh, hl), nf, scan, tabs, ent, ri, kind, bad)
+            decode.u16(hh, hl), nf, Pass{scan, tabs, ent, ri}, kind, bad)
         case _:
           St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
     case False{}:
@@ -2709,6 +2426,29 @@ def decode.read.sof(
       decode.read.sof.p(U32.is_eq(pp, 8), rest, scan, tabs, ent, ri, kind, bad)
     case Nil{}:
       St{Stop{}, decode.frame0(), scan, tabs, ent, ri, kind, 1}
+
+# what the marker walk has read besides its phase: the other fields of a St, which every segment reader takes and
+# hands on
+type Rd is Data:
+  Rd{frame: Frame, scan: Scan, tabs: Tabs, ent: List<&2, U32>, ri: U32, kind: U32, bad: U32}
+
+# the walk at a phase, with what it has read
+def decode.rd.st(phase: Phase, rd: Rd) -> St:
+  match rd:
+    case Rd{frame, scan, tabs, ent, +ri, +kind, +bad}:
+      St{phase, frame, scan, tabs, ent, ri, kind, bad}
+
+# the walk stopped on a fault, with what it has read
+def decode.rd.fail(rd: Rd) -> St:
+  match rd:
+    case Rd{frame, scan, tabs, ent, +ri, +kind, _bad}:
+      St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
+
+# an SOF0 or SOF1 body, read with what the walk has read; its frame is replaced
+def decode.read.sof.of(xs: List<&2, U32>, rd: Rd) -> St:
+  match rd:
+    case Rd{_frame, scan, tabs, ent, +ri, +kind, +bad}:
+      decode.read.sof(xs, scan, tabs, ent, ri, kind, bad)
 
 def decode.take(left: Nat, xs: List<&2, U32>, acc: List<&2, U32>) -> List<&2, U32> & List<&2, U32>:
   match left:
@@ -2755,58 +2495,60 @@ def decode.q.vals(wide: Bool, xs: List<&2, U32>) -> List<&2, U32>:
     case False{}:
       xs
 
+# a DQT body being read: whether it is well formed so far, the bytes left of the table being read (0 between tables),
+# that table's Tq and whether its entries are 16-bit, its entries so far, newest first, and what the walk has read
+type Dq is Data:
+  Dq{ok: Bool, phase: Nat, id: U32, wide: Bool, acc: List<&2, U32>, rd: Rd}
+
+# the end of a DQT body: well formed when it ends between tables
+def decode.dqt.end(ok: Bool, phase: Nat, acc: List<&2, U32>, rd: Rd) -> St:
+  match ok:
+    case False{}:
+      +_a = decode.drop(acc)
+      decode.rd.fail(rd)
+    case True{}:
+      match phase:
+        case 0n:
+          +_a = decode.drop(acc)
+          decode.rd.st(Seek{}, rd)
+        case _:
+          +_a = decode.drop(acc)
+          decode.rd.fail(rd)
+
+# what the walk has read, with a quantisation table put
+def decode.dqt.put(+id: U32, vals: List<&2, U32>, rd: Rd) -> Rd:
+  match rd:
+    case Rd{frame, scan, tabs, ent, +ri, +kind, +bad}:
+      Rd{frame, scan, decode.q.put(tabs, id, vals), ent, ri, kind, bad}
+
+# a DQT body after one more byte of a well-formed one: a table's Pq and Tq byte, its last entry byte, or another
+def decode.dqt.next(+byte: U32, phase: Nat, +id: U32, +wide: Bool, acc: List<&2, U32>, rd: Rd) -> Dq:
+  match phase:
+    case 0n:
+      +_a = decode.drop(acc)
+      +pq = U32.shrn(byte, 4n)
+      Dq{Bool.and(U32.is_le(pq, 1), U32.is_le(U32.and(byte, 15), 3)), Bool.pick(Nat, U32.is_eq(pq, 1), 128n, 64n),
+        U32.and(byte, 15), U32.is_eq(pq, 1), [], rd}
+    case 1n+p:
+      match p:
+        case 0n:
+          Dq{True{}, 0n, 0, False{}, [], decode.dqt.put(id, decode.q.vals(wide, List.reverse(&2, U32, byte <> acc)),
+            rd)}
+        case _:
+          Dq{True{}, p, id, wide, byte <> acc, rd}
+
 # a DQT body: each table's Pq and Tq byte (Pq 0 or 1, Tq at most 3), then its 64 entries, of 8 or 16 bits
-def decode.read.dqt(
-  xs: List<&2, U32>,
-  ok: Bool,
-  phase: Nat,
-  +id: U32,
-  +wide: Bool,
-  acc: List<&2, U32>,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
-  match xs:
-    case Nil{}:
-      match ok:
-        case False{}:
-          +_a = decode.drop(acc)
-          St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
-        case True{}:
-          match phase:
-            case 0n:
-              +_a = decode.drop(acc)
-              St{Seek{}, frame, scan, tabs, ent, ri, kind, bad}
-            case _:
-              +_a = decode.drop(acc)
-              St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
-    case +b <> rest:
-      match ok:
-        case False{}:
-          +_n = decode.drop(rest)
-          +_a = decode.drop(acc)
-          +_b = (b - b : U32)
-          St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
-        case True{}:
-          match phase:
-            case 0n:
-              +_a = decode.drop(acc)
-              +pq = U32.shrn(b, 4n)
-              decode.read.dqt(rest, Bool.and(U32.is_le(pq, 1), U32.is_le(U32.and(b, 15), 3)), Bool.pick(Nat,
-                U32.is_eq(pq, 1), 128n, 64n), U32.and(b, 15), U32.is_eq(pq, 1), [], frame, scan, tabs, ent, ri, kind,
-                bad)
-            case 1n+p:
-              match p:
-                case 0n:
-                  decode.read.dqt(rest, True{}, 0n, 0, False{}, [], frame, scan,
-                    decode.q.put(tabs, id, decode.q.vals(wide, List.reverse(&2, U32, b <> acc))), ent, ri, kind, bad)
-                case _:
-                  decode.read.dqt(rest, True{}, p, id, wide, b <> acc, frame, scan, tabs, ent, ri, kind, bad)
+def decode.read.dqt(xs: List<&2, U32>, dq: Dq) -> St:
+  match xs dq:
+    case Nil{} Dq{ok, phase, _id, _wide, acc, rd}:
+      decode.dqt.end(ok, phase, acc, rd)
+    case Con{+byte, rest} Dq{False{}, _phase, _id, _wide, acc, rd}:
+      +_n = decode.drop(rest)
+      +_a = decode.drop(acc)
+      +_b = (byte - byte : U32)
+      decode.rd.fail(rd)
+    case Con{+byte, rest} Dq{True{}, phase, +id, +wide, acc, rd}:
+      decode.read.dqt(rest, decode.dqt.next(byte, phase, id, wide, acc, rd))
 
 def decode.sum.counts(xs: List<&2, U32>, +nn: U32) -> U32:
   match xs:
@@ -2832,71 +2574,78 @@ def decode.huff.counts.ok(+cs: List<&2, U32>) -> Bool:
 # a symbol a table may hold: a DC table's (class 0) are difference categories, 0 to 11 for 8-bit samples (T.81
 # F.1.2.1); an AC table's are any byte
 def decode.huff.sym.ok(+cls: U32, +sym: U32) -> Bool:
-  Bool.or(Bool.not(U32.is_eq(cls, 0)), U32.is_le(sym, 11))
+  Bool.or(U32.is_ne(cls, 0), U32.is_le(sym, 11))
 
-def decode.huff.put.dc(
-  +id: U32,
-  hh: Huff,
-  q0: List<&2, U32>,
-  q1: List<&2, U32>,
-  q2: List<&2, U32>,
-  q3: List<&2, U32>,
-  dc0: Huff,
-  dc1: Huff,
-  dc2: Huff,
-  dc3: Huff,
-  ac0: Huff,
-  ac1: Huff,
-  ac2: Huff,
-  ac3: Huff
-) -> Tabs:
-  match id:
-    case 0:
-      Tabs{q0, q1, q2, q3, hh, dc1, dc2, dc3, ac0, ac1, ac2, ac3}
-    case 1:
-      Tabs{q0, q1, q2, q3, dc0, hh, dc2, dc3, ac0, ac1, ac2, ac3}
-    case 2:
-      Tabs{q0, q1, q2, q3, dc0, dc1, hh, dc3, ac0, ac1, ac2, ac3}
-    case _:
-      Tabs{q0, q1, q2, q3, dc0, dc1, dc2, hh, ac0, ac1, ac2, ac3}
-
-def decode.huff.put.ac(
-  +id: U32,
-  hh: Huff,
-  q0: List<&2, U32>,
-  q1: List<&2, U32>,
-  q2: List<&2, U32>,
-  q3: List<&2, U32>,
-  dc0: Huff,
-  dc1: Huff,
-  dc2: Huff,
-  dc3: Huff,
-  ac0: Huff,
-  ac1: Huff,
-  ac2: Huff,
-  ac3: Huff
-) -> Tabs:
-  match id:
-    case 0:
-      Tabs{q0, q1, q2, q3, dc0, dc1, dc2, dc3, hh, ac1, ac2, ac3}
-    case 1:
-      Tabs{q0, q1, q2, q3, dc0, dc1, dc2, dc3, ac0, hh, ac2, ac3}
-    case 2:
-      Tabs{q0, q1, q2, q3, dc0, dc1, dc2, dc3, ac0, ac1, hh, ac3}
-    case _:
-      Tabs{q0, q1, q2, q3, dc0, dc1, dc2, dc3, ac0, ac1, ac2, hh}
-
-def decode.huff.put(tabs: Tabs, +cls: U32, +id: U32, hh: Huff) -> Tabs:
+def decode.huff.put.dc(tabs: Tabs, +id: U32, huff: Huff) -> Tabs:
   match tabs:
     case Tabs{q0, q1, q2, q3, dc0, dc1, dc2, dc3, ac0, ac1, ac2, ac3}:
-      match cls:
+      match id:
         case 0:
-          decode.huff.put.dc(id, hh, q0, q1, q2, q3, dc0, dc1, dc2, dc3, ac0, ac1, ac2, ac3)
+          Tabs{q0, q1, q2, q3, huff, dc1, dc2, dc3, ac0, ac1, ac2, ac3}
+        case 1:
+          Tabs{q0, q1, q2, q3, dc0, huff, dc2, dc3, ac0, ac1, ac2, ac3}
+        case 2:
+          Tabs{q0, q1, q2, q3, dc0, dc1, huff, dc3, ac0, ac1, ac2, ac3}
         case _:
-          decode.huff.put.ac(id, hh, q0, q1, q2, q3, dc0, dc1, dc2, dc3, ac0, ac1, ac2, ac3)
+          Tabs{q0, q1, q2, q3, dc0, dc1, dc2, huff, ac0, ac1, ac2, ac3}
 
-def decode.read.dht(
-  xs: List<&2, U32>,
+def decode.huff.put.ac(tabs: Tabs, +id: U32, huff: Huff) -> Tabs:
+  match tabs:
+    case Tabs{q0, q1, q2, q3, dc0, dc1, dc2, dc3, ac0, ac1, ac2, ac3}:
+      match id:
+        case 0:
+          Tabs{q0, q1, q2, q3, dc0, dc1, dc2, dc3, huff, ac1, ac2, ac3}
+        case 1:
+          Tabs{q0, q1, q2, q3, dc0, dc1, dc2, dc3, ac0, huff, ac2, ac3}
+        case 2:
+          Tabs{q0, q1, q2, q3, dc0, dc1, dc2, dc3, ac0, ac1, huff, ac3}
+        case _:
+          Tabs{q0, q1, q2, q3, dc0, dc1, dc2, dc3, ac0, ac1, ac2, huff}
+
+def decode.huff.put(tabs: Tabs, +cls: U32, +id: U32, hh: Huff) -> Tabs:
+  match cls:
+    case 0:
+      decode.huff.put.dc(tabs, id, hh)
+    case _:
+      decode.huff.put.ac(tabs, id, hh)
+
+# a DHT body being read: whether it is well formed so far, whether the symbols (not the 16 counts) are being read, the
+# bytes left of them (0 between tables), the table's class and Th, its counts and its symbols so far, newest first,
+# and what the walk has read
+type Dh is Data:
+  Dh{ok: Bool, sym: Bool, phase: Nat, cls: U32, id: U32, counts: List<&2, U32>, syms: List<&2, U32>, rd: Rd}
+
+# what the walk has read, with a Huffman table put
+def decode.dht.put(+cls: U32, +id: U32, huff: Huff, rd: Rd) -> Rd:
+  match rd:
+    case Rd{frame, scan, tabs, ent, +ri, +kind, +bad}:
+      Rd{frame, scan, decode.huff.put(tabs, cls, id, huff), ent, ri, kind, bad}
+
+# the end of a DHT body in its counts: well formed between tables
+def decode.dht.end.counts(phase: Nat, +counts: List<&2, U32>, +syms: List<&2, U32>, rd: Rd) -> St:
+  match phase:
+    case 0n:
+      +_c = decode.drop(counts)
+      +_s = decode.drop(syms)
+      decode.rd.st(Seek{}, rd)
+    case _:
+      +_c = decode.drop(counts)
+      +_s = decode.drop(syms)
+      decode.rd.fail(rd)
+
+# the end of a DHT body in a table's symbols: well formed for a table of no symbols, which is put
+def decode.dht.end.syms(phase: Nat, +cls: U32, +id: U32, +counts: List<&2, U32>, +syms: List<&2, U32>, rd: Rd) -> St:
+  match phase:
+    case 0n:
+      +_s = decode.drop(syms)
+      decode.rd.st(Seek{}, decode.dht.put(cls, id, decode.canon(counts, []), rd))
+    case _:
+      +_c = decode.drop(counts)
+      +_s = decode.drop(syms)
+      decode.rd.fail(rd)
+
+# the end of a DHT body
+def decode.dht.end(
   ok: Bool,
   sym: Bool,
   phase: Nat,
@@ -2904,88 +2653,115 @@ def decode.read.dht(
   +id: U32,
   +counts: List<&2, U32>,
   +syms: List<&2, U32>,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
+  rd: Rd
 ) -> St:
-  match xs:
-    case Nil{}:
-      match ok:
+  match ok:
+    case False{}:
+      +_c = decode.drop(counts)
+      +_s = decode.drop(syms)
+      decode.rd.fail(rd)
+    case True{}:
+      match sym:
         case False{}:
-          +_c = decode.drop(counts)
-          +_s = decode.drop(syms)
-          St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
+          decode.dht.end.counts(phase, counts, syms, rd)
         case True{}:
-          match sym:
-            case False{}:
-              match phase:
-                case 0n:
-                  +_c = decode.drop(counts)
-                  +_s = decode.drop(syms)
-                  St{Seek{}, frame, scan, tabs, ent, ri, kind, bad}
-                case _:
-                  +_c = decode.drop(counts)
-                  +_s = decode.drop(syms)
-                  St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
-            case True{}:
-              match phase:
-                case 0n:
-                  +_s = decode.drop(syms)
-                  St{Seek{}, frame, scan, decode.huff.put(tabs, cls, id, decode.canon(counts, [])), ent, ri, kind, bad}
-                case _:
-                  +_c = decode.drop(counts)
-                  +_s = decode.drop(syms)
-                  St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
-    case +b <> rest:
-      match ok:
-        case False{}:
-          +_n = decode.drop(rest)
-          +_c = decode.drop(counts)
+          decode.dht.end.syms(phase, cls, id, counts, syms, rd)
+
+# a table's class and Th byte: class at most 1, Th at most 3
+def decode.dht.head(+byte: U32, rd: Rd) -> Dh:
+  Dh{Bool.and(U32.is_le(U32.shrn(byte, 4n), 1), U32.is_le(U32.and(byte, 15), 3)), False{}, 16n, U32.shrn(byte, 4n),
+    U32.and(byte, 15), [], [], rd}
+
+# one more byte among a table's counts, or its class and Th byte
+def decode.dht.count(
+  +byte: U32,
+  phase: Nat,
+  +cls: U32,
+  +id: U32,
+  +counts: List<&2, U32>,
+  +syms: List<&2, U32>,
+  rd: Rd
+) -> Dh:
+  match phase:
+    case 0n:
+      +_c = decode.drop(counts)
+      +_s = decode.drop(syms)
+      decode.dht.head(byte, rd)
+    case 1n+p:
+      match p:
+        case 0n:
+          +cs = List.reverse(&2, U32, byte <> counts)
+          Dh{decode.huff.counts.ok(cs), True{}, U32.to_nat(decode.sum.counts(cs, 0)), cls, id, cs, [], rd}
+        case _:
           +_s = decode.drop(syms)
-          +_b = (b - b : U32)
-          St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
-        case True{}:
-          match sym:
-            case False{}:
-              match phase:
-                case 0n:
-                  +_c = decode.drop(counts)
-                  +_s = decode.drop(syms)
-                  decode.read.dht(rest, Bool.and(U32.is_le(U32.shrn(b, 4n), 1), U32.is_le(U32.and(b, 15), 3)),
-                    False{}, 16n, U32.shrn(b, 4n), U32.and(b, 15), [], [], frame, scan, tabs, ent, ri, kind, bad)
-                case 1n+p:
-                  match p:
-                    case 0n:
-                      +cs = List.reverse(&2, U32, b <> counts)
-                      decode.read.dht(rest, decode.huff.counts.ok(cs), True{}, U32.to_nat(decode.sum.counts(cs, 0)),
-                        cls, id, cs, [], frame, scan, tabs, ent, ri, kind, bad)
-                    case _:
-                      +_s = decode.drop(syms)
-                      decode.read.dht(rest, True{}, False{}, p, cls, id, b <> counts, [], frame, scan, tabs, ent, ri,
-                        kind, bad)
-            case True{}:
-              match phase:
-                case 0n:
-                  +_s = decode.drop(syms)
-                  decode.read.dht(rest, Bool.and(U32.is_le(U32.shrn(b, 4n), 1), U32.is_le(U32.and(b, 15), 3)),
-                    False{}, 16n, U32.shrn(b, 4n), U32.and(b, 15), [], [], frame, scan, decode.huff.put(tabs, cls, id,
-                    decode.canon(counts, [])), ent, ri, kind, bad)
-                case 1n+p:
-                  match p:
-                    case 0n:
-                      decode.read.dht(rest, decode.huff.sym.ok(cls, b), False{}, 0n, 0, 0, [], [], frame, scan,
-                        decode.huff.put(tabs, cls, id, decode.canon(counts, List.reverse(&2, U32, b <> syms))), ent,
-                          ri, kind, bad)
-                    case _:
-                      decode.read.dht(rest, decode.huff.sym.ok(cls, b), True{}, p, cls, id, counts, b <> syms, frame,
-                        scan, tabs, ent, ri, kind, bad)
+          Dh{True{}, False{}, p, cls, id, byte <> counts, [], rd}
+
+# one more byte among a table's symbols, or the next table's class and Th byte after a table of no symbols
+def decode.dht.sym(
+  +byte: U32,
+  phase: Nat,
+  +cls: U32,
+  +id: U32,
+  +counts: List<&2, U32>,
+  +syms: List<&2, U32>,
+  rd: Rd
+) -> Dh:
+  match phase:
+    case 0n:
+      +_s = decode.drop(syms)
+      decode.dht.head(byte, decode.dht.put(cls, id, decode.canon(counts, []), rd))
+    case 1n+p:
+      match p:
+        case 0n:
+          Dh{decode.huff.sym.ok(cls, byte), False{}, 0n, 0, 0, [], [], decode.dht.put(cls, id, decode.canon(counts,
+            List.reverse(&2, U32, byte <> syms)), rd)}
+        case _:
+          Dh{decode.huff.sym.ok(cls, byte), True{}, p, cls, id, counts, byte <> syms, rd}
+
+# a DHT body after one more byte of a well-formed one
+def decode.dht.next(
+  +byte: U32,
+  sym: Bool,
+  phase: Nat,
+  +cls: U32,
+  +id: U32,
+  +counts: List<&2, U32>,
+  +syms: List<&2, U32>,
+  rd: Rd
+) -> Dh:
+  match sym:
+    case False{}:
+      decode.dht.count(byte, phase, cls, id, counts, syms, rd)
+    case True{}:
+      decode.dht.sym(byte, phase, cls, id, counts, syms, rd)
+
+def decode.read.dht(xs: List<&2, U32>, dh: Dh) -> St:
+  match xs dh:
+    case Nil{} Dh{ok, sym, phase, +cls, +id, +counts, +syms, rd}:
+      decode.dht.end(ok, sym, phase, cls, id, counts, syms, rd)
+    case Con{+byte, rest} Dh{False{}, _sym, _phase, _cls, _id, +counts, +syms, rd}:
+      +_n = decode.drop(rest)
+      +_c = decode.drop(counts)
+      +_s = decode.drop(syms)
+      +_b = (byte - byte : U32)
+      decode.rd.fail(rd)
+    case Con{+byte, rest} Dh{True{}, sym, phase, +cls, +id, +counts, +syms, rd}:
+      decode.read.dht(rest, decode.dht.next(byte, sym, phase, cls, id, counts, syms, rd))
 
 def decode.scan.rev(sids: List<&2, U32>, td: List<&2, U32>, ta: List<&2, U32>, +ns: U32) -> Scan:
   Scan{ns, List.reverse(&2, U32, sids), List.reverse(&2, U32, td), List.reverse(&2, U32, ta), 0, 63, 0}
+
+# the walk stopped on a fault in an SOS header, which leaves no scan
+def decode.sos.fail(rd: Rd) -> St:
+  match rd:
+    case Rd{frame, _scan, tabs, ent, +ri, +kind, _bad}:
+      St{Stop{}, frame, decode.scan0(), tabs, ent, ri, kind, 1}
+
+# the walk in the scan an SOS header read
+def decode.sos.in(+sids: List<&2, U32>, +td: List<&2, U32>, +ta: List<&2, U32>, +ns: U32, rd: Rd) -> St:
+  match rd:
+    case Rd{frame, _scan, tabs, ent, +ri, +kind, +bad}:
+      St{Ent{}, frame, decode.scan.rev(sids, td, ta, ns), tabs, ent, ri, kind, bad}
 
 def decode.read.sos.ok(
   ss0: Bool,
@@ -2995,26 +2771,17 @@ def decode.read.sos.ok(
   td: List<&2, U32>,
   ta: List<&2, U32>,
   +ns: U32,
-  frame: Frame,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
+  rd: Rd
 ) -> St:
-  match ss0:
-    case False{}:
-      St{Stop{}, frame, decode.scan0(), tabs, ent, ri, kind, 1}
-    case True{}:
-      match se63:
-        case False{}:
-          St{Stop{}, frame, decode.scan0(), tabs, ent, ri, kind, 1}
-        case True{}:
-          match ah0:
-            case False{}:
-              St{Stop{}, frame, decode.scan0(), tabs, ent, ri, kind, 1}
-            case True{}:
-              St{Ent{}, frame, decode.scan.rev(sids, td, ta, ns), tabs, ent, ri, kind, bad}
+  match ss0 se63 ah0:
+    case False{} _se _ah:
+      decode.sos.fail(rd)
+    case True{} False{} _ah:
+      decode.sos.fail(rd)
+    case True{} True{} False{}:
+      decode.sos.fail(rd)
+    case True{} True{} True{}:
+      decode.sos.in(sids, td, ta, ns, rd)
 
 def decode.read.sos.end(
   xs: List<&2, U32>,
@@ -3023,19 +2790,13 @@ def decode.read.sos.end(
   td: List<&2, U32>,
   ta: List<&2, U32>,
   +ns: U32,
-  frame: Frame,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
+  rd: Rd
 ) -> St:
   match xs:
     case ss <> se <> ah <> _rest:
-      decode.read.sos.ok(Bool.and(tok, U32.is_eq(ss, 0)), U32.is_eq(se, 63), U32.is_eq(ah, 0), sids, td, ta, ns, frame,
-        tabs, ent, ri, kind, bad)
+      decode.read.sos.ok(Bool.and(tok, U32.is_eq(ss, 0)), U32.is_eq(se, 63), U32.is_eq(ah, 0), sids, td, ta, ns, rd)
     case _:
-      St{Stop{}, frame, decode.scan0(), tabs, ent, ri, kind, 1}
+      decode.sos.fail(rd)
 
 def decode.read.sos.cs(
   left: Nat,
@@ -3045,321 +2806,154 @@ def decode.read.sos.cs(
   td: List<&2, U32>,
   ta: List<&2, U32>,
   +ns: U32,
-  frame: Frame,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
+  rd: Rd
 ) -> St:
   match left:
     case 0n:
-      decode.read.sos.end(xs, tok, sids, td, ta, ns, frame, tabs, ent, ri, kind, bad)
+      decode.read.sos.end(xs, tok, sids, td, ta, ns, rd)
     case 1n+p:
       match xs:
         case id <> +tdta <> rest:
           decode.read.sos.cs(p, rest, Bool.and(tok, Bool.and(U32.is_le(U32.shrn(tdta, 4n), 3), U32.is_le(U32.and(tdta,
-            15), 3))), id <> sids, U32.shrn(tdta, 4n) <> td, U32.and(tdta, 15) <> ta, ns, frame, tabs, ent, ri, kind,
-            bad)
+            15), 3))), id <> sids, U32.shrn(tdta, 4n) <> td, U32.and(tdta, 15) <> ta, ns, rd)
         case _:
-          St{Stop{}, frame, decode.scan0(), tabs, ent, ri, kind, 1}
+          decode.sos.fail(rd)
 
-def decode.read.sos(
-  xs: List<&2, U32>,
-  frame: Frame,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
+def decode.read.sos(xs: List<&2, U32>, rd: Rd) -> St:
   match xs:
     case +ns <> rest:
-      decode.read.sos.cs(U32.to_nat(ns), rest, True{}, [], [], [], ns, frame, tabs, ent, ri, kind, bad)
+      decode.read.sos.cs(U32.to_nat(ns), rest, True{}, [], [], [], ns, rd)
     case _:
-      St{Stop{}, frame, decode.scan0(), tabs, ent, ri, kind, 1}
+      decode.sos.fail(rd)
 
-def decode.read.dri(
-  xs: List<&2, U32>,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +kind: U32,
-  +bad: U32
-) -> St:
-  match xs:
-    case hi <> lo <> _rest:
+def decode.read.dri(xs: List<&2, U32>, rd: Rd) -> St:
+  match xs rd:
+    case Con{hi, Con{lo, _rest}} Rd{frame, scan, tabs, ent, _ri, +kind, +bad}:
       St{Seek{}, frame, scan, tabs, ent, decode.u16(hi, lo), kind, bad}
-    case _:
+    case _xs Rd{frame, scan, tabs, ent, _ri, +kind, _bad}:
       St{Stop{}, frame, scan, tabs, ent, 0, kind, 1}
 
-def decode.dispatch(
-  +mark: U32,
-  xs: List<&2, U32>,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
+def decode.dispatch(+mark: U32, xs: List<&2, U32>, rd: Rd) -> St:
   match mark:
     case 192:
-      decode.read.sof(xs, scan, tabs, ent, ri, kind, bad)
+      decode.read.sof.of(xs, rd)
     case 193:
-      decode.read.sof(xs, scan, tabs, ent, ri, kind, bad)
+      decode.read.sof.of(xs, rd)
     case 196:
-      decode.read.dht(xs, True{}, False{}, 0n, 0, 0, [], [], frame, scan, tabs, ent, ri, kind, bad)
+      decode.read.dht(xs, Dh{True{}, False{}, 0n, 0, 0, [], [], rd})
     case 218:
-      decode.read.sos(xs, frame, tabs, ent, ri, kind, bad)
+      decode.read.sos(xs, rd)
     case 219:
-      decode.read.dqt(xs, True{}, 0n, 0, False{}, [], frame, scan, tabs, ent, ri, kind, bad)
+      decode.read.dqt(xs, Dq{True{}, 0n, 0, False{}, [], rd})
     case 221:
-      decode.read.dri(xs, frame, scan, tabs, ent, kind, bad)
+      decode.read.dri(xs, rd)
     case _:
-      St{Seek{}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(Seek{}, rd)
 
 def decode.between(+bb: U32, +lo: U32, +hi: U32) -> Bool:
   Bool.and(U32.is_ge(bb, lo), U32.is_le(bb, hi))
 
-def decode.mark.range.b(
-  sof: Bool,
-  app: Bool,
-  rst: Bool,
-  +bb: U32,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
-  match sof:
-    case True{}:
+def decode.mark.range.b(sof: Bool, app: Bool, rst: Bool, +byte: U32, rd: Rd) -> St:
+  match sof app rst rd:
+    case True{} _app _rst Rd{frame, scan, tabs, ent, +ri, _kind, _bad}:
       St{Stop{}, frame, scan, tabs, ent, ri, 2, 1}
-    case False{}:
-      match app:
-        case True{}:
-          St{LenHi{bb}, frame, scan, tabs, ent, ri, kind, bad}
-        case False{}:
-          match rst:
-            case True{}:
-              St{Seek{}, frame, scan, tabs, ent, ri, kind, bad}
-            case False{}:
-              St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
+    case False{} True{} _rst Rd{frame, scan, tabs, ent, +ri, +kind, +bad}:
+      St{LenHi{byte}, frame, scan, tabs, ent, ri, kind, bad}
+    case False{} False{} True{} Rd{frame, scan, tabs, ent, +ri, +kind, +bad}:
+      St{Seek{}, frame, scan, tabs, ent, ri, kind, bad}
+    case False{} False{} False{} Rd{frame, scan, tabs, ent, +ri, +kind, _bad}:
+      St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
 
-def decode.mark.range(
-  +bb: U32,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
-  decode.mark.range.b(decode.between(bb, 192, 207), decode.between(bb, 224, 239), decode.between(bb, 208, 215), bb,
-    frame, scan, tabs, ent, ri, kind, bad)
+def decode.mark.range(+byte: U32, rd: Rd) -> St:
+  decode.mark.range.b(decode.between(byte, 192, 207), decode.between(byte, 224, 239), decode.between(byte, 208, 215),
+    byte, rd)
 
-def decode.mark(
-  +bb: U32,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
-  match bb:
+def decode.mark(+byte: U32, rd: Rd) -> St:
+  match byte:
     case 1:
-      St{Seek{}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(Seek{}, rd)
     case 192:
-      St{LenHi{192}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(LenHi{192}, rd)
     case 193:
-      St{LenHi{193}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(LenHi{193}, rd)
     case 196:
-      St{LenHi{196}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(LenHi{196}, rd)
     case 216:
-      St{Seek{}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(Seek{}, rd)
     case 217:
-      St{Stop{}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(Stop{}, rd)
     case 218:
-      St{LenHi{218}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(LenHi{218}, rd)
     case 219:
-      St{LenHi{219}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(LenHi{219}, rd)
     case 221:
-      St{LenHi{221}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(LenHi{221}, rd)
     case 254:
-      St{LenHi{254}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(LenHi{254}, rd)
     case 255:
-      St{Mark{}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(Mark{}, rd)
     case _:
-      decode.mark.range(bb, frame, scan, tabs, ent, ri, kind, bad)
+      decode.mark.range(byte, rd)
 
-def decode.step.pay0(
-  left: Nat,
-  +mark: U32,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
+def decode.step.pay0(left: Nat, +mark: U32, rd: Rd) -> St:
   match left:
     case 0n:
-      decode.dispatch(mark, [], frame, scan, tabs, ent, ri, kind, bad)
+      decode.dispatch(mark, [], rd)
     case _:
-      St{Pay{mark, left, []}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(Pay{mark, left, []}, rd)
 
-def decode.step.len.b(
-  small: Bool,
-  +mark: U32,
-  +len: U32,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
+def decode.step.len.b(small: Bool, +mark: U32, +len: U32, rd: Rd) -> St:
   match small:
     case True{}:
-      St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
+      decode.rd.fail(rd)
     case False{}:
-      decode.step.pay0(U32.to_nat((len - 2 : U32)), mark, frame, scan, tabs, ent, ri, kind, bad)
+      decode.step.pay0(U32.to_nat((len - 2 : U32)), mark, rd)
 
-def decode.step.last(
-  left: Nat,
-  +bb: U32,
-  +mark: U32,
-  acc: List<&2, U32>,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
+def decode.step.last(left: Nat, +bb: U32, +mark: U32, acc: List<&2, U32>, rd: Rd) -> St:
   match left:
     case 0n:
-      decode.dispatch(mark, List.reverse(&2, U32, bb <> acc), frame, scan, tabs, ent, ri, kind, bad)
+      decode.dispatch(mark, List.reverse(&2, U32, bb <> acc), rd)
     case 1n+q:
-      St{Pay{mark, Nat.add(1n, q), bb <> acc}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(Pay{mark, Nat.add(1n, q), bb <> acc}, rd)
 
-def decode.step.pay(
-  left: Nat,
-  +bb: U32,
-  +mark: U32,
-  acc: List<&2, U32>,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
+def decode.step.pay(left: Nat, +bb: U32, +mark: U32, acc: List<&2, U32>, rd: Rd) -> St:
   match left:
     case 0n:
-      St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
+      decode.rd.fail(rd)
     case 1n+p:
-      decode.step.last(p, bb, mark, acc, frame, scan, tabs, ent, ri, kind, bad)
+      decode.step.last(p, bb, mark, acc, rd)
 
 # a marker other than RSTn and EOI inside a scan ends the scan: after a frame header the walk keeps the bytes after
 # it (Rest); before one the file is refused
-def decode.ent.next(
-  framed: Bool,
-  +bb: U32,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
+def decode.ent.next(framed: Bool, +bb: U32, rd: Rd) -> St:
   match framed:
     case True{}:
-      St{Rest{bb, []}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(Rest{bb, []}, rd)
     case False{}:
-      St{Stop{}, frame, scan, tabs, ent, ri, kind, 1}
+      decode.rd.fail(rd)
 
-def decode.ent.rst.b(
-  rst: Bool,
-  +bb: U32,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
-  match rst:
-    case True{}:
+def decode.ent.rst.b(rst: Bool, +bb: U32, rd: Rd) -> St:
+  match rst rd:
+    case True{} Rd{frame, scan, tabs, ent, +ri, +kind, +bad}:
       St{Ent{}, frame, scan, tabs, bb <> (255 <> ent), ri, kind, bad}
-    case False{}:
-      decode.ent.next(U32.is_eq(kind, 1), bb, frame, scan, tabs, ent, ri, kind, bad)
+    case False{} Rd{frame, scan, tabs, ent, +ri, +kind, +bad}:
+      decode.ent.next(U32.is_eq(kind, 1), bb, Rd{frame, scan, tabs, ent, ri, kind, bad})
 
 # a byte of the entropy-coded data: 255 may open a stuffed pair or a marker, any other byte is data.
 # Compares with U32.is_eq, not a literal pattern, so a law reaches a symbolic byte.
-def decode.step.ent(
-  ff: Bool,
-  +bb: U32,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
-  match ff:
-    case True{}:
+def decode.step.ent(ff: Bool, +bb: U32, rd: Rd) -> St:
+  match ff rd:
+    case True{} Rd{frame, scan, tabs, ent, +ri, +kind, +bad}:
       +_b = (bb - bb : U32)
       St{EntFF{}, frame, scan, tabs, ent, ri, kind, bad}
-    case False{}:
+    case False{} Rd{frame, scan, tabs, ent, +ri, +kind, +bad}:
       St{Ent{}, frame, scan, tabs, bb <> ent, ri, kind, bad}
 
-def decode.step.ph(
-  phase: Phase,
-  +bb: U32,
-  frame: Frame,
-  scan: Scan,
-  tabs: Tabs,
-  ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32
-) -> St:
-  match phase:
-    case Seek{}:
-      match bb:
-        case 255:
-          St{Mark{}, frame, scan, tabs, ent, ri, kind, bad}
-        case _:
-          St{Seek{}, frame, scan, tabs, ent, ri, kind, bad}
-    case Mark{}:
-      decode.mark(bb, frame, scan, tabs, ent, ri, kind, bad)
-    case LenHi{+mark}:
-      St{LenLo{mark, bb}, frame, scan, tabs, ent, ri, kind, bad}
-    case LenLo{+mark, +hi}:
-      decode.step.len.b(U32.is_lt(decode.u16(hi, bb), 2), mark, decode.u16(hi, bb), frame, scan, tabs, ent, ri, kind,
-        bad)
-    case Pay{+mark, +left, +acc}:
-      decode.step.pay(left, bb, mark, acc, frame, scan, tabs, ent, ri, kind, bad)
-    case Ent{}:
-      decode.step.ent(U32.is_eq(bb, 255), bb, frame, scan, tabs, ent, ri, kind, bad)
-    case EntFF{}:
-      match bb:
+# a byte after an FF inside the entropy-coded data: a stuffed zero, a fill FF, EOI, or another marker
+def decode.step.ff(rd: Rd, +byte: U32) -> St:
+  match rd:
+    case Rd{frame, scan, tabs, ent, +ri, +kind, +bad}:
+      match byte:
         case 0:
           St{Ent{}, frame, scan, tabs, 0 <> (255 <> ent), ri, kind, bad}
         case 255:
@@ -3367,16 +2961,37 @@ def decode.step.ph(
         case 217:
           St{Stop{}, frame, scan, tabs, ent, ri, kind, bad}
         case _:
-          decode.ent.rst.b(decode.between(bb, 208, 215), bb, frame, scan, tabs, ent, ri, kind, bad)
+          decode.ent.rst.b(decode.between(byte, 208, 215), byte, Rd{frame, scan, tabs, ent, ri, kind, bad})
+
+def decode.step.ph(phase: Phase, +byte: U32, rd: Rd) -> St:
+  match phase:
+    case Seek{}:
+      match byte:
+        case 255:
+          decode.rd.st(Mark{}, rd)
+        case _:
+          decode.rd.st(Seek{}, rd)
+    case Mark{}:
+      decode.mark(byte, rd)
+    case LenHi{+mark}:
+      decode.rd.st(LenLo{mark, byte}, rd)
+    case LenLo{+mark, +hi}:
+      decode.step.len.b(U32.is_lt(decode.u16(hi, byte), 2), mark, decode.u16(hi, byte), rd)
+    case Pay{+mark, +left, +acc}:
+      decode.step.pay(left, byte, mark, acc, rd)
+    case Ent{}:
+      decode.step.ent(U32.is_eq(byte, 255), byte, rd)
+    case EntFF{}:
+      decode.step.ff(rd, byte)
     case Stop{}:
-      St{Stop{}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(Stop{}, rd)
     case Rest{+mark, +acc}:
-      St{Rest{mark, bb <> acc}, frame, scan, tabs, ent, ri, kind, bad}
+      decode.rd.st(Rest{mark, byte <> acc}, rd)
 
 def decode.step(+bb: U32, st: St) -> St:
   match st:
     case St{+phase, +frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
-      decode.step.ph(phase, bb, frame, scan, tabs, ent, ri, kind, bad)
+      decode.step.ph(phase, bb, Rd{frame, scan, tabs, ent, ri, kind, bad})
 
 def decode.walk(xs: List<&2, U32>, st: St) -> St:
   match xs:
@@ -3426,29 +3041,25 @@ def decode.chain.last(
 # redefined between scans). A walk ending where a scan may end is the last; one ending anywhere else, or with an error
 # or a second frame header, refuses the file.
 def decode.chain(left: Nat, good: Bool, st: St, passes: List<&2, Pass>) -> Chain:
-  match left:
-    case 0n:
+  match left good st:
+    case 0n _good _st:
       Chain{False{}, []}
-    case 1n+p:
-      match good:
-        case False{}:
+    case 1n+_p False{} _st:
+      Chain{False{}, []}
+    case 1n+p True{} St{phase, +frame, +scan, +tabs, +ent, +ri, _kind, _bad}:
+      match phase:
+        case Rest{+mark, +acc}:
+          +nx = decode.walk(List.reverse(&2, U32, acc), decode.mark(mark, Rd{frame, decode.scan0(), tabs, [], ri, 1,
+            0}))
+          decode.chain(p, decode.st.good(nx), nx, Pass{scan, tabs, List.reverse(&2, U32, ent), ri} <> passes)
+        case Stop{}:
+          Chain{True{}, decode.chain.last(U32.is_eq(decode.scan.ns(scan), 0), scan, tabs, ent, ri, passes)}
+        case Ent{}:
+          Chain{True{}, decode.chain.last(U32.is_eq(decode.scan.ns(scan), 0), scan, tabs, ent, ri, passes)}
+        case EntFF{}:
+          Chain{True{}, decode.chain.last(U32.is_eq(decode.scan.ns(scan), 0), scan, tabs, ent, ri, passes)}
+        case _:
           Chain{False{}, []}
-        case True{}:
-          match st:
-            case St{phase, +frame, +scan, +tabs, +ent, +ri, _kind, _bad}:
-              match phase:
-                case Rest{+mark, +acc}:
-                  +nx = decode.walk(List.reverse(&2, U32, acc), decode.mark(mark, frame, decode.scan0(), tabs, [], ri,
-                    1, 0))
-                  decode.chain(p, decode.st.good(nx), nx, Pass{scan, tabs, List.reverse(&2, U32, ent), ri} <> passes)
-                case Stop{}:
-                  Chain{True{}, decode.chain.last(U32.is_eq(decode.scan.ns(scan), 0), scan, tabs, ent, ri, passes)}
-                case Ent{}:
-                  Chain{True{}, decode.chain.last(U32.is_eq(decode.scan.ns(scan), 0), scan, tabs, ent, ri, passes)}
-                case EntFF{}:
-                  Chain{True{}, decode.chain.last(U32.is_eq(decode.scan.ns(scan), 0), scan, tabs, ent, ri, passes)}
-                case _:
-                  Chain{False{}, []}
 
 def decode.multi.go(ok: Bool, passes: List<&2, Pass>, frame: Frame, rgb: Bool) -> Maybe<&2, Pic>:
   match ok:
@@ -3468,35 +3079,25 @@ def decode.multi(chain: Chain, +frame: Frame, +facts: U32) -> Maybe<&2, Pic>:
 # marker after its scan reads on (decode.chain). One that read EOI (Stop), or whose bytes ended inside the
 # entropy-coded data, which libjpeg also takes as the end of the image (with a warning), hands its scan on; any other
 # has no picture.
-def decode.finish.at(
-  phase: Phase,
-  +frame: Frame,
-  +scan: Scan,
-  +tabs: Tabs,
-  +ent: List<&2, U32>,
-  +ri: U32,
-  +kind: U32,
-  +bad: U32,
-  +facts: U32
-) -> Maybe<&2, Pic>:
-  match phase:
-    case Rest{+mark, +acc}:
+def decode.finish.at(phase: Phase, rd: Rd, +facts: U32) -> Maybe<&2, Pic>:
+  match phase rd:
+    case Rest{+mark, +acc} Rd{+frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
       +st = {St{Rest{mark, acc}, frame, scan, tabs, ent, ri, kind, bad} : St}
       decode.multi(decode.chain(1n+1n+List.length(&2, U32, acc), decode.st.good(st), st, []), frame, facts)
-    case Stop{}:
-      decode.finish.ph(True{}, frame, scan, tabs, ent, ri, kind, bad, facts)
-    case Ent{}:
-      decode.finish.ph(True{}, frame, scan, tabs, ent, ri, kind, bad, facts)
-    case EntFF{}:
-      decode.finish.ph(True{}, frame, scan, tabs, ent, ri, kind, bad, facts)
-    case _:
-      decode.finish.ph(False{}, frame, scan, tabs, ent, ri, kind, bad, facts)
+    case Stop{} Rd{+frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
+      decode.finish.ph(True{}, frame, Pass{scan, tabs, ent, ri}, kind, bad, facts)
+    case Ent{} Rd{+frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
+      decode.finish.ph(True{}, frame, Pass{scan, tabs, ent, ri}, kind, bad, facts)
+    case EntFF{} Rd{+frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
+      decode.finish.ph(True{}, frame, Pass{scan, tabs, ent, ri}, kind, bad, facts)
+    case _ Rd{+frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
+      decode.finish.ph(False{}, frame, Pass{scan, tabs, ent, ri}, kind, bad, facts)
 
 # the picture of a finished walk, facts being what decode.facts read of the file's markers
 def decode.finish(st: St, +facts: U32) -> Maybe<&2, Pic>:
   match st:
     case St{+phase, +frame, +scan, +tabs, +ent, +ri, +kind, +bad}:
-      decode.finish.at(phase, frame, scan, tabs, ent, ri, kind, bad, facts)
+      decode.finish.at(phase, Rd{frame, scan, tabs, ent, ri, kind, bad}, facts)
 
 # the JPEG start-of-image marker, FF D8
 def soi() -> List<&2, U32>:
@@ -3578,31 +3179,35 @@ def decode.facts.mark(+bb: U32, +acc: U32) -> Fs:
     case _:
       Bool.pick(Fs, decode.between(bb, 208, 215), Fs{0, 0, 0, 0n, [], acc}, Fs{2, bb, 0, 0n, [], acc})
 
+# a body byte of the facts pass, of a segment of left more bytes
+def decode.facts.body(left: Nat, +mark: U32, +hi: U32, +byte: U32, +got: List<&2, U32>, +acc: U32) -> Fs:
+  match left:
+    case 0n:
+      decode.facts.end(mark, hi, decode.facts.keep(mark, byte, got), acc)
+    case 1n+p:
+      match p:
+        case 0n:
+          decode.facts.end(mark, hi, decode.facts.keep(mark, byte, got), acc)
+        case _:
+          Fs{4, mark, hi, p, decode.facts.keep(mark, byte, got), acc}
+
 # one byte of the facts pass. A byte between segments that is not an FF is skipped, as the walk skips it.
-def decode.facts.step(+bb: U32, fs: Fs) -> Fs:
+def decode.facts.step(+byte: U32, fs: Fs) -> Fs:
   match fs:
     case Fs{+ph, +mark, +hi, +left, +got, +acc}:
       match ph:
         case 0:
-          Bool.pick(Fs, U32.is_eq(bb, 255), Fs{1, mark, hi, left, got, acc}, Fs{0, mark, hi, left, got, acc})
+          Bool.pick(Fs, U32.is_eq(byte, 255), Fs{1, mark, hi, left, got, acc}, Fs{0, mark, hi, left, got, acc})
         case 1:
-          decode.facts.mark(bb, acc)
+          decode.facts.mark(byte, acc)
         case 2:
-          Fs{3, mark, bb, left, got, acc}
+          Fs{3, mark, byte, left, got, acc}
         case 3:
-          +ln = decode.u16(hi, bb)
+          +ln = decode.u16(hi, byte)
           +nn = Bool.pick(U32, U32.is_lt(ln, 2), 0, (ln - 2 : U32))
           decode.facts.len(U32.to_nat(nn), mark, nn, acc)
         case 4:
-          match left:
-            case 0n:
-              decode.facts.end(mark, hi, decode.facts.keep(mark, bb, got), acc)
-            case 1n+p:
-              match p:
-                case 0n:
-                  decode.facts.end(mark, hi, decode.facts.keep(mark, bb, got), acc)
-                case _:
-                  Fs{4, mark, hi, p, decode.facts.keep(mark, bb, got), acc}
+          decode.facts.body(left, mark, hi, byte, got, acc)
         case _:
           Fs{5, mark, hi, left, got, acc}
 
@@ -3615,18 +3220,16 @@ def decode.facts.acc(fs: Fs) -> U32:
 
 # the facts pass over bytes, stopping at the first scan
 def decode.facts.walk(xs: List<&2, U32>, fs: Fs) -> U32:
-  match xs:
-    case Nil{}:
-      decode.facts.acc(fs)
-    case +bb <> rest:
-      match fs:
-        case Fs{+ph, +mark, +hi, +left, +got, +acc}:
-          match ph:
-            case 5:
-              +_x = decode.drop(rest)
-              decode.facts.acc(Fs{5, mark, (hi + bb : U32), left, got, acc})
-            case _:
-              decode.facts.walk(rest, decode.facts.step(bb, Fs{ph, mark, hi, left, got, acc}))
+  match xs fs:
+    case Nil{} fs0:
+      decode.facts.acc(fs0)
+    case Con{+bb, rest} Fs{+ph, +mark, +hi, +left, +got, +acc}:
+      match ph:
+        case 5:
+          +_x = decode.drop(rest)
+          decode.facts.acc(Fs{5, mark, (hi + bb : U32), left, got, acc})
+        case _:
+          decode.facts.walk(rest, decode.facts.step(bb, Fs{ph, mark, hi, left, got, acc}))
 
 # a file that opens with SOI: bit 0, then the colour facts of its markers
 def decode.facts.soi.at(soi: Bool, rest: List<&2, U32>) -> U32:

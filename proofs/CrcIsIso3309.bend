@@ -216,20 +216,45 @@ def open.other.at(anc: Bool, +pg: Png.Pg) -> {nx.ends(Png.png.other.at(anc, pg))
     case False{}:
       {==}
 
+# the chunk handlers on what the state has seen
+def open.seen.trns(
+  sn: Png.Seen,
+  +data: List<&2, U32>,
+  +pg: Png.Pg
+) -> {nx.ends(Png.png.seen.trns(sn, data, pg)) == False{} : Bool}:
+  match sn:
+    case Png.Seen{+run, +saw_trns, +saw_plte, +colour}:
+      open.on.trns(run, saw_trns, colour, saw_plte, data, pg)
+
+def open.seen.plte(
+  sn: Png.Seen,
+  +data: List<&2, U32>,
+  +pg: Png.Pg
+) -> {nx.ends(Png.png.seen.plte(sn, data, pg)) == False{} : Bool}:
+  match sn:
+    case Png.Seen{+run, _st, +saw_plte, +colour}:
+      open.on.plte(run, saw_plte, colour, data, pg)
+
+def open.seen.idat(
+  sn: Png.Seen,
+  +data: List<&2, U32>,
+  +pg: Png.Pg
+) -> {nx.ends(Png.png.seen.idat(sn, data, pg)) == False{} : Bool}:
+  match sn:
+    case Png.Seen{+run, _st, +saw_plte, +colour}:
+      open.on.idat(run, Bool.or(Bool.not(U32.is_eq(colour, 3)), saw_plte), data, pg)
+
 # tRNS or another chunk
 def open.apply.tr(
   ztrns: Bool,
   +anc: Bool,
-  +run: Png.Run,
-  +saw_trns: Bool,
-  +saw_plte: Bool,
-  +colour: U32,
+  +sn: Png.Seen,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.tr(ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) == False{} : Bool}:
+) -> {nx.ends(Png.png.apply.tr(ztrns, anc, sn, data, pg)) == False{} : Bool}:
   match ztrns:
     case True{}:
-      open.on.trns(run, saw_trns, colour, saw_plte, data, pg)
+      open.seen.trns(sn, data, pg)
     case False{}:
       open.other.at(anc, pg)
 
@@ -238,18 +263,15 @@ def open.apply.pl(
   zplte: Bool,
   +ztrns: Bool,
   +anc: Bool,
-  +run: Png.Run,
-  +saw_trns: Bool,
-  +saw_plte: Bool,
-  +colour: U32,
+  +sn: Png.Seen,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.pl(zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) == False{} : Bool}:
+) -> {nx.ends(Png.png.apply.pl(zplte, ztrns, anc, sn, data, pg)) == False{} : Bool}:
   match zplte:
     case True{}:
-      open.on.plte(run, saw_plte, colour, data, pg)
+      open.seen.plte(sn, data, pg)
     case False{}:
-      open.apply.tr(ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
+      open.apply.tr(ztrns, anc, sn, data, pg)
 
 # not IEND: on to PLTE, tRNS or another chunk
 def open.apply.ie(
@@ -258,20 +280,16 @@ def open.apply.ie(
   +zplte: Bool,
   +ztrns: Bool,
   +anc: Bool,
-  +run: Png.Run,
-  +saw_trns: Bool,
-  +saw_plte: Bool,
-  +colour: U32,
+  +sn: Png.Seen,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.ie(ziend, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) == False{} :
-  Bool}:
+) -> {nx.ends(Png.png.apply.ie(ziend, zplte, ztrns, anc, sn, data, pg)) == False{} : Bool}:
   match ziend:
     case True{}:
-      Empty.absurd({nx.ends(Png.png.apply.ie(True{}, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) ==
-        False{} : Bool}, M1.true_false(ez))
+      Empty.absurd({nx.ends(Png.png.apply.ie(True{}, zplte, ztrns, anc, sn, data, pg)) == False{} : Bool},
+        M1.true_false(ez))
     case False{}:
-      open.apply.pl(zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
+      open.apply.pl(zplte, ztrns, anc, sn, data, pg)
 
 # IDAT, or not IEND
 def open.apply.id(
@@ -281,19 +299,15 @@ def open.apply.id(
   +zplte: Bool,
   +ztrns: Bool,
   +anc: Bool,
-  +run: Png.Run,
-  +saw_trns: Bool,
-  +saw_plte: Bool,
-  +colour: U32,
+  +sn: Png.Seen,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.id(zidat, ziend, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) ==
-  False{} : Bool}:
+) -> {nx.ends(Png.png.apply.id(zidat, ziend, zplte, ztrns, anc, sn, data, pg)) == False{} : Bool}:
   match zidat:
     case True{}:
-      open.on.idat(run, Bool.or(Bool.not(U32.is_eq(colour, 3)), saw_plte), data, pg)
+      open.seen.idat(sn, data, pg)
     case False{}:
-      open.apply.ie(ziend, ez, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
+      open.apply.ie(ziend, ez, zplte, ztrns, anc, sn, data, pg)
 
 # a second IHDR is refused; any other chunk is the rest
 def open.apply.go(
@@ -304,19 +318,15 @@ def open.apply.go(
   +zplte: Bool,
   +ztrns: Bool,
   +anc: Bool,
-  +run: Png.Run,
-  +saw_trns: Bool,
-  +saw_plte: Bool,
-  +colour: U32,
+  +sn: Png.Seen,
   +data: List<&2, U32>,
   +pg: Png.Pg
-) -> {nx.ends(Png.png.apply.go(zihdr, zidat, ziend, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)) ==
-  False{} : Bool}:
+) -> {nx.ends(Png.png.apply.go(Png.Tags{zihdr, zidat, ziend, zplte, ztrns, anc}, sn, data, pg)) == False{} : Bool}:
   match zihdr:
     case True{}:
       {==}
     case False{}:
-      open.apply.id(zidat, ziend, ez, zplte, ztrns, anc, run, saw_trns, saw_plte, colour, data, pg)
+      open.apply.id(zidat, ziend, ez, zplte, ztrns, anc, sn, data, pg)
 
 # a chunk whose type is not IEND does not end the image, whatever the state
 def open.apply(
@@ -330,8 +340,8 @@ def open.apply(
       open.on.start(U32.is_eq(typ, Png.tag.ihdr()), data)
     case Png.Pg{+w, +h, +d, +colour, +comp, +f, +i, +idat, +plte, +trns, +run}:
       open.apply.go(U32.is_eq(typ, Png.tag.ihdr()), U32.is_eq(typ, Png.tag.idat()), U32.is_eq(typ, Png.tag.iend()),
-        ht, U32.is_eq(typ, Png.tag.plte()), U32.is_eq(typ, Png.tag.trns()), Png.tag.anc(typ), run,
-        Maybe.is_some(&2, List<&2, U32>, trns), Maybe.is_some(&2, List<&2, U32>, plte), colour, data,
+        ht, U32.is_eq(typ, Png.tag.plte()), U32.is_eq(typ, Png.tag.trns()), Png.tag.anc(typ),
+        Png.Seen{run, Maybe.is_some(&2, List<&2, U32>, trns), Maybe.is_some(&2, List<&2, U32>, plte), colour}, data,
         Png.Pg{w, h, d, colour, comp, f, i, idat, plte, trns, run})
 
 # a judged chunk that is not IEND, CRC right or wrong, does not end the image

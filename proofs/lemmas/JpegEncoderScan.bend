@@ -376,8 +376,8 @@ def mcus_fin.ee.ty(
   +_d2: U32,
   +_d3: U32
 ) -> Type:
-  {Jenc.encode.step.y(_aa, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), _bit, _py, _pb, _pr, (_mx * 8 :
-    U32), (_my * 8 : U32), _ww, _hh, Jenc.encode.ctx(_qq)) == (_ar, Jenc.encode.bookof(False{}),
+  {Jenc.encode.step.y((_aa, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), _py, _pb, _pr, _bit),
+    (_mx * 8 : U32), (_my * 8 : U32), _ww, _hh, Jenc.encode.ctx(_qq)) == (_ar, Jenc.encode.bookof(False{}),
     Jenc.encode.bookof(True{}), _d1, _d2, _d3, M2.feed3b(L1.JBlkTok{False{}, _s1, _x1, _a1}, L1.JBlkTok{True{}, _s2,
     _x2, _a2}, L1.JBlkTok{True{}, _s3, _x3, _a3}, _bit)) : Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 &
     Jenc.Put}
@@ -452,14 +452,16 @@ def mcus_fin(
   +p3 = M2.feed3b(t1, t2, t3, bit)
   +fr = L1.jpg.enc.frame(Jenc.K444{}, ww, hh)
   +sc = L1.jpg.enc.scan(Jenc.K444{})
-  (t1 <> t2 <> t3 <> ts, Equal.trans(Jenc.Put, Jenc.encode.mcus(nn, Jenc.encode.step.y(aa, Jenc.encode.bookof(False{}),
-    Jenc.encode.bookof(True{}), bit, py, pb, pr, (mx * 8 : U32), (my * 8 : U32), ww, hh, cx), Jenc.encode.nx(mo, mx),
+  (t1 <> t2 <> t3 <> ts, Equal.trans(Jenc.Put, Jenc.encode.mcus(nn, Jenc.encode.step.y((aa,
+    Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), py, pb, pr, bit), (mx * 8 : U32), (my * 8 : U32), ww, hh,
+    cx), Jenc.encode.nx(mo, mx),
     Jenc.encode.ny(mo, my), mw, ww, hh, cx), Jenc.encode.mcus(nn, (ar, Jenc.encode.bookof(False{}),
     Jenc.encode.bookof(True{}), d1, d2, d3, p3), Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx),
     L1.jpg.feed(L1.jpg.tbits(t1 <> t2 <> t3 <> ts), bit), Equal.cong(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 &
     U32 & Jenc.Put, Jenc.Put, gg => Jenc.encode.mcus(nn, gg, Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww,
-    hh, cx), Jenc.encode.step.y(aa, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), bit, py, pb, pr, (mx * 8 :
-    U32), (my * 8 : U32), ww, hh, cx), (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3, p3),
+    hh, cx), Jenc.encode.step.y((aa, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), py, pb, pr, bit),
+      (mx * 8 : U32), (my * 8 : U32), ww, hh, cx), (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1,
+      d2, d3, p3),
     ee), Equal.trans(Jenc.Put, Jenc.encode.mcus(nn, (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1,
     d2, d3, p3), Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx), L1.jpg.feed(L1.jpg.tbits(ts), p3),
     L1.jpg.feed(L1.jpg.tbits(t1 <> t2 <> t3 <> ts), bit), er, feed_tri(t1, t2, t3, ts, bit))), Equal.cong(Nat, Nat,
@@ -761,7 +763,7 @@ def gmcus_fin.ee.ty(
   _ar: Array<U32>,
   +_d1: U32
 ) -> Type:
-  {Jenc.encode.gstep(_aa, Jenc.encode.bookof(False{}), _bit, _py, (_mx * 8 : U32), (_my * 8 : U32), _ww, _hh,
+  {Jenc.encode.gstep((_aa, Jenc.encode.bookof(False{}), _py, _bit), (_mx * 8 : U32), (_my * 8 : U32), _ww, _hh,
     Jenc.encode.ctx(_qq)) == (_ar, Jenc.encode.bookof(False{}), _d1, L1.jpg.feed(L1.jpg.blkbits(L1.JBlkTok{False{},
     _s1, _x1, _a1}), _bit)) : Array<U32> & Jenc.Book & U32 & Jenc.Put}
 
@@ -791,15 +793,15 @@ def gmcus_fin(
   +mo = U32.is_lt((mx + 1 : U32), mw)
   +cx = Jenc.encode.ctx(qq)
   +p1 = L1.jpg.feed(L1.jpg.blkbits(t1), bit)
-  (t1 <> ts, Equal.trans(Jenc.Put, Jenc.encode.gmcus(nn, Jenc.encode.gstep(aa, Jenc.encode.bookof(False{}), bit, py,
-    (mx * 8 : U32), (my * 8 :
-    U32), ww, hh, cx), Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx), Jenc.encode.gmcus(nn, (ar,
+  (t1 <> ts, Equal.trans(Jenc.Put, Jenc.encode.gmcus(nn, Jenc.encode.gstep((aa, Jenc.encode.bookof(False{}), py, bit),
+    (mx * 8 : U32), (my * 8 : U32), ww, hh, cx), Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx),
+    Jenc.encode.gmcus(nn, (ar,
     Jenc.encode.bookof(False{}), d1, p1), Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx),
       L1.jpg.feed(L1.jpg.tbits(t1 <> ts),
     bit), Equal.cong(Array<U32> & Jenc.Book & U32 & Jenc.Put, Jenc.Put, gg => Jenc.encode.gmcus(nn, gg,
-    Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx), Jenc.encode.gstep(aa,
-      Jenc.encode.bookof(False{}), bit, py, (mx * 8 :
-    U32), (my * 8 : U32), ww, hh, cx), (ar, Jenc.encode.bookof(False{}), d1, p1), ee), Equal.trans(Jenc.Put,
+    Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx), Jenc.encode.gstep((aa,
+      Jenc.encode.bookof(False{}), py, bit), (mx * 8 : U32), (my * 8 : U32), ww, hh, cx), (ar,
+      Jenc.encode.bookof(False{}), d1, p1), ee), Equal.trans(Jenc.Put,
       Jenc.encode.gmcus(nn, (ar, Jenc.encode.bookof(False{}),
     d1, p1), Jenc.encode.nx(mo, mx), Jenc.encode.ny(mo, my), mw, ww, hh, cx), L1.jpg.feed(L1.jpg.tbits(ts), p1),
     L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit), er, Equal.sym(Jenc.Put, L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit),
@@ -930,9 +932,8 @@ def H2Y0Out(
   +qc: List<&2, Jenc.Oct>
 ) -> Type:
   &ts: List<&2, L1.JBlkTok> -> &ar: Array<U32> -> &d1: U32 -> &d2: U32 -> &d3: U32 -> &_e: {Jenc.encode.h2.y0(tt,
-    Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), bit, py, pb, pr, xx, yy, ww, hh, M2.kern(),
-    Jpeg.decode.zig(), ql,
-    qc) == (ar,
+    Jenc.encode.bookof(False{}), bit, py, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Spot{xx, yy, ww, hh},
+    Jenc.Ctx{M2.kern(), Jpeg.decode.zig(), ql, qc}) == (ar,
     Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3, L1.jpg.feed(L1.jpg.tbits(ts),
       bit)) : Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put} -> &_h1: {U32.is_lt(d1, 2048) == True{} :
     Bool} -> &_h2: {U32.is_lt(d2, 2048) == True{} : Bool} -> &_h3: {U32.is_lt(d3, 2048) == True{} : Bool} -> &_l:
@@ -957,9 +958,8 @@ def H2Y1Out(
   +qc: List<&2, Jenc.Oct>
 ) -> Type:
   &ts: List<&2, L1.JBlkTok> -> &ar: Array<U32> -> &d1: U32 -> &d2: U32 -> &d3: U32 -> &_e: {Jenc.encode.h2.y1(tt,
-    Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), bit, py, pb, pr, xx, yy, ww, hh, M2.kern(),
-    Jpeg.decode.zig(), ql,
-    qc) == (ar,
+    Jenc.encode.bookof(False{}), bit, py, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Spot{xx, yy, ww, hh},
+    Jenc.Ctx{M2.kern(), Jpeg.decode.zig(), ql, qc}) == (ar,
     Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3, L1.jpg.feed(L1.jpg.tbits(ts),
       bit)) : Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put} -> &_h1: {U32.is_lt(d1, 2048) == True{} :
     Bool} -> &_h2: {U32.is_lt(d2, 2048) == True{} : Bool} -> &_h3: {U32.is_lt(d3, 2048) == True{} : Bool} -> &_l:
@@ -984,9 +984,8 @@ def H2Y2Out(
   +qc: List<&2, Jenc.Oct>
 ) -> Type:
   &ts: List<&2, L1.JBlkTok> -> &ar: Array<U32> -> &d1: U32 -> &d2: U32 -> &d3: U32 -> &_e: {Jenc.encode.h2.y2(tt,
-    Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), bit, py, pb, pr, xx, yy, ww, hh, M2.kern(),
-    Jpeg.decode.zig(), ql,
-    qc) == (ar,
+    Jenc.encode.bookof(False{}), bit, py, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Spot{xx, yy, ww, hh},
+    Jenc.Ctx{M2.kern(), Jpeg.decode.zig(), ql, qc}) == (ar,
     Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3, L1.jpg.feed(L1.jpg.tbits(ts),
       bit)) : Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put} -> &_h1: {U32.is_lt(d1, 2048) == True{} :
     Bool} -> &_h2: {U32.is_lt(d2, 2048) == True{} : Bool} -> &_h3: {U32.is_lt(d3, 2048) == True{} : Bool} -> &_l:
@@ -1011,9 +1010,8 @@ def H2Y3Out(
   +qc: List<&2, Jenc.Oct>
 ) -> Type:
   &ts: List<&2, L1.JBlkTok> -> &ar: Array<U32> -> &d1: U32 -> &d2: U32 -> &d3: U32 -> &_e: {Jenc.encode.h2.y3(tt,
-    Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), bit, py, pb, pr, xx, yy, ww, hh, M2.kern(),
-    Jpeg.decode.zig(), ql,
-    qc) == (ar,
+    Jenc.encode.bookof(False{}), bit, py, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Spot{xx, yy, ww, hh},
+    Jenc.Ctx{M2.kern(), Jpeg.decode.zig(), ql, qc}) == (ar,
     Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3, L1.jpg.feed(L1.jpg.tbits(ts),
       bit)) : Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put} -> &_h1: {U32.is_lt(d1, 2048) == True{} :
     Bool} -> &_h2: {U32.is_lt(d2, 2048) == True{} : Bool} -> &_h3: {U32.is_lt(d3, 2048) == True{} : Bool} -> &_l:
@@ -1039,9 +1037,9 @@ def H2COut(
   +_ql: List<&2, Jenc.Oct>,
   +qc: List<&2, Jenc.Oct>
 ) -> Type:
-  &ts: List<&2, L1.JBlkTok> -> &ar: Array<U32> -> &d1: U32 -> &d2: U32 -> &d3: U32 -> &_e: {Jenc.encode.h2.cb(pix, bs,
-    rs, fb, fr, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), bit, py, pb, pr, M2.kern(), Jpeg.decode.zig(),
-    qc) == (ar,
+  &ts: List<&2, L1.JBlkTok> -> &ar: Array<U32> -> &d1: U32 -> &d2: U32 -> &d3: U32 -> &_e: {Jenc.encode.h2.cb(pix,
+    Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.encode.bookof(False{}), bit, py,
+    Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Coder{M2.kern(), Jpeg.decode.zig(), qc}) == (ar,
     Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3, L1.jpg.feed(L1.jpg.tbits(ts),
       bit)) : Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put} -> &_h1: {U32.is_lt(d1, 2048) == True{} :
     Bool} -> &_h2: {U32.is_lt(d2, 2048) == True{} : Bool} -> &_h3: {U32.is_lt(d3, 2048) == True{} : Bool} -> &_l:
@@ -1116,13 +1114,13 @@ def h2c_fin(
   +kn = M2.kern()
   +zg = Jpeg.decode.zig()
   ([t2, t3], pix, py, d2, d3, Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
-    Jenc.encode.h2.cr(Jenc.encode.chan.go(fb, bs, Jenc.encode.bookof(True{}), bit, pb, kn,
-    zg, qc), Jenc.encode.bookof(False{}), pix, rs, fr, py, pr, kn, zg, qc),
-      Jenc.encode.h2.cr((Jenc.encode.bookof(True{}), d2, p2), Jenc.encode.bookof(False{}), pix, rs, fr, py, pr,
-    kn, zg, qc), (pix, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), py, d2, d3,
+    Jenc.encode.h2.cr(Jenc.encode.chan.go(fb, bs, Jenc.encode.bookof(True{}), bit, pb, kn, zg, qc),
+      Jenc.encode.bookof(False{}), pix, Jenc.Plane{rs, fr}, py, pr, Jenc.Coder{kn, zg, qc}),
+      Jenc.encode.h2.cr((Jenc.encode.bookof(True{}), d2, p2), Jenc.encode.bookof(False{}), pix, Jenc.Plane{rs, fr},
+        py, pr, Jenc.Coder{kn, zg, qc}), (pix, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), py, d2, d3,
       L1.jpg.feed(L1.jpg.tbits([t2, t3]), bit)), Equal.cong(Jenc.Book &
     U32 & Jenc.Put, Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put, gg => Jenc.encode.h2.cr(gg,
-      Jenc.encode.bookof(False{}), pix, rs, fr, py, pr, kn, zg, qc),
+      Jenc.encode.bookof(False{}), pix, Jenc.Plane{rs, fr}, py, pr, Jenc.Coder{kn, zg, qc}),
     Jenc.encode.chan.go(fb, bs, Jenc.encode.bookof(True{}), bit, pb, kn, zg, qc), (Jenc.encode.bookof(True{}), d2,
       p2), e2), Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
     Jenc.encode.h2.end(Jenc.encode.chan.go(fr, rs, Jenc.encode.bookof(True{}), p2, pr, kn, zg, qc),
@@ -1222,16 +1220,20 @@ def h2y3_fin(
   +kn = M2.kern()
   +zg = Jpeg.decode.zig()
   (t1 <> ts, ar, dy, db, dr, Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
-    Jenc.encode.h2.n4(Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn,
-    zg, ql), pix, bs, rs, fb, fr, Jenc.encode.bookof(True{}), pb, pr, xx, yy, ww, hh, kn, zg, ql, qc),
-      Jenc.encode.h2.cb(pix, bs, rs, fb, fr, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), p1, d1, pb, pr,
-      kn, zg, qc), (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy,
+    Jenc.encode.h2.n4(Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn, zg, ql), pix,
+      Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Spot{xx, yy, ww,
+      hh}, Jenc.Ctx{kn, zg, ql, qc}),
+      Jenc.encode.h2.cb(pix, Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.encode.bookof(False{}), p1, d1,
+        Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Coder{kn, zg, qc}), (ar, Jenc.encode.bookof(False{}),
+        Jenc.encode.bookof(True{}), dy,
     db, dr, L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit)), Equal.cong(Jenc.Book & U32 & Jenc.Put,
       Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put, gg =>
-    Jenc.encode.h2.n4(gg, pix, bs, rs, fb, fr, Jenc.encode.bookof(True{}), pb, pr, xx, yy, ww, hh, kn, zg, ql, qc),
+    Jenc.encode.h2.n4(gg, pix, Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr},
+      Jenc.Spot{xx, yy, ww, hh}, Jenc.Ctx{kn, zg, ql, qc}),
     Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn, zg, ql), (Jenc.encode.bookof(False{}), d1,
       p1), e1), Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put, Jenc.encode.h2.cb(pix,
-      bs, rs, fb, fr, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), p1, d1, pb, pr, kn, zg, qc),
+        Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.encode.bookof(False{}), p1, d1,
+        Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Coder{kn, zg, qc}),
     (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy, db, dr, L1.jpg.feed(L1.jpg.tbits(ts), p1)), (ar,
       Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy, db, dr,
     L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit)), er, Equal.cong(Jenc.Put,
@@ -1353,19 +1355,22 @@ def h2y2_fin(
   +kn = M2.kern()
   +zg = Jpeg.decode.zig()
   (t1 <> ts, ar, dy, db, dr, Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
-    Jenc.encode.h2.n3(Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn,
-    zg, ql), pix, bs, rs, fb, fr, Jenc.encode.bookof(True{}), pb, pr, xx, yy, ww, hh, kn, zg, ql, qc),
+    Jenc.encode.h2.n3(Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn, zg, ql), pix,
+      Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Spot{xx, yy, ww,
+      hh}, Jenc.Ctx{kn, zg, ql, qc}),
       Jenc.encode.h2.y3(Jenc.encode.quad.block(Jenc.Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh,
-      (xx + 8 : U32), (yy + 8 : U32), 36), Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), p1, d1, pb, pr,
-        xx, yy, ww, hh, kn, zg, ql, qc), (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy,
+        (xx + 8 : U32), (yy + 8 : U32), 36), Jenc.encode.bookof(False{}), p1, d1,
+        Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Spot{xx, yy, ww, hh}, Jenc.Ctx{kn, zg, ql, qc}), (ar,
+        Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy,
     db, dr, L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit)), Equal.cong(Jenc.Book & U32 & Jenc.Put,
       Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put, gg =>
-    Jenc.encode.h2.n3(gg, pix, bs, rs, fb, fr, Jenc.encode.bookof(True{}), pb, pr, xx, yy, ww, hh, kn, zg, ql, qc),
+    Jenc.encode.h2.n3(gg, pix, Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr},
+      Jenc.Spot{xx, yy, ww, hh}, Jenc.Ctx{kn, zg, ql, qc}),
     Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn, zg, ql), (Jenc.encode.bookof(False{}), d1,
       p1), e1), Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
       Jenc.encode.h2.y3(Jenc.encode.quad.block(Jenc.Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh,
-        (xx + 8 : U32), (yy + 8 : U32), 36), Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), p1, d1, pb, pr,
-        xx, yy, ww, hh, kn, zg, ql, qc),
+        (xx + 8 : U32), (yy + 8 : U32), 36), Jenc.encode.bookof(False{}), p1, d1,
+        Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Spot{xx, yy, ww, hh}, Jenc.Ctx{kn, zg, ql, qc}),
     (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy, db, dr, L1.jpg.feed(L1.jpg.tbits(ts), p1)), (ar,
       Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy, db, dr,
     L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit)), er, Equal.cong(Jenc.Put,
@@ -1487,19 +1492,22 @@ def h2y1_fin(
   +kn = M2.kern()
   +zg = Jpeg.decode.zig()
   (t1 <> ts, ar, dy, db, dr, Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
-    Jenc.encode.h2.n2(Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn,
-    zg, ql), pix, bs, rs, fb, fr, Jenc.encode.bookof(True{}), pb, pr, xx, yy, ww, hh, kn, zg, ql, qc),
+    Jenc.encode.h2.n2(Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn, zg, ql), pix,
+      Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Spot{xx, yy, ww,
+      hh}, Jenc.Ctx{kn, zg, ql, qc}),
       Jenc.encode.h2.y2(Jenc.encode.quad.block(Jenc.Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh,
-      xx, (yy + 8 : U32), 32), Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), p1, d1, pb, pr, xx, yy, ww,
-        hh, kn, zg, ql, qc), (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy,
+        xx, (yy + 8 : U32), 32), Jenc.encode.bookof(False{}), p1, d1, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr},
+        Jenc.Spot{xx, yy, ww, hh}, Jenc.Ctx{kn, zg, ql, qc}), (ar, Jenc.encode.bookof(False{}),
+        Jenc.encode.bookof(True{}), dy,
     db, dr, L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit)), Equal.cong(Jenc.Book & U32 & Jenc.Put,
       Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put, gg =>
-    Jenc.encode.h2.n2(gg, pix, bs, rs, fb, fr, Jenc.encode.bookof(True{}), pb, pr, xx, yy, ww, hh, kn, zg, ql, qc),
+    Jenc.encode.h2.n2(gg, pix, Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr},
+      Jenc.Spot{xx, yy, ww, hh}, Jenc.Ctx{kn, zg, ql, qc}),
     Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn, zg, ql), (Jenc.encode.bookof(False{}), d1,
       p1), e1), Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
       Jenc.encode.h2.y2(Jenc.encode.quad.block(Jenc.Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh,
-        xx, (yy + 8 : U32), 32), Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), p1, d1, pb, pr, xx, yy, ww,
-        hh, kn, zg, ql, qc),
+        xx, (yy + 8 : U32), 32), Jenc.encode.bookof(False{}), p1, d1, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr},
+        Jenc.Spot{xx, yy, ww, hh}, Jenc.Ctx{kn, zg, ql, qc}),
     (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy, db, dr, L1.jpg.feed(L1.jpg.tbits(ts), p1)), (ar,
       Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy, db, dr,
     L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit)), er, Equal.cong(Jenc.Put,
@@ -1621,19 +1629,22 @@ def h2y0_fin(
   +kn = M2.kern()
   +zg = Jpeg.decode.zig()
   (t1 <> ts, ar, dy, db, dr, Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
-    Jenc.encode.h2.n1(Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn,
-    zg, ql), pix, bs, rs, fb, fr, Jenc.encode.bookof(True{}), pb, pr, xx, yy, ww, hh, kn, zg, ql, qc),
+    Jenc.encode.h2.n1(Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn, zg, ql), pix,
+      Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr}, Jenc.Spot{xx, yy, ww,
+      hh}, Jenc.Ctx{kn, zg, ql, qc}),
       Jenc.encode.h2.y1(Jenc.encode.quad.block(Jenc.Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh,
-      (xx + 8 : U32), yy, 4), Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), p1, d1, pb, pr, xx, yy, ww, hh,
-        kn, zg, ql, qc), (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy,
+        (xx + 8 : U32), yy, 4), Jenc.encode.bookof(False{}), p1, d1, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr},
+        Jenc.Spot{xx, yy, ww, hh}, Jenc.Ctx{kn, zg, ql, qc}), (ar, Jenc.encode.bookof(False{}),
+        Jenc.encode.bookof(True{}), dy,
     db, dr, L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit)), Equal.cong(Jenc.Book & U32 & Jenc.Put,
       Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put, gg =>
-    Jenc.encode.h2.n1(gg, pix, bs, rs, fb, fr, Jenc.encode.bookof(True{}), pb, pr, xx, yy, ww, hh, kn, zg, ql, qc),
+    Jenc.encode.h2.n1(gg, pix, Jenc.Plane{bs, fb}, Jenc.Plane{rs, fr}, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr},
+      Jenc.Spot{xx, yy, ww, hh}, Jenc.Ctx{kn, zg, ql, qc}),
     Jenc.encode.chan.go(fy, ys, Jenc.encode.bookof(False{}), bit, py, kn, zg, ql), (Jenc.encode.bookof(False{}), d1,
       p1), e1), Equal.trans(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put,
       Jenc.encode.h2.y1(Jenc.encode.quad.block(Jenc.Tile{pix, Jpeg.decode.plane(64), bs, rs, True{}, fb, fr}, ww, hh,
-        (xx + 8 : U32), yy, 4), Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), p1, d1, pb, pr, xx, yy, ww,
-        hh, kn, zg, ql, qc),
+        (xx + 8 : U32), yy, 4), Jenc.encode.bookof(False{}), p1, d1, Jenc.Pend{Jenc.encode.bookof(True{}), pb, pr},
+        Jenc.Spot{xx, yy, ww, hh}, Jenc.Ctx{kn, zg, ql, qc}),
     (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy, db, dr, L1.jpg.feed(L1.jpg.tbits(ts), p1)), (ar,
       Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), dy, db, dr,
     L1.jpg.feed(L1.jpg.tbits(t1 <> ts), bit)), er, Equal.cong(Jenc.Put,
@@ -1762,7 +1773,7 @@ def h2mcus_fin.ee.ty(
   +_d2: U32,
   +_d3: U32
 ) -> Type:
-  {Jenc.encode.h2.step(_aa, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), _bit, _py, _pb, _pr,
+  {Jenc.encode.h2.step((_aa, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), _py, _pb, _pr, _bit),
     (_mx * 16 : U32), (_my * 16 : U32), _ww, _hh, Jenc.encode.ctx(_qq)) == (_ar, Jenc.encode.bookof(False{}),
     Jenc.encode.bookof(True{}), _d1, _d2, _d3, L1.jpg.feed(L1.jpg.tbits(_t6),
     _bit)) : Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put}
@@ -1808,16 +1819,16 @@ def h2mcus_fin(
   +p6 = L1.jpg.feed(L1.jpg.tbits(t6), bit)
   +nx = Jenc.encode.nx(mo, mx)
   +ny = Jenc.encode.ny(mo, my)
-  (List.append(&2, L1.JBlkTok, t6, ts), Equal.trans(Jenc.Put, Jenc.encode.h2.mcus(nn, Jenc.encode.h2.step(aa,
-    Jenc.encode.bookof(False{}),
-    Jenc.encode.bookof(True{}), bit, py, pb, pr, (mx * 16 : U32), (my * 16 : U32), ww, hh, cx), nx, ny, mw, ww, hh, cx),
+  (List.append(&2, L1.JBlkTok, t6, ts), Equal.trans(Jenc.Put, Jenc.encode.h2.mcus(nn, Jenc.encode.h2.step((aa,
+    Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), py, pb, pr, bit), (mx * 16 : U32), (my * 16 : U32), ww,
+    hh, cx), nx, ny, mw, ww, hh, cx),
     Jenc.encode.h2.mcus(nn, (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3, p6), nx, ny, mw,
       ww, hh, cx),
     L1.jpg.feed(L1.jpg.tbits(List.append(&2, L1.JBlkTok, t6, ts)), bit),
       Equal.cong(Array<U32> & Jenc.Book & Jenc.Book & U32 & U32 & U32 & Jenc.Put, Jenc.Put, gg =>
-    Jenc.encode.h2.mcus(nn, gg, nx, ny, mw, ww, hh, cx), Jenc.encode.h2.step(aa, Jenc.encode.bookof(False{}),
-      Jenc.encode.bookof(True{}), bit, py, pb, pr, (mx *
-    16 : U32), (my * 16 : U32), ww, hh, cx), (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3,
+    Jenc.encode.h2.mcus(nn, gg, nx, ny, mw, ww, hh, cx), Jenc.encode.h2.step((aa, Jenc.encode.bookof(False{}),
+      Jenc.encode.bookof(True{}), py, pb, pr, bit), (mx * 16 : U32), (my * 16 : U32), ww, hh, cx), (ar,
+      Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3,
       p6), ee), Equal.trans(Jenc.Put,
     Jenc.encode.h2.mcus(nn, (ar, Jenc.encode.bookof(False{}), Jenc.encode.bookof(True{}), d1, d2, d3, p6), nx, ny, mw,
       ww, hh, cx),
